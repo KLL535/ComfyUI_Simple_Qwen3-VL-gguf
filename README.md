@@ -59,7 +59,7 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 
 Maybe it will be useful to someone.
 
-[!] Tested on Windows only. Tested only with Qwen3-VL-8B-Instruct.
+[!] Tested on Windows only. Tested on RTX5080 only. Tested only with Qwen3-VL-8B-Instruct.
 
 # Dependencies & Thanks:
 - https://github.com/JamePeng/llama-cpp-python
