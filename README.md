@@ -3,7 +3,7 @@ Simple Qwen3-VL gguf model loader for Comfy-UI.
 
 # Why do we need this version?
 This version was created to meet my requirements:
-1. The model must support gguf (my gguf models run faster than transformer models)
+1. The model must support gguf (gguf models run faster than transformer models)
 2. The model must support the Qwen3-VL multimodal model
 3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, you have to reload the model each time, but this is faster, especially on good hardware with fast memory and disks)
 
