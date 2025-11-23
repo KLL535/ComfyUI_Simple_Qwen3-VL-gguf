@@ -8,8 +8,8 @@ This version was created to meet my requirements:
 3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, you have to reload the model each time, but this is faster, especially on good hardware with fast memory and disks)
 
 # What's the problem:
-Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via pip install `llama-cpp-python`, but it didn't work for me.
-Workaround (until support is added):
+Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work for me.
+## Workaround (until support is added):
 1. Download this using Git:
 - https://github.com/JamePeng/llama-cpp-python
 2. Download this using Git:
