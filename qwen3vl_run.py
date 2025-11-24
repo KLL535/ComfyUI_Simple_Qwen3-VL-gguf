@@ -42,7 +42,7 @@ def main():
                     clip_model_path=config["mmproj_path"],
                     image_min_tokens=1024,      # обязательно для Qwen-VL
                     image_max_tokens=config.get("image_max_tokens", 4096),
-                    force_reasoning=True,
+                    force_reasoning=False,
                     verbose=False,
                 )
             else:
@@ -50,7 +50,7 @@ def main():
                     clip_model_path=config["mmproj_path"],
                     image_min_tokens=1024,      # обязательно для Qwen-VL
                     image_max_tokens=config.get("image_max_tokens", 4096),
-                    force_reasoning=True,
+                    force_reasoning=False,
                     verbose=False,
                 )
         else:
@@ -58,7 +58,7 @@ def main():
                 clip_model_path=config["mmproj_path"],
                 image_min_tokens=1024,      # обязательно для Qwen-VL
                 image_max_tokens=config.get("image_max_tokens", 4096),
-                force_reasoning=True,
+                force_reasoning=False,
                 verbose=False,
             )
 
