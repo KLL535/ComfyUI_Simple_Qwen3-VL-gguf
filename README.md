@@ -34,10 +34,20 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 - `prompt`: *STRING*, default: Describe this image - user prompt
 - `model_path`: *STRING*, default: `H:\Qwen3VL-8B-Instruct-Q8_0.gguf` - The path to the model is written here
 - `mmproj_path`: *STRING*, default: `H:\mmproj-Qwen3VL-8B-Instruct-F16.gguf` - The path to the mmproj model is written here; it is required and usually located in the same place as the model.
-- `max_tokens`: *INT*, default: 2048, min: 64, max: 4096 - The number of tokens to display. Fewer saves memory, but may result in a truncated response.
+- `output_max_tokens`: *INT*, default: 2048, min: 64, max: 4096 - The max number of tokens to output. A smaller number saves memory, but may result in a truncated response.
 - `temperature`: *FLOAT*, default: 0.7, min: 0.0, max: 1.0 - The more - the more nonsense
-- `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. This is fine if you can't handle it, but it will slow you down considerably. -1 means all layers in GPU. 0 means all layers in CPU. Unfortunately, this is NOT Block Swap - this technology is not yet supported by the llama.cpp library.
-- `ctx`: *INT*, default: 16384, min: 0, max: 1000000. - The fewer the number of input tokens, the greater the memory savings, but the image requires a lot of tokens, so you can't set them too few.
+- `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. If there is not enough memory, you can use the CPU, but this will significantly slow down the work. -1 means all layers in GPU. 0 means all layers in CPU. Unfortunately, this is NOT Block Swap - this technology is not yet supported by the llama.cpp library.
+- `ctx`: *INT*, default: 16384, min: 0, max: 1024000. - A smaller number saves memory.
+Rule: `image_max_tokens + text_max_tokens + output_max_tokens <= ctx`
+- `image_max_tokens`(new): *INT*, default: 4096, min: 1024, max: 1024000 - The max number of tokens to image. A smaller number saves memory, but the image requires a lot of tokens, so you can't set them too few. 
+- `n_batch`(new): *INT*, default: 512, min: 64, max: 1024000 - Number of tokens processed simultaneously. A smaller number saves memory, **but setting `n_batch = ctx` this will speed up the work**.
+Rule: `n_batch <= ctx`
+
+### Not customizable parameters:
+- `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
+- `force_reasoning` = True - forces the reasoning mode.
+- `swa_full` = True - disables Sliding Window Attention.
+- `verbose` = False - doesn't clutter the console.
 
 # Issue:
 If the memory is full before this node starts working and there isn't enough memory, you can clear it like this before node:
