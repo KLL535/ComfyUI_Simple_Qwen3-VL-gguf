@@ -47,7 +47,7 @@ Rule: `n_batch <= ctx`
 
 ### Not customizable parameters:
 - `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
-- `force_reasoning` = True - forces the reasoning mode.
+- `force_reasoning` = False - reasoning mode off.
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
 
