@@ -16,15 +16,17 @@ class Qwen3VL_GGUF_Node:
          return {
              "required": {
                  "image": ("IMAGE",),
-                 "prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
+                 "system_prompt": ("STRING", {"multiline": False, "default": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."}),
+                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
                  "model_path": ("STRING", {"default": "H:\\Qwen3VL-8B-Instruct-Q8_0.gguf"}),
                  "mmproj_path": ("STRING", {"default": "H:\\mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
                  "output_max_tokens": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
-                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01}),
-                 "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 100}),
-                 "ctx": ("INT", {"default": 8192, "min": 1024, "max": 1024000, "step": 512}),
                  "image_max_tokens": ("INT", {"default": 4096, "min": 1024, "max": 1024000, "step": 512}),
+                 "ctx": ("INT", {"default": 8192, "min": 1024, "max": 1024000, "step": 512}),
                  "n_batch": ("INT", {"default": 512, "min": 64, "max": 1024000, "step": 64}),
+                 "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 100}),
+                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01}),
+                 "seed": ("INT", {"default": 42}),
              }
          }
 
@@ -32,7 +34,7 @@ class Qwen3VL_GGUF_Node:
     FUNCTION = "run"
     CATEGORY = "multimodal/Qwen"
 
-    def run(self, image, prompt, model_path, mmproj_path, output_max_tokens, temperature, gpu_layers, ctx, image_max_tokens,n_batch):
+    def run(self, image, system_prompt, user_prompt, model_path, mmproj_path, output_max_tokens, image_max_tokens, ctx, n_batch, gpu_layers, temperature, seed):
         # Подготовка изображения
         img_tensor = image[0]  # [H, W, C]
         img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
@@ -53,7 +55,7 @@ class Qwen3VL_GGUF_Node:
         config = {
             "model_path": model_path,
             "mmproj_path": mmproj_path,
-            "prompt": prompt,
+            "user_prompt": user_prompt,
             "max_tokens": output_max_tokens,
             "temperature": temperature,
             "gpu_layers": gpu_layers,
@@ -61,6 +63,8 @@ class Qwen3VL_GGUF_Node:
             "image_base64": img_base64,  
             "image_max_tokens": image_max_tokens,
             "n_batch": n_batch,
+            "system_prompt":system_prompt,
+            "seed":seed,
         }
 
         #debug_config_path = os.path.join(os.path.dirname(__file__), "debug_config.json")

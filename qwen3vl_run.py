@@ -80,13 +80,13 @@ def main():
         messages = [
             {
                 "role": "system",
-                "content": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."
+                "content": config["system_prompt"]
             },
             {
                 "role": "user",
                 "content": [
-                    {"type": "image_url", "image_url": {"url": data_uri}},
-                    {"type": "text", "text": config["prompt"]}
+                    {"type": "text", "text": config["user_prompt"]},
+                    {"type": "image_url", "image_url": {"url": data_uri}}
                 ]
             }
         ]
@@ -96,6 +96,7 @@ def main():
             messages=messages,
             max_tokens=config.get("max_tokens", 2048),
             temperature=config.get("temperature", 0.7),
+            seed=config.get("seed", 42),
         )
 
         output = result["choices"][0]["message"]["content"]
