@@ -37,8 +37,8 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 - `output_max_tokens`: *INT*, default: 2048, min: 64, max: 4096 - The max number of tokens to output. A smaller number saves memory, but may result in a truncated response.
 - `temperature`: *FLOAT*, default: 0.7, min: 0.0, max: 1.0 - The more - the more nonsense
 - `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. If there is not enough memory, you can use the CPU, but this will significantly slow down the work. -1 means all layers in GPU. 0 means all layers in CPU. Unfortunately, this is NOT Block Swap - this technology is not yet supported by the llama.cpp library.
-- `ctx`: *INT*, default: 16384, min: 0, max: 1024000. - A smaller number saves memory.
-Rule: `image_max_tokens + text_max_tokens + output_max_tokens <= ctx`
+- `ctx`: *INT*, default: 8192, min: 0, max: 1024000. - A smaller number saves memory.
+Rule: `image_max_tokens + text_max_tokens + output_max_tokens <= ctx` 
 - `image_max_tokens`(new): *INT*, default: 4096, min: 1024, max: 1024000 - The max number of tokens to image. A smaller number saves memory, but the image requires a lot of tokens, so you can't set them too few. 
 - `n_batch`(new): *INT*, default: 512, min: 64, max: 1024000 - Number of tokens processed simultaneously. A smaller number saves memory. **Setting `n_batch = ctx` will speed up the work, but check in task manager if VRAM is getting full (the system starts using shared RAM memory which is causing x10 slowdown)**
 Rule: `n_batch <= ctx`
