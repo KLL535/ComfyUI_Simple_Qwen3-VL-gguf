@@ -27,9 +27,9 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 2. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
 3. Restarting the frontend (F5)
 4. Now the next node has appeared in the nodes.
-<img width="1600" height="675" alt="7" src="https://github.com/user-attachments/assets/8d5416a9-fb85-4adc-8876-49c55e6de89b" />
+<img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
-# Parameters (new version):
+# Parameters:
 - `image`: *IMAGE* - analyzed image
 - `system prompt`: *STRING*, default: "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions." - role + rules + format.
 - `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
