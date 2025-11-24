@@ -48,6 +48,7 @@ Rule: `n_batch <= ctx`
 - `force_reasoning` = True - forces the reasoning mode.
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
+- `system prompt` = "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."
 
 # Issue:
 If the memory is full before this node starts working and there isn't enough memory, you can clear it like this before node:
