@@ -1,7 +1,7 @@
 # ComfyUI_Simple_Qwen3-VL-gguf
 Simple Qwen3-VL gguf model loader for Comfy-UI.
 
-# Why do we need this version?
+# Why need this version?
 This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models, at least for me. Why, I don’t know)
 2. The model must support the Qwen3-VL multimodal model
