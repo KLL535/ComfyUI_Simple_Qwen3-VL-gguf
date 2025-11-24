@@ -16,7 +16,7 @@ def main():
             print(json.dumps({
                 "status": "error",
                 "message": "Usage: python qwen3vl_run.py <config.json>"
-            }, ensure_ascii=False))
+            }, ensure_ascii=True))
             sys.exit(1)
 
         config_path = sys.argv[1]
@@ -24,22 +24,42 @@ def main():
             config = json.load(f)
 
         # === Загрузка изображения из base64 ===
-        img_data = base64.b64decode(config["image_base64"])
-        pil_img = Image.open(BytesIO(img_data)).convert("RGB")
+        #img_data = base64.b64decode(config["image_base64"])
+        #pil_img = Image.open(BytesIO(img_data)).convert("RGB")
 
         # === Импорт llama_cpp внутри функции (чтобы не ломать импорт) ===
         from llama_cpp import Llama
         try:
-            from llama_cpp.llama_chat_format import Qwen2VLChatHandler
+            from llama_cpp.llama_chat_format import Qwen3VLChatHandler
         except ImportError:
-            # Fallback для старых версий (не рекомендуется)
-            from llama_cpp.llama_chat_format import Llava15ChatHandler
-            chat_handler = Llava15ChatHandler(clip_model_path=config["mmproj_path"])
+            # для старых версий
+            try:
+                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+            except ImportError:
+                # для еще более старых версий
+                from llama_cpp.llama_chat_format import Qwen2VLChatHandler
+                chat_handler = Qwen2VLChatHandler(
+                    clip_model_path=config["mmproj_path"],
+                    image_min_tokens=1024,      # обязательно для Qwen-VL
+                    image_max_tokens=config.get("image_max_tokens", 4096),
+                    force_reasoning=True,
+                    verbose=False,
+                )
+            else:
+                сhat_handler = Qwen25VLChatHandler(
+                    clip_model_path=config["mmproj_path"],
+                    image_min_tokens=1024,      # обязательно для Qwen-VL
+                    image_max_tokens=config.get("image_max_tokens", 4096),
+                    force_reasoning=True,
+                    verbose=False,
+                )
         else:
-            chat_handler = Qwen2VLChatHandler(
+            chat_handler = Qwen3VLChatHandler(
                 clip_model_path=config["mmproj_path"],
                 image_min_tokens=1024,      # обязательно для Qwen-VL
-                image_max_tokens=4096,
+                image_max_tokens=config.get("image_max_tokens", 4096),
+                force_reasoning=True,
+                verbose=False,
             )
 
         # === Загрузка модели ===
@@ -48,6 +68,10 @@ def main():
             chat_handler=chat_handler,
             n_ctx=config.get("ctx", 8192),
             n_gpu_layers=config.get("gpu_layers", 0),
+            image_min_tokens=1024,      # обязательно для Qwen-VL
+            image_max_tokens=config.get("image_max_tokens", 4096),
+            n_batch=config.get("n_batch", 512),
+            swa_full=True,
             verbose=False,
         )
 
@@ -82,7 +106,7 @@ def main():
         gc.collect()
 
         # === Успех ===
-        print(json.dumps({"status": "success", "output": output}, ensure_ascii=False))
+        print(json.dumps({"status": "success", "output": output}, ensure_ascii=True))
 
     except Exception as e:
         import traceback
@@ -90,7 +114,7 @@ def main():
             "status": "error",
             "message": str(e),
             "traceback": traceback.format_exc()
-        }, ensure_ascii=False))
+        }, ensure_ascii=True))
         sys.exit(1)
 
 if __name__ == "__main__":
