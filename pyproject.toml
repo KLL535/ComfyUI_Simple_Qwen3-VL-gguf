@@ -1,0 +1,15 @@
+[project]
+name = "ComfyUI_Simple_Qwen3-VL-gguf"
+description = "Simple Qwen3-VL gguf model loader"
+version = "1.0"
+license = {file = "LICENSE"}
+dependencies = ["llama-cpp-python"]
+
+[project.urls]
+Repository = "https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "kll535"
+DisplayName = "ComfyUI_Simple_Qwen3-VL-gguf"
+Icon = ""
