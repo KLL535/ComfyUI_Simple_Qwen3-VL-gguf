@@ -23,13 +23,13 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 (You can find ready-made WHL packages for your configuration)
 
 # What's next:
-1. Сopy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
-2. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
-3. Restarting the frontend (F5)
-4. Now the next node has appeared in the nodes.
+1. Use **ComfyUI Manager** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
+3. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
+4. Restarting the frontend (F5)
+5. Now the next node has appeared in the nodes.
 <img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
-# Parameters:
+# Parameters (update):
 - `image`: *IMAGE* - analyzed image
 - `system prompt`: *STRING*, default: "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions." - role + rules + format.
 - `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
@@ -39,11 +39,12 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 - `image_max_tokens`: *INT*, default: 4096, min: 1024, max: 1024000 - The max number of tokens to image. A smaller number saves memory, but the image requires a lot of tokens, so you can't set them too few. 
 - `ctx`: *INT*, default: 8192, min: 0, max: 1024000. - A smaller number saves memory.
 Rule: `image_max_tokens + text_max_tokens + output_max_tokens <= ctx` 
-- `n_batch`: *INT*, default: 512, min: 64, max: 1024000 - Number of tokens processed simultaneously. A smaller number saves memory. **Setting `n_batch = ctx` will speed up the work, but check in task manager if VRAM is getting full (the system starts using shared RAM memory which is causing x10 slowdown)**
+- `n_batch`: *INT*, default: 512, min: 64, max: 1024000 - Number of tokens processed simultaneously. A smaller number saves memory. Setting `n_batch = ctx` will speed up the work
 Rule: `n_batch <= ctx`
-- `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. If there is not enough memory, you can use the CPU, but this will significantly slow down the work. -1 means all layers in GPU. 0 means all layers in CPU. Unfortunately, this is NOT Block Swap - this technology is not yet supported by the llama.cpp library.
+- `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. If there is not enough memory, you can use the CPU, but this will significantly slow down the work. -1 means all layers in GPU. 0 means all layers in CPU.
 - `temperature`: *FLOAT*, default: 0.7, min: 0.0, max: 1.0 - The more - the more nonsense
 - `seed`: *INT*, default: 42
+- `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from **ComfyUI-Unload-Model**
 
 ### Not customizable parameters:
 - `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
@@ -51,9 +52,18 @@ Rule: `n_batch <= ctx`
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
 
-# Issue:
-If the memory is full before this node starts working and there isn't enough memory, you can clear it like this before node:
+# Speed test and memory full issue:
+LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
+Therefore, to get good speed, you cannot exceed the VRAM overflow.
+**Check in task manager if VRAM is getting full (which is causing x10 slowdown)**.
+
+The memory size (and speed) depends on model size, quantization method, the size of the input prompt, the output response, and the image size.
+Therefore, it is difficult to estimate the speed, but for me, with a prompt of 377 English words and a response of 225 English words and a 1024x1024 image on an RTX5080 card, with 8B Q8 model, the node executes in 13 seconds.
+
+If the memory is full before this node starts working and there isn't enough memory, I used this project before node:
 - https://github.com/SeanScripts/ComfyUI-Unload-Model
+  
+But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
 
 # Models:
 Regular version:
