@@ -7,6 +7,7 @@ import torch
 import numpy as np
 import gc
 import base64
+import comfy.model_management
 from io import BytesIO
 from PIL import Image
 
@@ -27,6 +28,7 @@ class Qwen3VL_GGUF_Node:
                  "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 100}),
                  "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01}),
                  "seed": ("INT", {"default": 42}),
+                 "unload_all_models": ("BOOLEAN", {"default": False}),
              }
          }
 
@@ -34,7 +36,18 @@ class Qwen3VL_GGUF_Node:
     FUNCTION = "run"
     CATEGORY = "multimodal/Qwen"
 
-    def run(self, image, system_prompt, user_prompt, model_path, mmproj_path, output_max_tokens, image_max_tokens, ctx, n_batch, gpu_layers, temperature, seed):
+    def run(self, image, system_prompt, user_prompt, model_path, mmproj_path, output_max_tokens, image_max_tokens, ctx, n_batch, gpu_layers, temperature, seed, unload_all_models):
+        
+        if unload_all_models == True:
+            comfy.model_management.unload_all_models()
+            comfy.model_management.soft_empty_cache(True)
+            try:
+                gc.collect()
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+            except:
+                print("Unable to clear cache")
+
         # Подготовка изображения
         img_tensor = image[0]  # [H, W, C]
         img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
