@@ -1,4 +1,5 @@
 # nightly
+# V1.1
 - add properties `unload_all_models`
 # V1.0
 - add properties `system prompt` - it can now be changed
