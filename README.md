@@ -1,5 +1,5 @@
 # ComfyUI_Simple_Qwen3-VL-gguf
-Simple Qwen3-VL gguf model loader for Comfy-UI.
+Simple Qwen3-VL gguf LLM model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
