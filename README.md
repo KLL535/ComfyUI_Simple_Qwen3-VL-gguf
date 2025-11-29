@@ -6,6 +6,7 @@ This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models, at least for me. Why, I don’t know)
 2. The model must support the Qwen3-VL multimodal model
 3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, you have to reload the model each time, but this is faster, especially on good hardware with fast memory and disks)
+4. No pre-loaded models stored in some unknown location. You can use any models you already have. Just download them using any convenient method (via a browser or even on a flash drive from a friend) and simply specify their path on the disk. For me, this is the most convenient method.
 
 # What's the problem:
 Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work for me.
@@ -84,7 +85,7 @@ Maybe it will be useful to someone.
 # More options:
 I wanted to give creative freedom and control LLM, so you could write any system prompt or change it on the fly.
 But if anyone wants to use templates, here's a solution that won't deprive the node of its previous capabilities.
-If you need to use a template prompt, include a special loader. If you need to edit the templates, you can find them here: custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts.json
+If you need to use a template prompt, include a special loader `Master Prompt Loader`. If you need to edit the templates, you can find them here: `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts.json`
 Just be sure not to violate the JSON format, otherwise the node won't load.
 Templates stolen from here:
 https://github.com/1038lab/ComfyUI-QwenVL
