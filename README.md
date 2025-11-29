@@ -30,7 +30,8 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 4. Restarting the frontend (F5)
 5. Now the following node has appeared:
 - `Qwen-VL Vision Language Model` - The main node for working with LLM
-- `Master Prompt Loader` - Loads system prompt presets
+- `Master Prompt Loader` - Loads system prompt and user prompt presets
+- `Master Prompt Loader (advanced)` - Loads system prompt and user prompt presets. Contains a bunch of other options that are still under development.
 <img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
 # Parameters (update):
@@ -86,8 +87,8 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 # More options:
 I wanted to give creative freedom and control LLM, so you could write any system prompt or change it on the fly.
 But if anyone wants to use templates, here's a solution that won't deprive the node of its previous capabilities.
-If you need to use a template prompt, include a special loader `Master Prompt Loader`. If you need to edit the templates, you can find them here: `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts.json`
-Just be sure not to violate the JSON format, otherwise the node won't load.
+If you need to use a template prompt, include a special loader `Master Prompt Loader`. If you need to add new templates, you can add them here: `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json` (The `system_prompts.json` file contains default presets, but they can be updated).
+Just be sure not to violate the JSON format, otherwise the node won't load. You need to escape the quotes for ", like this \\". You also need to make sure that the last line of the list doesn't have a comma at the end.
 Templates stolen from here:
 https://github.com/1038lab/ComfyUI-QwenVL
 
