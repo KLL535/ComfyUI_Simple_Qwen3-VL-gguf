@@ -1,3 +1,4 @@
+# qwen3vl_node.py
 import sys
 import os
 import json
@@ -80,6 +81,7 @@ class Qwen3VL_GGUF_Node:
             "seed":seed,
         }
 
+        #DEBUG
         #debug_config_path = os.path.join(os.path.dirname(__file__), "debug_config.json")
         #with open(debug_config_path, "w", encoding="utf-8") as f:
         #    json.dump(config, f, ensure_ascii=False, indent=2)
@@ -130,148 +132,39 @@ class Qwen3VL_GGUF_Node:
             gc.collect()
             torch.cuda.empty_cache()
 
+class MasterPromptLoader:
+    @classmethod
+    def INPUT_TYPES(cls):
+        prompts = cls._load_prompts()
+        preset_names = list(prompts.keys())
+        return {
+            "required": {
+                "preset": (preset_names, ),
+            }
+        }
 
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("system_prompt",)
+    FUNCTION = "load_prompt"
+    CATEGORY = "multimodal/Qwen"
 
-# import os
-# import gc
-# import base64
-# import torch
-# import numpy as np
-# from io import BytesIO
-# from PIL import Image
-# from llama_cpp import Llama
-# from llama_cpp.llama_chat_format import Llava15ChatHandler
-# import folder_paths
+    @staticmethod
+    def _load_prompts():
+        """Загружает пресеты из system_prompts.json из той же папки."""
+        # Получаем путь к текущему файлу
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        json_path = os.path.join(current_dir, "system_prompts.json")
 
-# class Qwen3VL_GGUF_Node:
-#     @classmethod
-#     def INPUT_TYPES(cls):
-#         return {
-#             "required": {
-#                 "image": ("IMAGE",),
-#                 "prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
-#                 "model_path": ("STRING", {"default": "H:\\Qwen3VL-8B-Instruct-Q8_0.gguf"}),
-#                 "mmproj_path": ("STRING", {"default": "H:\\mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
-#                 "max_tokens": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
-#                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.1}),
-#                 "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 100}),
-#                 "ctx": ("INT", {"default": 16384, "min": 0, "max": 1000000}),
-#             }
-#         }
+        if not os.path.exists(json_path):
+            raise FileNotFoundError(f"system_prompts.json not found at {json_path}")
 
-#     RETURN_TYPES = ("STRING",)
-#     FUNCTION = "run"
-#     CATEGORY = "multimodal/Qwen"
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-#     def run(self, image, prompt, model_path, mmproj_path, max_tokens, temperature, gpu_layers, ctx):
-#         output_text = ""
-#         llm = None
-#         chat_handler = None
+        return data.get("_system_prompts", {})
 
-#         def pil_image_to_base64_data_uri(pil_img):
-#             buffer = BytesIO()
-#             pil_img.save(buffer, format="PNG")
-#             img_bytes = buffer.getvalue()
-#             base64_str = base64.b64encode(img_bytes).decode('utf-8')
-#             return f"data:image/png;base64,{base64_str}"
+    def load_prompt(self, preset):
+        prompts = self._load_prompts()
+        prompt_text = prompts.get(preset, "")
+        return (prompt_text,)
 
-#         temp_img_path = None
-#         try:
-#             if not os.path.exists(model_path):
-#                 raise FileNotFoundError(f"Model not found: {model_path}")
-#             if not os.path.exists(mmproj_path):
-#                 raise FileNotFoundError(f"MMProj not found: {mmproj_path}")
-
-#             # --- Принудительная очистка памяти перед загрузкой модели ---
-#             torch.cuda.empty_cache()  # Очистка кэша PyTorch (включая shared memory)
-#             gc.collect()              # Сборка мусора Python
-
-#             # Если используется AMD или CPU — можно добавить:
-#             if torch.cuda.is_available():
-#                 torch.cuda.synchronize()  # Ждём завершения всех GPU-операций
-
-#             # --- Преобразуем изображение из ComfyUI в base64 ---
-#             img_tensor = image[0]  # [H, W, C], диапазон [0, 1]
-#             img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
-#             pil_img = Image.fromarray(img_np).convert("RGB")
-
-#             # --- Инициализация ---
-#             chat_handler = Llava15ChatHandler(clip_model_path=mmproj_path)
-
-#             llm = Llama(
-#                 model_path=model_path,
-#                 chat_handler=chat_handler,
-#                 n_ctx=ctx,
-#                 n_gpu_layers=gpu_layers,
-#                 verbose=False,
-#             )
-
-#             data_uri = pil_image_to_base64_data_uri(pil_img)
-
-#             images_messages = []
-#             images_messages.append({"type": "image_url", "image_url": {"url": data_uri}})
-#             images_messages.append({"type": "text", "text": prompt})
-
-#             messages = [
-#                 {"role": "system", "content": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."},
-#                 {"role": "user", "content": images_messages}
-#             ]
-
-#             result = llm.create_chat_completion(
-#                 messages=messages,
-#                 max_tokens=max_tokens,
-#                 temperature=temperature,
-#             )
-
-#             output_text = result["choices"][0]["message"]["content"]
-
-#         except Exception as e:
-#             output_text = f"[ERROR] {str(e)}"
-#             print("Qwen3VL GGUF Node Error:", e)
-#             import traceback
-#             traceback.print_exc()
-
-#         finally:
-#             # Явное уничтожение
-#             if 'llm' in locals() and llm is not None:
-#                 try:
-#                     llm._llama.ctx = None
-#                     llm._llama.model = None
-#                 except:
-#                     pass
-#                 try:
-#                     llm.__del__()
-#                 except:
-#                     pass
-#                 del llm
-
-#             if 'chat_handler' in locals() and chat_handler is not None:
-#                 try:
-#                     if hasattr(chat_handler, 'clip_model'):
-#                         del chat_handler.clip_model
-#                 except:
-#                     pass
-#                 del chat_handler
-
-#             # Удаляем изображения
-#             for var in ['pil_img', 'img_np', 'img_tensor']:
-#                 if var in locals():
-#                     del locals()[var]
-
-#             gc.collect()
-#             gc.collect()
-#             torch.cuda.empty_cache()
-
-#             # Принудительная выгрузка CUDA
-#             if torch.cuda.is_available():
-#                 torch.cuda.synchronize()
-#                 torch.cuda.empty_cache()
-
-#             # Дополнительно: сброс кэша llama.cpp (если доступен)
-#             try:
-#                from llama_cpp import llama_backend_free
-#                llama_backend_free()
-#             except:
-#                 pass 
-
-#         return (output_text,)

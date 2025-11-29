@@ -1,4 +1,6 @@
 # nightly
+# V1.2
+- add system_prompt template
 # V1.1
 - add properties `unload_all_models`
 # V1.0
