@@ -83,8 +83,6 @@ For example:
 # Implementation Features:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 
-Maybe it will be useful to someone.
-
 # More options:
 I wanted to give creative freedom and control LLM, so you could write any system prompt or change it on the fly.
 But if anyone wants to use templates, here's a solution that won't deprive the node of its previous capabilities.
@@ -94,6 +92,10 @@ Templates stolen from here:
 https://github.com/1038lab/ComfyUI-QwenVL
 
 <img width="1287" height="635" alt="image" src="https://github.com/user-attachments/assets/4700331c-7797-4090-82e2-efd86f5c17bc" />
+
+---
+
+Maybe it will be useful to someone.
 
 [!] Tested on Windows only. Tested on RTX5080 only. Tested only with Qwen3-VL-8B-Instruct.
 
