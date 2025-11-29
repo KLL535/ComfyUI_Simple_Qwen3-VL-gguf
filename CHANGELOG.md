@@ -1,4 +1,5 @@
 # nightly
+- experimental: add style preset
 # V1.2
 - add system_prompt template
 # V1.1

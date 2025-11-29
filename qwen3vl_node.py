@@ -30,6 +30,9 @@ class Qwen3VL_GGUF_Node:
                  "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01}),
                  "seed": ("INT", {"default": 42}),
                  "unload_all_models": ("BOOLEAN", {"default": False}),
+             },
+             "optional": {
+                 "user_prompt_prefix": ("STRING", {"default": "", "multiline": False, "forceInput": True}),
              }
          }
 
@@ -37,7 +40,7 @@ class Qwen3VL_GGUF_Node:
     FUNCTION = "run"
     CATEGORY = "multimodal/Qwen"
 
-    def run(self, image, system_prompt, user_prompt, model_path, mmproj_path, output_max_tokens, image_max_tokens, ctx, n_batch, gpu_layers, temperature, seed, unload_all_models):
+    def run(self, image, system_prompt, user_prompt, model_path, mmproj_path, output_max_tokens, image_max_tokens, ctx, n_batch, gpu_layers, temperature, seed, unload_all_models, user_prompt_prefix=None):
         
         if unload_all_models == True:
             comfy.model_management.unload_all_models()
@@ -64,6 +67,10 @@ class Qwen3VL_GGUF_Node:
         # Путь к скрипту (рядом с этим файлом)
         node_dir = os.path.dirname(os.path.abspath(__file__))
         script_path = os.path.join(node_dir, "qwen3vl_run.py")
+
+        if user_prompt_prefix != None:
+            if user_prompt_prefix != "":
+                user_prompt = user_prompt_prefix + " " + user_prompt
 
         # Создаём временный JSON-файл с параметрами
         config = {
@@ -135,23 +142,29 @@ class Qwen3VL_GGUF_Node:
 class MasterPromptLoader:
     @classmethod
     def INPUT_TYPES(cls):
-        prompts = cls._load_prompts()
-        preset_names = list(prompts.keys())
+        # Загружаем system prompts и user styles
+        system_prompts = cls._load_section("_system_prompts")
+        user_styles = cls._load_section("_user_prompt_styles")
+
+        preset_names = list(system_prompts.keys())
+        
+        style_names = ["No changes"] + list(user_styles.keys())
+
         return {
             "required": {
-                "preset": (preset_names, ),
+                "master_preset": (preset_names, ),
+                "style_preset": (style_names, {"default": "No changes"}),
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("system_prompt",)
+    RETURN_TYPES = ("STRING","STRING")
+    RETURN_NAMES = ("system_prompt","user_prompt")
     FUNCTION = "load_prompt"
     CATEGORY = "multimodal/Qwen"
 
     @staticmethod
-    def _load_prompts():
-        """Загружает пресеты из system_prompts.json из той же папки."""
-        # Получаем путь к текущему файлу
+    def _load_section(section_key):
+        """Загружает указанную секцию из system_prompts.json."""
         current_dir = os.path.dirname(os.path.abspath(__file__))
         json_path = os.path.join(current_dir, "system_prompts.json")
 
@@ -161,10 +174,21 @@ class MasterPromptLoader:
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        return data.get("_system_prompts", {})
+        return data.get(section_key, {})
 
-    def load_prompt(self, preset):
-        prompts = self._load_prompts()
-        prompt_text = prompts.get(preset, "")
-        return (prompt_text,)
+    def load_prompt(self, master_preset, style_preset):
+        system_prompts = self._load_section("_system_prompts")
+        user_styles = self._load_section("_user_prompt_styles")
+
+        base_prompt = system_prompts.get(master_preset, "").strip()
+        system_prompt = base_prompt
+
+        user_prompt = ""
+        if style_preset != "No changes":
+            style_instruction = user_styles.get(style_preset, "").strip()
+            user_prompt = style_instruction
+
+        return (system_prompt,user_prompt)
+
+
 
