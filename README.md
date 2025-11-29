@@ -28,7 +28,9 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 1. Use **ComfyUI Manager** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
 3. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
 4. Restarting the frontend (F5)
-5. Now the next node has appeared in the nodes.
+5. Now the following node has appeared:
+- `Qwen-VL Vision Language Model` - The main node for working with LLM
+- `Master Prompt Loader` - Loads system prompt presets
 <img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
 # Parameters (update):
