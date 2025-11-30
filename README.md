@@ -47,9 +47,11 @@ Rule: `image_max_tokens + text_max_tokens + output_max_tokens <= ctx`
 - `n_batch`: *INT*, default: 512, min: 64, max: 1024000 - Number of tokens processed simultaneously. A smaller number saves memory. Setting `n_batch = ctx` will speed up the work
 Rule: `n_batch <= ctx`
 - `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. If there is not enough memory, you can use the CPU, but this will significantly slow down the work. -1 means all layers in GPU. 0 means all layers in CPU.
-- `temperature`: *FLOAT*, default: 0.7, min: 0.0, max: 1.0 - The more - the more nonsense
+- `temperature`: *FLOAT*, default: 0.7, min: 0.0, max: 1.0 
 - `seed`: *INT*, default: 42
-- `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from **ComfyUI-Unload-Model**
+- `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
+- `top_p`: *FLOAT*, default: 0.92, min: 0.0, max: 1.0 
+- `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0 
 
 ### Not customizable parameters:
 - `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
@@ -69,6 +71,12 @@ If the memory is full before this node starts working and there isn't enough mem
 - https://github.com/SeanScripts/ComfyUI-Unload-Model
   
 But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
+
+# Stuck issue:
+If the model gets stuck on a response, you need to:
+- increase the `temperature`
+- decrease `top_p`
+- increase `repeat_penalty`
 
 # Models:
 Regular version:
