@@ -230,12 +230,13 @@ class MasterPromptLoaderAdvanced:
                 "focus_on_key_elements": ("BOOLEAN", {"default": False, "tooltip": "Describe only the most important subjects — omit background clutter, minor details, or decorations."}),
                 "European_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'European woman'."}),
                 "Slavic_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'Slavic woman'."}),
-                "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),        
+                "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}), 
+                "user_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),         
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("system_prompt",)
+    RETURN_TYPES = ("STRING","STRING")
+    RETURN_NAMES = ("system_prompt","user_prompt")
     FUNCTION = "load_prompt"
     CATEGORY = "multimodal/Qwen"
 
@@ -265,12 +266,24 @@ class MasterPromptLoaderAdvanced:
         focus_on_key_elements=False,
         European_woman=False,
         Slavic_woman=False,
-        system_prompt_opt=""):
+        system_prompt_opt="",
+        user_prompt_opt=""):
 
-        system_prompts = load_json_section("_system_prompts")
+        # === Master === 
 
         instructions = []
+        system_prompts = load_json_section("_system_prompts")
         instructions.append(system_prompts.get(master_preset, "").strip())
+        # === system_prompt_opt === 
+        if system_prompt_opt != None:
+            if system_prompt_opt.strip() != "":
+                instructions.append(system_prompt_opt.strip())
+
+        system_prompt = "\n".join(instructions)
+
+        # === User === 
+
+        instructions = []
 
         # === Style === 
         user_styles = load_json_section("_user_prompt_styles")
@@ -279,15 +292,15 @@ class MasterPromptLoaderAdvanced:
 
         # === Length === 
         if caption_length == "very_short":
-            instructions.append("Describe the image in no more than 50 words.")
+            instructions.append("Output format: no more than 50 words.")
         elif caption_length == "short":
-            instructions.append("Keep the description under 100 words.")
+            instructions.append("Output format: no more than 100 words.")
         elif caption_length == "medium":
-            instructions.append("Limit the description to 200 words or fewer.")
+            instructions.append("Output format: no more than 200 words.")
         elif caption_length == "long":
-            instructions.append("Write a detailed description of up to 300 words.")
+            instructions.append("Output format: no more than 300 words.")
         elif caption_length == "very_long":
-            instructions.append("Provide an in-depth description, not exceeding 400 words.")
+            instructions.append("Output format: no more than 400 words.")
 
         # === Экстра-опции ===
         if skip_meta_phrases:
@@ -357,14 +370,13 @@ class MasterPromptLoaderAdvanced:
             instructions.append("Only if a woman is visibly present in the image, refer to her as 'Slavic woman'.")
 
         # === system_prompt_opt === 
-        if system_prompt_opt != None:
-            if system_prompt_opt.strip() != "":
-                instructions.append(system_prompt_opt.strip())
+        if user_prompt_opt != None:
+            if user_prompt_opt.strip() != "":
+                instructions.append(user_prompt_opt.strip())
 
-        # Собираем финальный промпт
-        system_prompt = "\n".join(instructions)
+        user_prompt = "\n".join(instructions)
 
-        return (system_prompt,)
+        return (system_prompt,user_prompt)
 
 
 
