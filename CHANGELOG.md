@@ -1,4 +1,6 @@
 # nightly
+# V1.4
+- add joecaption model
 # V1.3
 - add properties top_p
 - add properties repeat_penalty
