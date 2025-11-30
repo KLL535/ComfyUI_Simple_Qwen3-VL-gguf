@@ -115,6 +115,13 @@ https://github.com/1038lab/ComfyUI-QwenVL
 
 <img width="1287" height="635" alt="image" src="https://github.com/user-attachments/assets/4700331c-7797-4090-82e2-efd86f5c17bc" />
 
+### Under construction:
+Styles - work acceptably. The rest of the options - sometimes yes, sometimes no.
+The idea for this configurator is taken from here:
+https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
+
+<img width="356" height="703" alt="image" src="https://github.com/user-attachments/assets/0e1327f3-6310-45a9-a0e3-ff4e5d9cc82b" />
+
 ---
 
 Maybe it will be useful to someone.
