@@ -96,9 +96,9 @@ For example:
 
 The loader selection is determined by the file name, the `llava` model must contain the word `llava` in the name.
 Recommended parameter for `joecaption`:
-- `temperature` = 0.4
+- `temperature` = 0.6
 - `top_p` = 0.9
-- `repeat_penalty` = 1.15
+- `repeat_penalty` = 1.2
 - `top_k` = 40 - const, not configurable
 
 # Implementation Features:
