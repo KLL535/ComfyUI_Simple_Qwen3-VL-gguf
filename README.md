@@ -99,6 +99,7 @@ Recommended parameter for `joecaption`:
 - `temperature` = 0.6
 - `top_p` = 0.9
 - `repeat_penalty` = 1.2
+- `n_batch` = 512
 - `top_k` = 40 - const, not configurable
 
 # Implementation Features:
