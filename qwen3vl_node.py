@@ -78,9 +78,15 @@ class Qwen3VL_GGUF_Node:
         torch.cuda.empty_cache()
         gc.collect()
 
+        model_filename = os.path.basename(model_path).lower()
+        if "llava" in model_filename:
+            script_name = "llavavl_run.py"
+        else:
+            script_name = "qwen3vl_run.py"
+            
         # Путь к скрипту (рядом с этим файлом)
         node_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(node_dir, "qwen3vl_run.py")
+        script_path = os.path.join(node_dir, script_name)
 
         # Создаём временный JSON-файл с параметрами
         config = {
