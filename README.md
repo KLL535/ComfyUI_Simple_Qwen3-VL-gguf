@@ -79,15 +79,26 @@ If the model gets stuck on a response, you need to:
 - increase `repeat_penalty`
 
 # Models:
-Regular version:
+1. Regular Qwen:
 - https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
 For example:
 `Qwen3VL-8B-Instruct-Q8_0.gguf` + `mmproj-Qwen3VL-8B-Instruct-F16.gguf`
 
-Uncensored version:
+2. Uncensored Qwen:
 - https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-8B-Instruct-abliterated/tree/main/GGUF
 For example:
 `ggml-model-q8_0.gguf` + `mmproj-model-f16.gguf`
+
+3. Old model llava (joecaption):
+- https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
+For example:
+`llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
+
+Recommended parameter for `joecaption`:
+- `temperature` = 0.4
+- `top_p` = 0.9
+- `repeat_penalty` = 1.15
+- `top_k` = 40 - const, not configurable
 
 # Implementation Features:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
