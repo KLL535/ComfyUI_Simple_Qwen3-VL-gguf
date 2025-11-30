@@ -94,6 +94,7 @@ For example:
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
+The loader selection is determined by the file name, the `llava` model must contain the word `llava` in the name.
 Recommended parameter for `joecaption`:
 - `temperature` = 0.4
 - `top_p` = 0.9
