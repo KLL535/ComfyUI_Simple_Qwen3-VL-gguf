@@ -97,6 +97,8 @@ def main():
             max_tokens=config.get("max_tokens", 2048),
             temperature=config.get("temperature", 0.7),
             seed=config.get("seed", 42),
+            repeat_penalty=config.get("repeat_penalty", 1.2),   
+            top_p=config.get("top_p", 0.92),
         )
 
         output = result["choices"][0]["message"]["content"]

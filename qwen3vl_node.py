@@ -30,6 +30,8 @@ class Qwen3VL_GGUF_Node:
                  "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01}),
                  "seed": ("INT", {"default": 42}),
                  "unload_all_models": ("BOOLEAN", {"default": False}),
+                 "top_p": ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01}),
+                 "repeat_penalty": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 2.0, "step": 0.01}),
              }
          }
 
@@ -37,7 +39,22 @@ class Qwen3VL_GGUF_Node:
     FUNCTION = "run"
     CATEGORY = "multimodal/Qwen"
 
-    def run(self, image, system_prompt, user_prompt, model_path, mmproj_path, output_max_tokens, image_max_tokens, ctx, n_batch, gpu_layers, temperature, seed, unload_all_models):
+    def run(self, 
+        image, 
+        system_prompt, 
+        user_prompt, 
+        model_path, 
+        mmproj_path, 
+        output_max_tokens, 
+        image_max_tokens, 
+        ctx, 
+        n_batch, 
+        gpu_layers, 
+        temperature, 
+        seed, 
+        unload_all_models,
+        top_p,
+        repeat_penalty):
         
         if unload_all_models == True:
             comfy.model_management.unload_all_models()
@@ -79,6 +96,8 @@ class Qwen3VL_GGUF_Node:
             "n_batch": n_batch,
             "system_prompt":system_prompt,
             "seed":seed,
+            "repeat_penalty":repeat_penalty,
+            "top_p":top_p,
         }
 
         #DEBUG

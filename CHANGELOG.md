@@ -1,8 +1,10 @@
 # nightly
-- add advanced options
-- add style preset
+- add properties top_p
+- add properties repeat_penalty
+- add advanced options (Master Prompt Loader Advanced)
+- add style preset (Master Prompt Loader Advanced)
 # V1.2
-- add system_prompt template
+- add system_prompt preset (Master Prompt Loader)
 # V1.1
 - add properties `unload_all_models`
 # V1.0
