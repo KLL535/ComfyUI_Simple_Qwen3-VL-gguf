@@ -245,6 +245,10 @@ class MasterPromptLoaderAdvanced:
                 "describe_composition": ("BOOLEAN", {"default": False, "tooltip": "Analyze visual structure: rule of thirds, symmetry, leading lines, balance, framing."}),
                 "describe_facial_details": ("BOOLEAN", {"default": False, "tooltip": "Provide a detailed description of facial features (eyes, mouth, expression) and the emotional state of any characters."}),
                 "describe_artistic_style": ("BOOLEAN", {"default": False, "tooltip": "Clearly identify and describe the artistic or rendering style of the image (e.g., photorealistic, anime, oil painting, pixel art, 3D render)."}),
+                "describe_camera_settings": ("BOOLEAN", {"default": False}),      # фото: ISO, aperture и т.д.
+                "describe_shot_type": ("BOOLEAN", {"default": False}),           # cinematic shot types
+                "describe_vantage_height": ("BOOLEAN", {"default": False}),      # bird's-eye, low-angle
+                "describe_orientation": ("BOOLEAN", {"default": False}),         # portrait/landscape                
                 "rate_aesthetic_quality": ("BOOLEAN", {"default": False, "tooltip": "Add a subjective quality rating: e.g., “low quality,” “high quality,” or “masterpiece.”"}),
                 "detect_watermark": ("BOOLEAN", {"default": False, "tooltip": "State whether a visible watermark is present in the image."}),
                 "skip_fixed_traits": ("BOOLEAN", {"default": False, "tooltip": "Avoid mentioning unchangeable attributes like ethnicity, gender, or age. Promotes ethical and flexible descriptions."}),
@@ -255,6 +259,8 @@ class MasterPromptLoaderAdvanced:
                 "classify_content_rating": ("BOOLEAN", {"default": False, "tooltip": "Explicitly label the image as sfw, suggestive, or nsfw."}),
                 "focus_on_key_elements": ("BOOLEAN", {"default": False, "tooltip": "Describe only the most important subjects — omit background clutter, minor details, or decorations."}),
                 "European_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'European woman'."}),
+                "Slavic_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'Slavic woman'."}),
+                "use_vulgar_language": ("BOOLEAN", {"default": False}),          # ⚠️ ВКЛЮЧАТЬ ОСТОРОЖНО!
             }
 
         }
@@ -302,6 +308,10 @@ class MasterPromptLoaderAdvanced:
         describe_composition=False,
         describe_facial_details=False,
         describe_artistic_style=False,
+        describe_camera_settings=False,
+        describe_shot_type=False,
+        describe_vantage_height=False,
+        describe_orientation=False,
         rate_aesthetic_quality=False,
         detect_watermark=False,
         skip_fixed_traits=False,
@@ -311,10 +321,92 @@ class MasterPromptLoaderAdvanced:
         family_friendly=False,
         classify_content_rating=False,
         focus_on_key_elements=False,
-        European_woman=False):
+        European_woman=False,
+        Slavic_woman=False,
+        use_vulgar_language=False):
+
 
         system_prompts = self._load_section("_system_prompts")
-        system_prompt = system_prompts.get(master_preset, "").strip()
+        base_prompt = system_prompts.get(master_preset, "").strip()
+        instructions = [base_prompt]
+
+        # === ВСЕГДА ДОБАВЛЯЕМ: запрет на мета-фразы (для T2I) ===
+        instructions.append("Avoid useless meta phrases like 'This image shows', 'You are looking at', or 'The image depicts'.")
+
+        # === Имя персонажа ===
+        if character_name and character_name.strip():
+            instructions.append(f"If a person is present, refer to them as '{character_name.strip()}'. Do NOT mention or describe any person if none is present.")
+
+        # === Экстра-опции ===
+        if European_woman:
+            instructions.append("Only if a woman is visibly present in the image, refer to her as 'European woman'. Do NOT mention or describe any woman if none is present. Never invent, assume, or add female figures.")
+
+        if Slavic_woman:
+            instructions.append("Only if a woman is visibly present in the image, refer to her as 'Slavic woman'. Do NOT mention or describe any woman if none is present. Never invent, assume, or add female figures.")
+
+        if describe_lighting:
+            instructions.append("Include details about the lighting (type, direction, mood).")
+
+        if describe_camera_angle:
+            instructions.append("Describe the camera angle (e.g., frontal, profile, overhead).")
+
+        if describe_vantage_height:
+            instructions.append("Specify the vantage height (e.g., eye-level, low-angle, bird’s-eye view, drone shot).")
+
+        if describe_shot_type:
+            instructions.append("Identify the shot type (e.g., extreme close-up, close-up, medium shot, wide shot, extreme wide shot).")
+
+        if describe_camera_settings:
+            instructions.append("If the image is a photograph, include likely camera settings: aperture, shutter speed, ISO, and lens type.")
+
+        if describe_orientation:
+            instructions.append("Identify the image orientation: portrait, landscape, or square, and approximate aspect ratio if obvious.")
+
+        if describe_depth_of_field:
+            instructions.append("Specify the depth of field (e.g., background blurred or in focus).")
+
+        if describe_composition:
+            instructions.append("Comment on the composition style (e.g., rule of thirds, leading lines, symmetry, framing).")
+
+        if describe_facial_details:
+            instructions.append("Provide a detailed description of facial features (eyes, mouth, expression) and emotional state of any characters.")
+
+        if describe_artistic_style:
+            instructions.append("Clearly identify and describe the artistic or rendering style (e.g., photorealistic, anime, oil painting, 3D render, pixel art).")
+
+        if rate_aesthetic_quality:
+            instructions.append("Rate the aesthetic quality from low to very high.")
+
+        if detect_watermark:
+            instructions.append("State clearly if there is a visible watermark.")
+
+        if skip_fixed_traits:
+            instructions.append("Focus on what people are doing or wearing, not on unchangeable attributes like ethnicity, gender, or body type.")
+
+        if skip_resolution:
+            instructions.append("Describe only the depicted scene, objects, and people — not the image quality, resolution, file format, or compression artifacts.")
+
+        if ignore_image_text:
+            instructions.append("Completely ignore any text, logos, UI elements, or watermarks in the image. Describe only visual content.")
+
+        if use_precise_language:
+            instructions.append("Use precise, unambiguous, and concrete language. Avoid vague or subjective terms.")
+
+        if family_friendly and not use_vulgar_language:
+            instructions.append("Keep the description family-friendly (PG). Avoid any sexual, violent, or offensive content.")
+
+        if classify_content_rating:
+            instructions.append("Classify the image as 'sfw', 'suggestive', or 'nsfw'.")
+
+        if focus_on_key_elements:
+            instructions.append("Only describe the most important and visually dominant elements of the image.")
+
+        # === ⚠️ VULGAR LANGUAGE ===
+        if use_vulgar_language:
+            instructions.append("Use blunt, casual phrasing with vulgar slang and profanity where appropriate (e.g., 'fucking', 'slut', 'cock'). Avoid polite euphemisms.")
+
+        # Собираем финальный промпт
+        system_prompt = "\n".join(instructions)
 
         #-------
 
@@ -337,48 +429,7 @@ class MasterPromptLoaderAdvanced:
             if custom_user_prompt.strip():
                 user_prompt += "\n" + custom_user_prompt.strip()
 
-        # instructions
-        instructions = []
-        if character_name != None:
-            if character_name.strip() != "":
-                instructions.append(f"If a person is present, refer to them as '{character_name.strip()}'.")
-        if describe_lighting:
-            instructions.append("Include details about the lighting.")
-        if describe_camera_angle:
-            instructions.append("Describe the camera angle.")
-        if describe_depth_of_field:
-            instructions.append("Specify the depth of field (e.g., background blurred or in focus).")
-        if describe_composition:
-            instructions.append("Comment on the composition style (e.g., rule of thirds, symmetry).")
-        if describe_facial_details:
-            instructions.append("Provide a detailed description of facial features (eyes, mouth, expression) and the emotional state of any characters.")
-        if describe_artistic_style:
-            instructions.append("Clearly identify and describe the artistic or rendering style of the image (e.g., photorealistic, anime, oil painting, pixel art, 3D render).")
-        if rate_aesthetic_quality:
-            instructions.append("Rate the aesthetic quality from low to very high.")
-        if detect_watermark:
-            instructions.append("State if there is a watermark.")
-        if skip_fixed_traits:
-            instructions.append("Focus on what people are doing or wearing, not who they appear to be.")
-        if skip_resolution:
-            instructions.append("Describe only the depicted scene, objects, and people — not the image quality, format, or technical attributes.")
-        if ignore_image_text:
-            instructions.append("Describe only visual elements such as objects, people, colors, and lighting. Completely ignore any text, logos, watermarks, or UI elements in the image.")
-        if use_precise_language:
-            instructions.append("Use precise and unambiguous language.")
-        if family_friendly:
-            instructions.append("Keep the description family-friendly (PG).")
-        if classify_content_rating:
-            instructions.append("Classify the image as 'sfw', 'suggestive', or 'nsfw'.")
-        if focus_on_key_elements:
-            instructions.append("Only describe the most important elements of the image.")
-        if European_woman:
-            instructions.append("Only if a woman is visibly present in the image, refer to her as 'European woman'. Do NOT mention or describe any woman if none is present. Never invent, assume, or add female figures.")
-
-        if instructions:
-            user_prompt += "\n" + "\n".join(instructions)
-
-        return (system_prompt,user_prompt)
+        return (system_prompt.strip(),user_prompt.strip())
 
 
 
