@@ -132,120 +132,90 @@ class Qwen3VL_GGUF_Node:
             gc.collect()
             torch.cuda.empty_cache()
 
+def load_json_section(section_key):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    official_path = os.path.join(current_dir, "system_prompts.json")
+    user_path = os.path.join(current_dir, "system_prompts_user.json")
+
+    official_data = {}
+    if os.path.exists(official_path):
+        with open(official_path, "r", encoding="utf-8") as f:
+            official_data = json.load(f)
+    else:
+        print(f"[WARNING] Official prompt file not found: {official_path}")
+
+    user_data = {}
+    if os.path.exists(user_path):
+        with open(user_path, "r", encoding="utf-8") as f:
+            user_data = json.load(f)
+
+    # Получаем секции
+    official_section = official_data.get(section_key, {})
+    user_section = user_section = user_data.get(section_key, {})
+
+    combined = {**official_section, **user_section}
+    return combined
+
+
 class MasterPromptLoader:
     @classmethod
     def INPUT_TYPES(cls):
         # Загружаем system prompts и user styles
-        system_prompts = cls._load_section("_system_prompts")
+        system_prompts = load_json_section("_system_prompts")
         system_names = list(system_prompts.keys())
-        
-        user_styles = cls._load_section("_user_prompt_styles")
-        style_names = ["No changes"] + list(user_styles.keys())
 
         return {
             "required": {
-                "master_preset": (system_names, ),
-                "style_preset": (style_names, {"default": "No changes"}),
-                "caption_length": ([
-                    "any", "very_short", "short", "medium", "long", "very_long"
-                ] + [str(i) for i in range(20, 261, 10)], {"default": "long"}),
+                "master_preset": (system_names, )
             },
             "optional": {
-                "custom_user_prompt": ("STRING", {"default": "", "multiline": True}),
+                "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),        
             }
-
         }
 
-    RETURN_TYPES = ("STRING","STRING")
-    RETURN_NAMES = ("system_prompt","user_prompt")
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("system_prompt",)
     FUNCTION = "load_prompt"
     CATEGORY = "multimodal/Qwen"
 
-    @staticmethod
-    def _load_section(section_key):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        official_path = os.path.join(current_dir, "system_prompts.json")
-        user_path = os.path.join(current_dir, "system_prompts_user.json")
-
-        official_data = {}
-        if os.path.exists(official_path):
-            with open(official_path, "r", encoding="utf-8") as f:
-                official_data = json.load(f)
-        else:
-            print(f"[WARNING] Official prompt file not found: {official_path}")
-
-        user_data = {}
-        if os.path.exists(user_path):
-            with open(user_path, "r", encoding="utf-8") as f:
-                user_data = json.load(f)
-
-        # Получаем секции
-        official_section = official_data.get(section_key, {})
-        user_section = user_section = user_data.get(section_key, {})
-
-        combined = {**official_section, **user_section}
-        return combined
-
     def load_prompt(self, 
-        master_preset, 
-        style_preset,
-        caption_length,
-        custom_user_prompt=""):
+        master_preset,
+        system_prompt_opt=""):
 
-        system_prompts = self._load_section("_system_prompts")
+        system_prompts = load_json_section("_system_prompts")
         system_prompt = system_prompts.get(master_preset, "").strip()
 
-        #-------
+        if system_prompt_opt != None:
+            if system_prompt_opt.strip() != "":
+                system_prompt += '\n' + system_prompt_opt.strip()
 
-        user_prompt = ""
-
-        # length
-        if caption_length not in ["any", "very_short", "short", "medium", "long", "very_long"]:
-            user_prompt += f"Keep it within {caption_length} words."
-        elif caption_length != "any":
-            user_prompt += f"Make it a {caption_length.replace('_', '-')} caption."
-
-        # style
-        user_styles = self._load_section("_user_prompt_styles")
-        if style_preset != "No changes":
-            style_instruction = user_styles.get(style_preset, "").strip()
-            user_prompt += '\n' + style_instruction
-
-        # custom_user_prompt
-        if custom_user_prompt != None:
-            if custom_user_prompt.strip():
-                user_prompt += "\n" + custom_user_prompt.strip()
-
-        return (system_prompt,user_prompt)
+        return (system_prompt,)
 
 class MasterPromptLoaderAdvanced:
     @classmethod
     def INPUT_TYPES(cls):
         # Загружаем system prompts и user styles
-        system_prompts = cls._load_section("_system_prompts")
+        system_prompts = load_json_section("_system_prompts")
         system_names = list(system_prompts.keys())
         
-        user_styles = cls._load_section("_user_prompt_styles")
+        user_styles = load_json_section("_user_prompt_styles")
         style_names = ["No changes"] + list(user_styles.keys())
 
         return {
             "required": {
                 "master_preset": (system_names, ),
                 "style_preset": (style_names, {"default": "No changes"}),
-                "caption_length": ([
-                    "any", "very_short", "short", "medium", "long", "very_long"
-                ] + [str(i) for i in range(20, 261, 10)], {"default": "long"}),
+                "caption_length": (["unlimited", "very_short", "short", "medium", "long", "very_long"], {"default": "unlimited"}),
             },
             "optional": {
-                "custom_user_prompt": ("STRING", {"default": "", "multiline": True}),
-                "character_name": ("STRING", {"default": "", "multiline": False, "tooltip": "The name to use for the character"}),
+                "skip_meta_phrases": ("BOOLEAN", {"default": False}),
                 "describe_lighting": ("BOOLEAN", {"default": False, "tooltip": "Include details about lighting: natural/artificial, soft/harsh, direction, and mood."}),
                 "describe_camera_angle": ("BOOLEAN", {"default": False, "tooltip": "Specify the camera perspective: eye-level, low-angle, bird’s-eye view, etc."}),
                 "describe_depth_of_field": ("BOOLEAN", {"default": False, "tooltip": "Describe focus and blur: e.g., “shallow depth of field,” “background blurred,” or “everything in focus.”"}),
                 "describe_composition": ("BOOLEAN", {"default": False, "tooltip": "Analyze visual structure: rule of thirds, symmetry, leading lines, balance, framing."}),
                 "describe_facial_details": ("BOOLEAN", {"default": False, "tooltip": "Provide a detailed description of facial features (eyes, mouth, expression) and the emotional state of any characters."}),
                 "describe_artistic_style": ("BOOLEAN", {"default": False, "tooltip": "Clearly identify and describe the artistic or rendering style of the image (e.g., photorealistic, anime, oil painting, pixel art, 3D render)."}),
-                "describe_camera_settings": ("BOOLEAN", {"default": False}),      # фото: ISO, aperture и т.д.
+                "describe_camera_settings": ("BOOLEAN", {"default": False}),      # ISO, aperture
                 "describe_shot_type": ("BOOLEAN", {"default": False}),           # cinematic shot types
                 "describe_vantage_height": ("BOOLEAN", {"default": False}),      # bird's-eye, low-angle
                 "describe_orientation": ("BOOLEAN", {"default": False}),         # portrait/landscape                
@@ -260,48 +230,20 @@ class MasterPromptLoaderAdvanced:
                 "focus_on_key_elements": ("BOOLEAN", {"default": False, "tooltip": "Describe only the most important subjects — omit background clutter, minor details, or decorations."}),
                 "European_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'European woman'."}),
                 "Slavic_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'Slavic woman'."}),
-                "use_vulgar_language": ("BOOLEAN", {"default": False}),          # ⚠️ ВКЛЮЧАТЬ ОСТОРОЖНО!
+                "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),        
             }
-
         }
 
-    RETURN_TYPES = ("STRING","STRING")
-    RETURN_NAMES = ("system_prompt","user_prompt")
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("system_prompt",)
     FUNCTION = "load_prompt"
     CATEGORY = "multimodal/Qwen"
-
-    @staticmethod
-    def _load_section(section_key):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        official_path = os.path.join(current_dir, "system_prompts.json")
-        user_path = os.path.join(current_dir, "system_prompts_user.json")
-
-        official_data = {}
-        if os.path.exists(official_path):
-            with open(official_path, "r", encoding="utf-8") as f:
-                official_data = json.load(f)
-        else:
-            print(f"[WARNING] Official prompt file not found: {official_path}")
-
-        user_data = {}
-        if os.path.exists(user_path):
-            with open(user_path, "r", encoding="utf-8") as f:
-                user_data = json.load(f)
-
-        # Получаем секции
-        official_section = official_data.get(section_key, {})
-        user_section = user_section = user_data.get(section_key, {})
-
-        combined = {**official_section, **user_section}
-        return combined
-
 
     def load_prompt(self, 
         master_preset, 
         style_preset,
         caption_length,
-        custom_user_prompt="",
-        character_name="",
+        skip_meta_phrases=False,
         describe_lighting=False,
         describe_camera_angle=False,
         describe_depth_of_field=False,
@@ -323,26 +265,33 @@ class MasterPromptLoaderAdvanced:
         focus_on_key_elements=False,
         European_woman=False,
         Slavic_woman=False,
-        use_vulgar_language=False):
+        system_prompt_opt=""):
 
+        system_prompts = load_json_section("_system_prompts")
 
-        system_prompts = self._load_section("_system_prompts")
-        base_prompt = system_prompts.get(master_preset, "").strip()
-        instructions = [base_prompt]
+        instructions = []
+        instructions.append(system_prompts.get(master_preset, "").strip())
 
-        # === ВСЕГДА ДОБАВЛЯЕМ: запрет на мета-фразы (для T2I) ===
-        instructions.append("Avoid useless meta phrases like 'This image shows', 'You are looking at', or 'The image depicts'.")
+        # === Style === 
+        user_styles = load_json_section("_user_prompt_styles")
+        if style_preset != "No changes":
+            instructions.append(user_styles.get(style_preset, "").strip())
 
-        # === Имя персонажа ===
-        if character_name and character_name.strip():
-            instructions.append(f"If a person is present, refer to them as '{character_name.strip()}'. Do NOT mention or describe any person if none is present.")
+        # === Length === 
+        if caption_length == "very_short":
+            instructions.append("Describe the image in no more than 50 words.")
+        elif caption_length == "short":
+            instructions.append("Keep the description under 100 words.")
+        elif caption_length == "medium":
+            instructions.append("Limit the description to 200 words or fewer.")
+        elif caption_length == "long":
+            instructions.append("Write a detailed description of up to 300 words.")
+        elif caption_length == "very_long":
+            instructions.append("Provide an in-depth description, not exceeding 400 words.")
 
         # === Экстра-опции ===
-        if European_woman:
-            instructions.append("Only if a woman is visibly present in the image, refer to her as 'European woman'. Do NOT mention or describe any woman if none is present. Never invent, assume, or add female figures.")
-
-        if Slavic_woman:
-            instructions.append("Only if a woman is visibly present in the image, refer to her as 'Slavic woman'. Do NOT mention or describe any woman if none is present. Never invent, assume, or add female figures.")
+        if skip_meta_phrases:
+            instructions.append("Avoid useless meta phrases like 'This image shows', 'You are looking at', or 'The image depicts'.")    
 
         if describe_lighting:
             instructions.append("Include details about the lighting (type, direction, mood).")
@@ -372,7 +321,7 @@ class MasterPromptLoaderAdvanced:
             instructions.append("Provide a detailed description of facial features (eyes, mouth, expression) and emotional state of any characters.")
 
         if describe_artistic_style:
-            instructions.append("Clearly identify and describe the artistic or rendering style (e.g., photorealistic, anime, oil painting, 3D render, pixel art).")
+            instructions.append("Emphasize the artistic or rendering style in your description.")
 
         if rate_aesthetic_quality:
             instructions.append("Rate the aesthetic quality from low to very high.")
@@ -392,44 +341,30 @@ class MasterPromptLoaderAdvanced:
         if use_precise_language:
             instructions.append("Use precise, unambiguous, and concrete language. Avoid vague or subjective terms.")
 
-        if family_friendly and not use_vulgar_language:
-            instructions.append("Keep the description family-friendly (PG). Avoid any sexual, violent, or offensive content.")
-
         if classify_content_rating:
             instructions.append("Classify the image as 'sfw', 'suggestive', or 'nsfw'.")
 
         if focus_on_key_elements:
             instructions.append("Only describe the most important and visually dominant elements of the image.")
 
-        # === ⚠️ VULGAR LANGUAGE ===
-        if use_vulgar_language:
-            instructions.append("Use blunt, casual phrasing with vulgar slang and profanity where appropriate (e.g., 'fucking', 'slut', 'cock'). Avoid polite euphemisms.")
+        if family_friendly:
+            instructions.append("Keep the description family-friendly (PG). Avoid any sexual, violent, or offensive content.")
+
+        if European_woman and not Slavic_woman:
+            instructions.append("Only if a woman is visibly present in the image, refer to her as 'European woman'.")
+
+        if Slavic_woman and not European_woman:
+            instructions.append("Only if a woman is visibly present in the image, refer to her as 'Slavic woman'.")
+
+        # === system_prompt_opt === 
+        if system_prompt_opt != None:
+            if system_prompt_opt.strip() != "":
+                instructions.append(system_prompt_opt.strip())
 
         # Собираем финальный промпт
         system_prompt = "\n".join(instructions)
 
-        #-------
-
-        user_prompt = ""
-
-        # length
-        if caption_length not in ["any", "very_short", "short", "medium", "long", "very_long"]:
-            user_prompt += f"Keep it within {caption_length} words."
-        elif caption_length != "any":
-            user_prompt += f"Make it a {caption_length.replace('_', '-')} caption."
-
-        # style
-        user_styles = self._load_section("_user_prompt_styles")
-        if style_preset != "No changes":
-            style_instruction = user_styles.get(style_preset, "").strip()
-            user_prompt += '\n' + style_instruction
-
-        # custom_user_prompt
-        if custom_user_prompt != None:
-            if custom_user_prompt.strip():
-                user_prompt += "\n" + custom_user_prompt.strip()
-
-        return (system_prompt.strip(),user_prompt.strip())
+        return (system_prompt,)
 
 
 
