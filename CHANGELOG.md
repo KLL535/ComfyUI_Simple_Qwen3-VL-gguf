@@ -1,4 +1,5 @@
 # nightly
+# V1.3
 - add properties top_p
 - add properties repeat_penalty
 - add advanced options (Master Prompt Loader Advanced)
