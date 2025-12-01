@@ -79,15 +79,28 @@ If the model gets stuck on a response, you need to:
 - increase `repeat_penalty`
 
 # Models:
-Regular version:
+1. Regular Qwen:
 - https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
 For example:
 `Qwen3VL-8B-Instruct-Q8_0.gguf` + `mmproj-Qwen3VL-8B-Instruct-F16.gguf`
 
-Uncensored version:
+2. Uncensored Qwen:
 - https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-8B-Instruct-abliterated/tree/main/GGUF
 For example:
 `ggml-model-q8_0.gguf` + `mmproj-model-f16.gguf`
+
+3. Old model llava (joecaption):
+- https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
+For example:
+`llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
+
+The loader selection is determined by the file name, the `llava` model must contain the word `llava` in the name.
+Recommended parameter for `joecaption`:
+- `temperature` = 0.6
+- `top_p` = 0.9
+- `repeat_penalty` = 1.2
+- `n_batch` = 512
+- `top_k` = 40 - const, not configurable
 
 # Implementation Features:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
@@ -101,6 +114,13 @@ Templates stolen from here:
 https://github.com/1038lab/ComfyUI-QwenVL
 
 <img width="1287" height="635" alt="image" src="https://github.com/user-attachments/assets/4700331c-7797-4090-82e2-efd86f5c17bc" />
+
+### Under construction:
+Styles - work acceptably. The rest of the options - sometimes yes, sometimes no.
+The idea for this configurator is taken from here:
+https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
+
+<img width="356" height="703" alt="image" src="https://github.com/user-attachments/assets/0e1327f3-6310-45a9-a0e3-ff4e5d9cc82b" />
 
 ---
 
