@@ -75,20 +75,20 @@ def main():
             verbose=False,
         )
 
+        images = config['images']
+        content = [{"type": "text", "text": config["user_prompt"]}]
+        for image in images:
+            if image != None:
+                data_url = f"data:image/png;base64,{image}"
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_url}
+                })
+
         # === Подготовка сообщений ===
-        data_uri = f"data:image/png;base64,{config['image_base64']}"
         messages = [
-            {
-                "role": "system",
-                "content": config["system_prompt"]
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": config["user_prompt"]},
-                    {"type": "image_url", "image_url": {"url": data_uri}}
-                ]
-            }
+            { "role": "system", "content": config["system_prompt"] },
+            { "role": "user", "content": content }
         ]
 
         # === Генерация ===

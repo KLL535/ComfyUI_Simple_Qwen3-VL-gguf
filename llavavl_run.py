@@ -33,16 +33,19 @@ def main():
             verbose=False,
         )
 
+        images = config['images']
+        content = [{"type": "text", "text": config["system_prompt"] + "\n\n" + config["user_prompt"]}]
+        for image in images:
+            if image != None:
+                data_url = f"data:image/png;base64,{image}"
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_url}
+                })
+
         # === Подготовка сообщений ===
-        data_uri = f"data:image/png;base64,{config['image_base64']}"
         messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": data_uri}},
-                    {"type": "text", "text": config["system_prompt"] + "\n\n" + config["user_prompt"]},
-                ]
-            }
+            { "role": "user", "content": content }
         ]
 
         # === Генерация ===

@@ -15,32 +15,35 @@ from PIL import Image
 class Qwen3VL_GGUF_Node:
     @classmethod
     def INPUT_TYPES(cls):
-         return {
-             "required": {
-                 "image": ("IMAGE",),
-                 "system_prompt": ("STRING", {"multiline": False, "default": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."}),
-                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
-                 "model_path": ("STRING", {"default": "H:\\Qwen3VL-8B-Instruct-Q8_0.gguf"}),
-                 "mmproj_path": ("STRING", {"default": "H:\\mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
-                 "output_max_tokens": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
-                 "image_max_tokens": ("INT", {"default": 4096, "min": 1024, "max": 1024000, "step": 512}),
-                 "ctx": ("INT", {"default": 8192, "min": 1024, "max": 1024000, "step": 512}),
-                 "n_batch": ("INT", {"default": 512, "min": 64, "max": 1024000, "step": 64}),
-                 "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 100}),
-                 "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01}),
-                 "seed": ("INT", {"default": 42}),
-                 "unload_all_models": ("BOOLEAN", {"default": False}),
-                 "top_p": ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01}),
-                 "repeat_penalty": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 2.0, "step": 0.01}),
-             }
-         }
+        return {
+            "required": {
+                "system_prompt": ("STRING", {"multiline": False, "default": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."}),
+                "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
+                "model_path": ("STRING", {"default": "H:\\Qwen3VL-8B-Instruct-Q8_0.gguf"}),
+                "mmproj_path": ("STRING", {"default": "H:\\mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
+                "output_max_tokens": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
+                "image_max_tokens": ("INT", {"default": 4096, "min": 1024, "max": 1024000, "step": 512}),
+                "ctx": ("INT", {"default": 8192, "min": 1024, "max": 1024000, "step": 512}),
+                "n_batch": ("INT", {"default": 512, "min": 64, "max": 1024000, "step": 64}),
+                "gpu_layers": ("INT", {"default": -1, "min": -1, "max": 100}),
+                "temperature": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 2.0, "step": 0.01}),
+                "seed": ("INT", {"default": 42}),
+                "unload_all_models": ("BOOLEAN", {"default": False}),
+                "top_p": ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "repeat_penalty": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 2.0, "step": 0.01}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+            }
+        }
 
     RETURN_TYPES = ("STRING",)
     FUNCTION = "run"
     CATEGORY = "multimodal/Qwen"
 
     def run(self, 
-        image, 
         system_prompt, 
         user_prompt, 
         model_path, 
@@ -54,7 +57,10 @@ class Qwen3VL_GGUF_Node:
         seed, 
         unload_all_models,
         top_p,
-        repeat_penalty):
+        repeat_penalty,
+        image=None,
+        image2=None,
+        image3=None):
         
         if unload_all_models == True:
             comfy.model_management.unload_all_models()
@@ -66,13 +72,33 @@ class Qwen3VL_GGUF_Node:
             except:
                 print("Unable to clear cache")
 
-        # Подготовка изображения
-        img_tensor = image[0]  # [H, W, C]
-        img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
-        pil_img = Image.fromarray(img_np, mode='RGB')
-        buffer = BytesIO()
-        pil_img.save(buffer, format="PNG")
-        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        input_images = [image, image2, image3]
+        images = []
+        for img_batch in input_images:
+            if img_batch is None:
+                continue  
+
+            # ComfyUI передаёт изображение как тензор формы [B, H, W, C] (обычно B=1)
+            if img_batch.ndim == 4:
+                img_tensor = img_batch[0]  # извлекаем первое (и единственное) изображение → [H, W, C]
+            else:
+                img_tensor = img_batch  # на случай, если вдруг уже [H, W, C]
+
+            # Преобразуем в numpy uint8 в диапазоне [0, 255]
+            img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
+
+            # Конвертируем в PIL.Image
+            pil_img = Image.fromarray(img_np, mode='RGB')
+
+            # Сохраняем в буфер как PNG
+            buffer = BytesIO()
+            pil_img.save(buffer, format="PNG")
+
+            # Кодируем в base64
+            img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+            # Добавляем в список
+            images.append(img_base64)
 
         # Очистка перед запуском
         torch.cuda.empty_cache()
@@ -97,7 +123,7 @@ class Qwen3VL_GGUF_Node:
             "temperature": temperature,
             "gpu_layers": gpu_layers,
             "ctx": ctx,
-            "image_base64": img_base64,  
+            "images": images, 
             "image_max_tokens": image_max_tokens,
             "n_batch": n_batch,
             "system_prompt":system_prompt,
