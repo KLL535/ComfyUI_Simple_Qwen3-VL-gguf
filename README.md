@@ -35,7 +35,7 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 <img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
 # Parameters (update):
-- `image`: *IMAGE* - analyzed image
+- `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3 images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM.
 - `system prompt`: *STRING*, default: "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions." - role + rules + format.
 - `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
 - `model_path`: *STRING*, default: `H:\Qwen3VL-8B-Instruct-Q8_0.gguf` - The path to the model is written here
@@ -84,7 +84,7 @@ If the model gets stuck on a response, you need to:
 For example:
 `Qwen3VL-8B-Instruct-Q8_0.gguf` + `mmproj-Qwen3VL-8B-Instruct-F16.gguf`
 
-2. Uncensored Qwen:
+2. Uncensored Qwen (but the model isn't trained on NSFW and doesn't understand it well):
 - https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-8B-Instruct-abliterated/tree/main/GGUF
 For example:
 `ggml-model-q8_0.gguf` + `mmproj-model-f16.gguf`
@@ -116,7 +116,7 @@ https://github.com/1038lab/ComfyUI-QwenVL
 <img width="1287" height="635" alt="image" src="https://github.com/user-attachments/assets/4700331c-7797-4090-82e2-efd86f5c17bc" />
 
 ### Under construction:
-Styles - work acceptably. The rest of the options - sometimes yes, sometimes no.
+Styles - work well 90% of the time. The rest of the options - sometimes yes, sometimes no.
 The idea for this configurator is taken from here:
 https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
