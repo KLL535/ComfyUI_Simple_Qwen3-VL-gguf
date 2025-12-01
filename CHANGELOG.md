@@ -1,4 +1,6 @@
 # nightly
+# V1.5
+- add up to 3 optional image
 # V1.4
 - add joecaption model
 # V1.3
