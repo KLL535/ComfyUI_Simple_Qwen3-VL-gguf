@@ -1,8 +1,10 @@
 # nightly
+# V1.6
+- add `Model Preset Loader`
 # V1.5
 - add up to 3 optional image
 # V1.4
-- add joecaption model
+- add Joecaption model
 # V1.3
 - add properties top_p
 - add properties repeat_penalty
