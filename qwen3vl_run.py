@@ -73,6 +73,7 @@ def main():
             n_batch=config.get("n_batch", 512),
             swa_full=True,
             verbose=False,
+            #pool_size=4194304,
         )
 
         images = config['images']
@@ -99,6 +100,7 @@ def main():
             seed=config.get("seed", 42),
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
+            stop=["<|im_end|>", "<|im_start|>"],
         )
 
         output = result["choices"][0]["message"]["content"]

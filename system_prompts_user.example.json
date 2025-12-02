@@ -1,0 +1,49 @@
+{
+    "_system_prompts": {
+        "🖼️ My": "You are a helpful and precise image captioning assistant. Write a \"some text\""
+    },
+    "_user_prompt_styles": {
+        "🖼️ My": "Transform style to \"some text\""
+    },
+    "_camera_preset": {
+        "✨ My": "Transform this exact scene using the following camera transformation: Replace camera settings with: \"some text\" this means: \"some text\""
+    },
+    "_model_presets": {
+        "Qwen3-VL-8B": {
+            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
+            "output_max_tokens": 2048,
+            "image_max_tokens": 4096,
+            "ctx": 8192,
+            "n_batch": 8192,
+            "gpu_layers": -1,
+            "temperature": 0.7,
+            "top_p": 0.92,
+            "repeat_penalty": 1.2
+        },
+        "Qwen3-VL-30B": {
+            "model_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf",
+            "mmproj_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S\\mmproj-BF16.gguf",
+            "output_max_tokens": 2048,
+            "image_max_tokens": 4096,
+            "ctx": 8192,
+            "n_batch": 8192,
+            "gpu_layers": -1,
+            "temperature": 0.7,
+            "top_p": 0.92,
+            "repeat_penalty": 1.2
+        },
+        "Joycaption-Beta": {
+            "model_path": "H:\\LLM2\\llama-joycaption-beta-one-hf-llava-q8_0\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\llama-joycaption-beta-one-hf-llava-q8_0\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
+            "output_max_tokens": 1024,
+            "image_max_tokens": 2048,
+            "ctx": 4096,
+            "n_batch": 512,
+            "gpu_layers": -1,
+            "temperature": 0.6,
+            "top_p": 0.9,
+            "repeat_penalty": 1.2
+        }
+    }
+}

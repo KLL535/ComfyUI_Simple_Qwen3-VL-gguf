@@ -252,10 +252,14 @@ class MasterPromptLoaderAdvanced:
         user_styles = load_json_section("_user_prompt_styles")
         style_names = ["No changes"] + list(user_styles.keys())
 
+        camera = load_json_section("_camera_preset")
+        camera_names = ["No changes"] + list(camera.keys())
+
         return {
             "required": {
                 "master_preset": (system_names, ),
                 "style_preset": (style_names, {"default": "No changes"}),
+                "camera_preset": (camera_names, {"default": "No changes"}),
                 "caption_length": (["unlimited", "very_short", "short", "medium", "long", "very_long"], {"default": "unlimited"}),
             },
             "optional": {
@@ -294,6 +298,7 @@ class MasterPromptLoaderAdvanced:
     def load_prompt(self, 
         master_preset, 
         style_preset,
+        camera_preset,
         caption_length,
         skip_meta_phrases=False,
         describe_lighting=False,
@@ -325,6 +330,7 @@ class MasterPromptLoaderAdvanced:
         instructions = []
         system_prompts = load_json_section("_system_prompts")
         instructions.append(system_prompts.get(master_preset, "").strip())
+
         # === system_prompt_opt === 
         if system_prompt_opt != None:
             if system_prompt_opt.strip() != "":
@@ -337,9 +343,13 @@ class MasterPromptLoaderAdvanced:
         instructions = []
 
         # === Style === 
-        user_styles = load_json_section("_user_prompt_styles")
         if style_preset != "No changes":
+            user_styles = load_json_section("_user_prompt_styles")
             instructions.append(user_styles.get(style_preset, "").strip())
+
+        if camera_preset != "No changes":
+            camera = load_json_section("_camera_preset")
+            instructions.append(camera.get(camera_preset, "").strip())
 
         # === Length === 
         if caption_length == "very_short":
@@ -430,4 +440,78 @@ class MasterPromptLoaderAdvanced:
         return (system_prompt,user_prompt)
 
 
+class ModelPresetLoaderAdvanced:
+    @classmethod
+    def INPUT_TYPES(s):
+        # Load presets from JSON
+        presets = load_json_section("_model_presets")
+        preset_names = list(presets.keys()) if presets else ["None"]
+        
+        return {
+            "required": {
+                "model_preset": (preset_names, {"default": preset_names[0] if preset_names else "None"})
+            }
+        }
+
+    RETURN_TYPES = (
+        "STRING",  # model_path
+        "STRING",  # mmproj_path
+        "INT",     # output_max_tokens
+        "INT",     # image_max_tokens
+        "INT",     # ctx
+        "INT",     # n_batch
+        "INT",     # gpu_layers
+        "FLOAT",   # temperature
+        "FLOAT",   # top_p
+        "FLOAT"    # repeat_penalty
+    )
+    
+    RETURN_NAMES = (
+        "model_path",
+        "mmproj_path", 
+        "output_max_tokens",
+        "image_max_tokens",
+        "ctx",
+        "n_batch",
+        "gpu_layers",
+        "temperature",
+        "top_p",
+        "repeat_penalty"
+    )
+
+    FUNCTION = "load_preset"
+    CATEGORY = "multimodal/Qwen"
+
+    def load_preset(self, model_preset):
+        presets = load_json_section("_model_presets")
+        
+        if model_preset not in presets:
+            raise ValueError(f"Model preset '{model_preset}' not found in JSON")
+        
+        preset = presets[model_preset]
+        
+        # Extract values with defaults
+        model_path = preset.get("model_path", "")
+        mmproj_path = preset.get("mmproj_path", "")
+        output_max_tokens = preset.get("output_max_tokens", 2048)
+        image_max_tokens = preset.get("image_max_tokens", 4096)
+        ctx = preset.get("ctx", 8192)
+        n_batch = preset.get("n_batch", 8192)
+        gpu_layers = preset.get("gpu_layers", -1)
+        temperature = preset.get("temperature", 0.7)
+        top_p = preset.get("top_p", 0.92)
+        repeat_penalty = preset.get("repeat_penalty", 1.2)
+        
+        return (
+            model_path,
+            mmproj_path,
+            output_max_tokens,
+            image_max_tokens,
+            ctx,
+            n_batch,
+            gpu_layers,
+            temperature,
+            top_p,
+            repeat_penalty
+        )
 
