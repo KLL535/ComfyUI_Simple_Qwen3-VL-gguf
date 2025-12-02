@@ -176,7 +176,8 @@ CUDA : ARCHS = 1200 | USE_GRAPHS = 1 | PEER_MAX_BATCH_SIZE = 128 | CPU : SSE3 = 
 
 Maybe it will be useful to someone.
 
-[!] Tested on Windows only. Tested on RTX5080 only. Tested only with Qwen3-VL-8B, Qwen3-VL-30B, llama-joycaption-beta-one.
+[!] Tested only on Windows. Tested only on RTX5080. Tested only on Python 3.13.2 and Pytorch 2.10.0.dev20251121+cu130
+Tested with Qwen3-VL-8B, Qwen3-VL-30B, llama-joycaption-beta-one.
 
 # Dependencies & Thanks:
 - https://github.com/JamePeng/llama-cpp-python
