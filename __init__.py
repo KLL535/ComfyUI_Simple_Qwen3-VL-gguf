@@ -10,7 +10,7 @@ NODE_CLASS_MAPPINGS = {
     "SimpleQwenVLgguf": Qwen3VL_GGUF_Node,
     "SimpleMasterPromptLoader": MasterPromptLoader,
     "SimpleMasterPromptLoaderAdvanced": MasterPromptLoaderAdvanced,
-    "SimpleLLMModelPresetLoader": ModelPresetLoaderAdvanced,
+    "SimpleModelPresetLoaderAdvanced": ModelPresetLoaderAdvanced,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
