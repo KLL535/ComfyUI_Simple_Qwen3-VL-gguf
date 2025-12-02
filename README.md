@@ -147,9 +147,36 @@ https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
 ---
 
+### Troubleshooting:
+
+You can check the versions of the library installed
+Create a test.py file with the following content:
+```
+import llama_cpp
+print("llama-cpp-python version:", llama_cpp.__version__)
+try:
+    from llama_cpp import llama_print_system_info
+    info = llama_print_system_info()
+    print(info.decode('utf-8'))
+except Exception as e2:
+    print("Failed:", e2)
+```
+Run it using your embedded python from the `python_embeded` folder :
+```
+H:\ComfyUI128\python_embeded>python temp\test.py
+llama-cpp-python version: 0.3.17
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA GeForce RTX 5080, compute capability 12.0, VMM: yes
+CUDA : ARCHS = 1200 | USE_GRAPHS = 1 | PEER_MAX_BATCH_SIZE = 128 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | AVX512 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 |
+```
+
+---
+
 Maybe it will be useful to someone.
 
-[!] Tested on Windows only. Tested on RTX5080 only. Tested only with Qwen3-VL-8B-Instruct.
+[!] Tested on Windows only. Tested on RTX5080 only. Tested only with Qwen3-VL-8B, Qwen3-VL-30B, llama-joycaption-beta-one.
 
 # Dependencies & Thanks:
 - https://github.com/JamePeng/llama-cpp-python
