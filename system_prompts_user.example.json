@@ -28,7 +28,7 @@
             "image_max_tokens": 4096,
             "ctx": 8192,
             "n_batch": 8192,
-            "gpu_layers": -1,
+            "gpu_layers": 35,
             "temperature": 0.7,
             "top_p": 0.92,
             "repeat_penalty": 1.2
