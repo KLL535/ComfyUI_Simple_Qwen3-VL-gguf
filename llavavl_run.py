@@ -1,4 +1,4 @@
-# qwen3vl_run.py
+# llavavl_run.py
 import sys
 import json
 import gc
@@ -16,14 +16,29 @@ def main():
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
-        # === Импорт llama_cpp внутри функции (чтобы не ломать импорт) ===
-        from llama_cpp import Llama
-        from llama_cpp.llama_chat_format import Llava15ChatHandler
-        chat_handler = Llava15ChatHandler(
-            clip_model_path=config["mmproj_path"],  # путь к .mmproj файлу
-        )
+        content_text_part = config["system_prompt"] + "\n\n" + config["user_prompt"]
 
-        # === Загрузка модели ===
+        from llama_cpp import Llama
+
+        images = config['images']
+        if images:
+            from llama_cpp.llama_chat_format import Llava15ChatHandler
+            chat_handler = Llava15ChatHandler(
+                clip_model_path=config["mmproj_path"],  
+            )
+            content = [{"type": "text", "text": content_text_part}]
+            for image in images:
+                if image != None:
+                    data_url = f"data:image/png;base64,{image}"
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": data_url}
+                    })
+            messages = [{ "role": "user", "content": content }]
+        else:
+            chat_handler = None
+            messages = [{ "role": "user", "content": content_text_part }]
+
         llm = Llama(
             model_path=config["model_path"],
             chat_handler=chat_handler,
@@ -33,22 +48,6 @@ def main():
             verbose=False,
         )
 
-        images = config['images']
-        content = [{"type": "text", "text": config["system_prompt"] + "\n\n" + config["user_prompt"]}]
-        for image in images:
-            if image != None:
-                data_url = f"data:image/png;base64,{image}"
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": data_url}
-                })
-
-        # === Подготовка сообщений ===
-        messages = [
-            { "role": "user", "content": content }
-        ]
-
-        # === Генерация ===
         result = llm.create_chat_completion(
             messages=messages,
             max_tokens=config.get("max_tokens", 2048),
@@ -57,17 +56,15 @@ def main():
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
             top_k=40,
-            stop=["<|eot_id|>", "user:", "User:", "Human:", "ASSISTANT:", "\n\n"]
+            stop=["<|eot_id|>", "ASSISTANT:"]
         )
 
         output = result["choices"][0]["message"]["content"]
 
-        # === Очистка (хотя процесс завершится) ===
         del llm
         del chat_handler
         gc.collect()
 
-        # === Успех ===
         print(json.dumps({"status": "success", "output": output}, ensure_ascii=True))
 
     except Exception as e:

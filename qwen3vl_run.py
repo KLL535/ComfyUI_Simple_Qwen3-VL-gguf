@@ -7,9 +7,6 @@ import gc
 from io import BytesIO
 from PIL import Image
 
-# Отключаем GPU, если не нужно (опционально)
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
 def main():
     try:
         if len(sys.argv) != 2:
@@ -23,59 +20,6 @@ def main():
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
-        # === Загрузка изображения из base64 ===
-        #img_data = base64.b64decode(config["image_base64"])
-        #pil_img = Image.open(BytesIO(img_data)).convert("RGB")
-
-        # === Импорт llama_cpp внутри функции (чтобы не ломать импорт) ===
-        from llama_cpp import Llama
-        try:
-            from llama_cpp.llama_chat_format import Qwen3VLChatHandler
-        except ImportError:
-            # для старых версий
-            try:
-                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-            except ImportError:
-                # для еще более старых версий
-                from llama_cpp.llama_chat_format import Qwen2VLChatHandler
-                chat_handler = Qwen2VLChatHandler(
-                    clip_model_path=config["mmproj_path"],
-                    image_min_tokens=1024,      # обязательно для Qwen-VL
-                    image_max_tokens=config.get("image_max_tokens", 4096),
-                    force_reasoning=False,
-                    verbose=False,
-                )
-            else:
-                сhat_handler = Qwen25VLChatHandler(
-                    clip_model_path=config["mmproj_path"],
-                    image_min_tokens=1024,      # обязательно для Qwen-VL
-                    image_max_tokens=config.get("image_max_tokens", 4096),
-                    force_reasoning=False,
-                    verbose=False,
-                )
-        else:
-            chat_handler = Qwen3VLChatHandler(
-                clip_model_path=config["mmproj_path"],
-                image_min_tokens=1024,      # обязательно для Qwen-VL
-                image_max_tokens=config.get("image_max_tokens", 4096),
-                force_reasoning=False,
-                verbose=False,
-            )
-
-        # === Загрузка модели ===
-        llm = Llama(
-            model_path=config["model_path"],
-            chat_handler=chat_handler,
-            n_ctx=config.get("ctx", 8192),
-            n_gpu_layers=config.get("gpu_layers", 0),
-            image_min_tokens=1024,      # обязательно для Qwen-VL
-            image_max_tokens=config.get("image_max_tokens", 4096),
-            n_batch=config.get("n_batch", 512),
-            swa_full=True,
-            verbose=False,
-            #pool_size=4194304,
-        )
-
         images = config['images']
         content = [{"type": "text", "text": config["user_prompt"]}]
         for image in images:
@@ -86,13 +30,60 @@ def main():
                     "image_url": {"url": data_url}
                 })
 
-        # === Подготовка сообщений ===
+        chat_handler=None
+        from llama_cpp import Llama
+        if images:
+            try:
+                from llama_cpp.llama_chat_format import Qwen3VLChatHandler
+            except ImportError:
+                # для старых версий
+                try:
+                    from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                except ImportError:
+                    # для еще более старых версий
+                    from llama_cpp.llama_chat_format import Qwen2VLChatHandler
+                    chat_handler = Qwen2VLChatHandler(
+                        clip_model_path=config["mmproj_path"],
+                        image_min_tokens=1024,     
+                        image_max_tokens=config.get("image_max_tokens", 4096),
+                        force_reasoning=False,
+                        verbose=False,
+                    )
+                else:
+                    сhat_handler = Qwen25VLChatHandler(
+                        clip_model_path=config["mmproj_path"],
+                        image_min_tokens=1024,     
+                        image_max_tokens=config.get("image_max_tokens", 4096),
+                        force_reasoning=False,
+                        verbose=False,
+                    )
+            else:
+                chat_handler = Qwen3VLChatHandler(
+                    clip_model_path=config["mmproj_path"],
+                    image_min_tokens=1024,      
+                    image_max_tokens=config.get("image_max_tokens", 4096),
+                    force_reasoning=False,
+                    verbose=False,
+                )
+
+        llm = Llama(
+            model_path=config["model_path"],
+            chat_handler=chat_handler,
+            n_ctx=config.get("ctx", 8192),
+            n_gpu_layers=config.get("gpu_layers", 0),
+            image_min_tokens=1024,      
+            image_max_tokens=config.get("image_max_tokens", 4096),
+            n_batch=config.get("n_batch", 512),
+            swa_full=True,
+            verbose=False,
+            #pool_size=4194304,
+        )
+
         messages = [
             { "role": "system", "content": config["system_prompt"] },
             { "role": "user", "content": content }
         ]
 
-        # === Генерация ===
         result = llm.create_chat_completion(
             messages=messages,
             max_tokens=config.get("max_tokens", 2048),
@@ -100,17 +91,15 @@ def main():
             seed=config.get("seed", 42),
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
-            stop=["<|im_end|>", "<|im_start|>"],
+            stop=["<|im_end|>", "<|im_start|>", "<im_end>", "<im_start>", "<|endoftext|>", "</im_end>", "</im_start>" ],
         )
 
         output = result["choices"][0]["message"]["content"]
 
-        # === Очистка (хотя процесс завершится) ===
         del llm
         del chat_handler
         gc.collect()
 
-        # === Успех ===
         print(json.dumps({"status": "success", "output": output}, ensure_ascii=True))
 
     except Exception as e:
