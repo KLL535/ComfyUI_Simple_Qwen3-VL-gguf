@@ -52,14 +52,15 @@ Rule: `n_batch <= ctx`
 - `seed`: *INT*, default: 42
 - `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
 - `top_p`: *FLOAT*, default: 0.92, min: 0.0, max: 1.0 
-- `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0 
+- `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0
+- `top_k`: *FLOAT*, default: 0, min: 0.0, max: 1.0 - for QwenVL recommended 0, for llava recommended 40
+- `pool_size`: *INT*, default: 4194304, min: 1048576, max: 10485760 - if the ggml memory pool is not enough, then you should increase it
 
 ### Not customizable parameters:
 - `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
 - `force_reasoning` = False - reasoning mode off.
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
-- `memory pool` - doesn't set.
 
 # Speed test and memory full issue:
 LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
@@ -147,7 +148,7 @@ https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
 ### Troubleshooting:
 
-You can check the versions of the library installed
+Check that the libraries are installed to the latest versions.
 Create a test.py file with the following content:
 ```
 import llama_cpp
@@ -180,11 +181,13 @@ If the model gets stuck on a response, you need to:
 
 ---
 
-### Memory pool owerflow issue:
+### ggml memory pool owerflow issue:
 
-`ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16)`
-The solution is here, I still don’t understand why this error occurs:
-https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/7
+If an error occurs `ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16)`, try it:
+- increase `pool_size`
+- decrease `ctx`
+- decrease `image_max_tokens`
+- increase `n_batch`
 
 ---
 

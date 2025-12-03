@@ -1,4 +1,7 @@
 # nightly
+# V1.7
+- add properties `top_k`
+- add properties `pool_size`
 # V1.6
 - add `Model Preset Loader`
 # V1.5
