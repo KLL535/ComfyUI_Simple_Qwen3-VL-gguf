@@ -31,7 +31,7 @@ class Qwen3VL_GGUF_Node:
                 "unload_all_models": ("BOOLEAN", {"default": False}),
                 "top_p": ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "repeat_penalty": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 2.0, "step": 0.01}),
-                "top_k": ("FLOAT", {"default": 0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "top_k": ("INT", {"default": 0, "min": 0, "max": 32768}),
                 "pool_size": ("INT", {"default": 4194304, "min": 1048576, "max": 10485760, "step": 524288}),
             },
             "optional": {
@@ -470,7 +470,7 @@ class ModelPresetLoaderAdvanced:
         "FLOAT",   # temperature
         "FLOAT",   # top_p
         "FLOAT",   # repeat_penalty
-        "FLOAT",   # top_p
+        "INT",   # top_p
         "INT",     # pool_size
     )
     
