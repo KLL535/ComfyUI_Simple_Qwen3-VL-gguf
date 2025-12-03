@@ -53,7 +53,7 @@ Rule: `n_batch <= ctx`
 - `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
 - `top_p`: *FLOAT*, default: 0.92, min: 0.0, max: 1.0 
 - `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0
-- `top_k`: *FLOAT*, default: 0, min: 0.0, max: 1.0 - for QwenVL recommended 0, for llava recommended 40
+- `top_k`: *INT*, default: 0, min: 0, max: 32768 - for QwenVL recommended 0, for llava recommended 40
 - `pool_size`: *INT*, default: 4194304, min: 1048576, max: 10485760 - if the ggml memory pool is not enough, then you should increase it
 
 ### Not customizable parameters:
