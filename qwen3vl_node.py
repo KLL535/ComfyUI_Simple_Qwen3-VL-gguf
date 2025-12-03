@@ -31,6 +31,8 @@ class Qwen3VL_GGUF_Node:
                 "unload_all_models": ("BOOLEAN", {"default": False}),
                 "top_p": ("FLOAT", {"default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "repeat_penalty": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 2.0, "step": 0.01}),
+                "top_k": ("FLOAT", {"default": 0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "pool_size": ("INT", {"default": 4194304, "min": 1048576, "max": 10485760, "step": 524288}),
             },
             "optional": {
                 "image": ("IMAGE",),
@@ -58,6 +60,8 @@ class Qwen3VL_GGUF_Node:
         unload_all_models,
         top_p,
         repeat_penalty,
+        top_k,
+        pool_size,
         image=None,
         image2=None,
         image3=None):
@@ -130,6 +134,8 @@ class Qwen3VL_GGUF_Node:
             "seed":seed,
             "repeat_penalty":repeat_penalty,
             "top_p":top_p,
+            "top_k":top_k,
+            "pool_size":pool_size,
         }
 
         #DEBUG
@@ -463,7 +469,9 @@ class ModelPresetLoaderAdvanced:
         "INT",     # gpu_layers
         "FLOAT",   # temperature
         "FLOAT",   # top_p
-        "FLOAT"    # repeat_penalty
+        "FLOAT",   # repeat_penalty
+        "FLOAT",   # top_p
+        "INT",     # pool_size
     )
     
     RETURN_NAMES = (
@@ -476,7 +484,9 @@ class ModelPresetLoaderAdvanced:
         "gpu_layers",
         "temperature",
         "top_p",
-        "repeat_penalty"
+        "repeat_penalty",
+        "top_k",
+        "pool_size",
     )
 
     FUNCTION = "load_preset"
@@ -501,6 +511,8 @@ class ModelPresetLoaderAdvanced:
         temperature = preset.get("temperature", 0.7)
         top_p = preset.get("top_p", 0.92)
         repeat_penalty = preset.get("repeat_penalty", 1.2)
+        top_k = preset.get("top_k", 0)
+        pool_size = preset.get("pool_size", 4194304)
         
         return (
             model_path,
@@ -512,6 +524,8 @@ class ModelPresetLoaderAdvanced:
             gpu_layers,
             temperature,
             top_p,
-            repeat_penalty
+            repeat_penalty,
+            top_k,
+            pool_size
         )
 

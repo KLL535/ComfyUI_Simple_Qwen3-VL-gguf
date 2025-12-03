@@ -44,7 +44,7 @@ def main():
                     from llama_cpp.llama_chat_format import Qwen2VLChatHandler
                     chat_handler = Qwen2VLChatHandler(
                         clip_model_path=config["mmproj_path"],
-                        image_min_tokens=1024,     
+                        #image_min_tokens=1024,     
                         image_max_tokens=config.get("image_max_tokens", 4096),
                         force_reasoning=False,
                         verbose=False,
@@ -52,7 +52,7 @@ def main():
                 else:
                     сhat_handler = Qwen25VLChatHandler(
                         clip_model_path=config["mmproj_path"],
-                        image_min_tokens=1024,     
+                        #image_min_tokens=1024,     
                         image_max_tokens=config.get("image_max_tokens", 4096),
                         force_reasoning=False,
                         verbose=False,
@@ -60,7 +60,7 @@ def main():
             else:
                 chat_handler = Qwen3VLChatHandler(
                     clip_model_path=config["mmproj_path"],
-                    image_min_tokens=1024,      
+                    #image_min_tokens=1024,      
                     image_max_tokens=config.get("image_max_tokens", 4096),
                     force_reasoning=False,
                     verbose=False,
@@ -76,7 +76,7 @@ def main():
             n_batch=config.get("n_batch", 512),
             swa_full=True,
             verbose=False,
-            #pool_size=4194304,
+            pool_size=config.get("pool_size", 4194304),
         )
 
         messages = [
@@ -91,6 +91,7 @@ def main():
             seed=config.get("seed", 42),
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
+            top_k=config.get("top_k", 0),
             stop=["<|im_end|>", "<|im_start|>", "<im_end>", "<im_start>", "<|endoftext|>", "</im_end>", "</im_start>" ],
         )
 

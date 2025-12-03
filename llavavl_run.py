@@ -55,8 +55,8 @@ def main():
             seed=config.get("seed", 42),
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
-            top_k=40,
-            stop=["<|eot_id|>", "ASSISTANT:"]
+            top_k=config.get("top_k", 0),
+            stop=["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"]
         )
 
         output = result["choices"][0]["message"]["content"]
