@@ -3,7 +3,7 @@ Simple Qwen3-VL gguf LLM model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
-1. The model must support gguf (gguf models run faster than transformer models, at least for me. Why, I don’t know)
+1. The model must support gguf (gguf models run faster than transformer models)
 2. The model must support the Qwen3-VL multimodal model
 3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, you have to reload the model each time, but this is faster, especially on good hardware with fast memory and disks)
 4. No pre-loaded models stored in some unknown location. You can use any models you already have. Just download them using any convenient method (via a browser or even on a flash drive from a friend) and simply specify their path on the disk. For me, this is the most convenient method.
@@ -59,6 +59,7 @@ Rule: `n_batch <= ctx`
 - `force_reasoning` = False - reasoning mode off.
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
+- `memory pool` - doesn't set.
 
 # Speed test and memory full issue:
 LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
@@ -72,12 +73,6 @@ If the memory is full before this node starts working and there isn't enough mem
 - https://github.com/SeanScripts/ComfyUI-Unload-Model
   
 But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
-
-# Stuck issue:
-If the model gets stuck on a response, you need to:
-- increase the `temperature`
-- decrease `top_p`
-- increase `repeat_penalty`
 
 # Models:
 1. Regular Qwen:
@@ -103,7 +98,7 @@ Recommended parameter for `joecaption`:
 - `n_batch` = 512
 - `top_k` = 40 - const, not configurable
 
-4. Qwen3-30B
+4. Qwen3-VL-30B
 - https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main
 For example:
 `Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf` + `mmproj-BF16.gguf`
@@ -139,11 +134,14 @@ Agreement:
 - The `system_prompts_user.json` contains the exact same user settings. This file will not be updated. Edit this file.
 
 ### Under construction:
-Styles - work well 90% of the time. Camera settings - doesn't work. The rest of the options - sometimes yes, sometimes no.
+- Styles - work well 90% of the time. But you cannot set up instructions that contradict each other.
+- Camera settings - only work with the 30B model, but give very interesting results, some settings are useful.
+- The "describe..." descriptive group works for photorealism and forces the LLM to describe more details.
+- The other options - I don't see any point in them yet.
 The idea for this configurator is taken from here:
 https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
-<img width="356" height="703" alt="image" src="https://github.com/user-attachments/assets/0e1327f3-6310-45a9-a0e3-ff4e5d9cc82b" />
+<img width="396" height="821" alt="image" src="https://github.com/user-attachments/assets/ca8437de-e940-4ed4-964e-4b6cfbe5f1cb" />
 
 ---
 
@@ -171,6 +169,22 @@ ggml_cuda_init: found 1 CUDA devices:
   Device 0: NVIDIA GeForce RTX 5080, compute capability 12.0, VMM: yes
 CUDA : ARCHS = 1200 | USE_GRAPHS = 1 | PEER_MAX_BATCH_SIZE = 128 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | AVX512 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 |
 ```
+
+---
+
+### Stuck issue:
+If the model gets stuck on a response, you need to:
+- increase the `temperature`
+- decrease `top_p`
+- increase `repeat_penalty`
+
+---
+
+### Memory pool owerflow issue:
+
+`ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16)`
+The solution is here, I still don’t understand why this error occurs:
+https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/7
 
 ---
 
