@@ -97,7 +97,7 @@ Recommended parameter for `joecaption`:
 - `top_p` = 0.9
 - `repeat_penalty` = 1.2
 - `n_batch` = 512
-- `top_k` = 40 - const, not configurable
+- `top_k` = 40 
 
 4. Qwen3-VL-30B
 - https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main
