@@ -86,7 +86,7 @@ For example:
 For example:
 `ggml-model-q8_0.gguf` + `mmproj-model-f16.gguf`
 
-3. Old model llava (joecaption):
+3. Old model llava (joecaption) true NSFW:
 - https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
