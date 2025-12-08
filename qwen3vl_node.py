@@ -109,7 +109,7 @@ class Qwen3VL_GGUF_Node:
         gc.collect()
 
         model_filename = os.path.basename(model_path).lower()
-        if "llava" in model_filename:
+        if "llava" or "ministral" or "mistral" in model_filename:
             script_name = "llavavl_run.py"
         else:
             script_name = "qwen3vl_run.py"
@@ -291,8 +291,16 @@ class MasterPromptLoaderAdvanced:
                 "focus_on_key_elements": ("BOOLEAN", {"default": False, "tooltip": "Describe only the most important subjects — omit background clutter, minor details, or decorations."}),
                 "European_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'European woman'."}),
                 "Slavic_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'Slavic woman'."}),
+
+                "describe_color_grading": ("BOOLEAN", {"default": False}),
+                "describe_motion_blur_or_shutter_effect": ("BOOLEAN", {"default": False}),
+                "describe_film_or_sensor_grain": ("BOOLEAN", {"default": False}),
+                "describe_narrative_context_or_mood": ("BOOLEAN", {"default": False}),
+                "describe_lens_distortion_or_bokeh_quality": ("BOOLEAN", {"default": False}),
+
                 "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}), 
-                "user_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),         
+                "user_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),        
+
             }
         }
 
@@ -328,6 +336,13 @@ class MasterPromptLoaderAdvanced:
         focus_on_key_elements=False,
         European_woman=False,
         Slavic_woman=False,
+
+        describe_color_grading=False,
+        describe_motion_blur_or_shutter_effect=False,
+        describe_film_or_sensor_grain=False,
+        describe_narrative_context_or_mood=False,
+        describe_lens_distortion_or_bokeh_quality=False,
+
         system_prompt_opt="",
         user_prompt_opt=""):
 
@@ -431,10 +446,25 @@ class MasterPromptLoaderAdvanced:
             instructions.append("Keep the description family-friendly (PG). Avoid any sexual, violent, or offensive content.")
 
         if European_woman and not Slavic_woman:
-            instructions.append("Only if a woman is visibly present in the image, refer to her as 'European woman'.")
+            instructions.append("If a woman are visible, refer to her as 'European woman'.")
 
         if Slavic_woman and not European_woman:
-            instructions.append("Only if a woman is visibly present in the image, refer to her as 'Slavic woman'.")
+            instructions.append("If a woman are visible, refer to her as 'Slavic woman'.")
+
+        if describe_color_grading:
+            instructions.append("Describe the color grading and tonal palette (e.g., warm/cool tones, high contrast, desaturated, teal-and-orange, Kodak film emulation, monochrome).")
+
+        if describe_motion_blur_or_shutter_effect:
+            instructions.append("If motion blur or shutter-related effects are visible, describe their character (e.g., frozen action, motion smear, panning blur, crisp stillness).")
+
+        if describe_film_or_sensor_grain:
+            instructions.append("Note the presence, absence, or style of film grain or digital sensor noise (e.g., fine 35mm grain, clean digital, heavy VHS noise, vintage texture).")
+
+        if describe_narrative_context_or_mood:
+            instructions.append("Describe the implied narrative context or emotional mood of the scene (e.g., tension, solitude, triumph, melancholy, suspense).")
+
+        if describe_lens_distortion_or_bokeh_quality:
+            instructions.append("Comment on optical qualities such as bokeh smoothness, vignetting, lens flare, or distortion (e.g., creamy bokeh, anamorphic flare, barrel distortion, sharp edge-to-edge rendering).")
 
         # === system_prompt_opt === 
         if user_prompt_opt != None:

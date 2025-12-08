@@ -50,7 +50,7 @@ def main():
                         verbose=False,
                     )
                 else:
-                    сhat_handler = Qwen25VLChatHandler(
+                    chat_handler = Qwen25VLChatHandler(
                         clip_model_path=config["mmproj_path"],
                         #image_min_tokens=1024,     
                         image_max_tokens=config.get("image_max_tokens", 4096),

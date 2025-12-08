@@ -1,4 +1,6 @@
 # nightly
+# V1.8
+- add mistral3 model
 # V1.7
 - add properties `top_k`
 - add properties `pool_size`
