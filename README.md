@@ -126,7 +126,7 @@ My parameter for `ministral`:
 ```
 ---
 6. Qwen3-30B-A3B-Instruct-2507-Q4_K_S (**not vision**)
-Rule: the `mmproj` line must be empty.
+Rule: the `mmproj` line must be empty. Model gguf must not be very ancient. Previously, they didn't contain a tokenizer. In this mode images are ignored.
 - https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/tree/main
 For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
 ---
