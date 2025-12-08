@@ -62,20 +62,11 @@ Rule: `n_batch <= ctx`
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
 
-# Speed test and memory full issue:
-LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
-Therefore, to get good speed, you cannot exceed the VRAM overflow.
-**Check in task manager if VRAM is getting full (which is causing x10 slowdown)**.
+# Implementation Features:
+The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 
-The memory size (and speed) depends on model size, quantization method, the size of the input prompt, the output response, and the image size.
-Therefore, it is difficult to estimate the speed, but for me, with a prompt of 377 English words and a response of 225 English words and a 1024x1024 image on an RTX5080 card, with 8B Q8 model, the node executes in 13 seconds.
 
-If the memory is full before this node starts working and there isn't enough memory, I used this project before node:
-- https://github.com/SeanScripts/ComfyUI-Unload-Model
-  
-But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
-
-# Models:
+### Models:
 1. Regular Qwen:
 - https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
 For example:
@@ -138,11 +129,32 @@ My parameter for `ministral`:
 Rule: the `mmproj` line must be empty.
 - https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/tree/main
 For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
-
 ---
 
-# Implementation Features:
-The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
+# Speed test and memory full issue:
+LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
+Therefore, to get good speed, you cannot exceed the VRAM overflow.
+**Check in task manager if VRAM is getting full (which is causing slowdown)**.
+
+Memory overflow (speed down):
+
+<img width="284" height="188" alt="image" src="https://github.com/user-attachments/assets/a9aca700-6e16-4c56-8a78-bcb36183bcff" />
+
+Model fits (good speed):
+
+<img width="223" height="181" alt="image" src="https://github.com/user-attachments/assets/fe1b21c5-e35e-4945-9c7a-4f820bda7776" />
+
+To make the model fit:
+1. Use stronger quantization
+2. Reduce `ctx`, but not too much, otherwise the response may be cut off.
+3. Use CPU offload (`gpu_layers` > 0, The lower the number, the more layers will be unloaded onto the CPU; the number of layers depends on the model, start decreasing from 40) - It may be slow if the processor is weak.
+
+The memory size (and speed) depends on model size, quantization method, the size of the input prompt, the output response, and the image size.
+Therefore, it is difficult to estimate the speed, but for me, with a prompt of 377 English words and a response of 225 English words and a 1024x1024 image on an RTX5080 card, with 8B Q8 model, the node executes in 13 seconds.
+
+If the memory is full before this node starts working and there isn't enough memory, I used this project before node:
+- https://github.com/SeanScripts/ComfyUI-Unload-Model
+But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
 
 # More options:
 I wanted to give creative freedom and control LLM, so you could write any system prompt or change it on the fly.
