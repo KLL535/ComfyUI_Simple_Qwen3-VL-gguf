@@ -80,12 +80,12 @@ But sometimes the model would still load between this node and my node. So I jus
 - https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
 For example:
 `Qwen3VL-8B-Instruct-Q8_0.gguf` + `mmproj-Qwen3VL-8B-Instruct-F16.gguf`
-
+---
 2. Uncensored Qwen (but the model isn't trained on NSFW and doesn't understand it well):
 - https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-8B-Instruct-abliterated/tree/main/GGUF
 For example:
 `ggml-model-q8_0.gguf` + `mmproj-model-f16.gguf`
-
+---
 3. Old model llava (joecaption) true NSFW:
 - https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
 For example:
@@ -98,7 +98,7 @@ Recommended parameter for `joecaption`:
 - `repeat_penalty` = 1.2
 - `n_batch` = 512
 - `top_k` = 40 
-
+---
 4. Qwen3-VL-30B
 - https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main
 For example:
@@ -108,8 +108,31 @@ Pushing into 16Gb memory (image 1M):
 The model fills up the memory and runs for a long time 60 sec.
 We cram 5 layers out of 40 into the CPU and get x2 speedup.
 - `gpu_layers` = 35
-<img width="739" height="624" alt="image" src="https://github.com/user-attachments/assets/c49273ed-6cbb-40fa-bc61-b2d8c164aeda" />
+---
+5. Ministral-3-14B (Library `llama.cpp` update and reinstall required)
+- https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/tree/main
+For example:
+`Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
 
+The loader selection is determined by the file name, the word `ministral` or `mistral` must contain in the filename.
+My parameter for `ministral`:
+
+```
+        "Ministral-3-14B": {
+            "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+            "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
+            "output_max_tokens": 1024,
+            "image_max_tokens": 2048,
+            "ctx": 4096,
+            "n_batch": 1024,
+            "gpu_layers": -1,
+            "temperature": 0.3,
+            "top_p": 0.92,
+            "repeat_penalty": 1.1,
+            "top_k": 40,
+            "pool_size": 4194304
+        }
+```
 # Implementation Features:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 
@@ -125,7 +148,7 @@ https://github.com/1038lab/ComfyUI-QwenVL
 
 ### Simplifying the selection of models:
 If you have a lot of models, you can write their PATHs and settings to the `system_prompts_user.json` file, as shown in the example `system_prompts_user.example.json`, and use the `Model Preset Loader (Advanced)` model selector, connecting it like this:
-<img width="694" height="564" alt="image" src="https://github.com/user-attachments/assets/c39d5976-d996-4bb6-ba76-5a622db5a87d" />
+<img width="739" height="624" alt="image" src="https://github.com/user-attachments/assets/c49273ed-6cbb-40fa-bc61-b2d8c164aeda" />
 
 Then you can collapse the node and read only the important settings.
 <img width="586" height="480" alt="image" src="https://github.com/user-attachments/assets/c453aba1-0b86-4812-a4df-d448fd9f591b" />
