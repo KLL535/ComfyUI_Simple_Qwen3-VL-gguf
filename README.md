@@ -91,7 +91,7 @@ For example:
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
-The loader selection is determined by the file name, the `llava` model must contain the word `llava` in the name.
+Rule: The loader selection is determined by the file name, the `llava` model must contain the word `llava` in the name.
 Recommended parameter for `joecaption`:
 - `temperature` = 0.6
 - `top_p` = 0.9
@@ -114,7 +114,7 @@ We cram 5 layers out of 40 into the CPU and get x2 speedup.
 For example:
 `Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
 
-The loader selection is determined by the file name, the word `ministral` or `mistral` must contain in the filename.
+Rule: The loader selection is determined by the file name, the word `ministral` or `mistral` must contain in the filename.
 My parameter for `ministral`:
 
 ```
@@ -133,6 +133,14 @@ My parameter for `ministral`:
             "pool_size": 4194304
         }
 ```
+---
+6. Qwen3-30B-A3B-Instruct-2507-Q4_K_S (**not vision**)
+Rule: the `mmproj` line must be empty.
+- https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/tree/main
+For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
+
+---
+
 # Implementation Features:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 
