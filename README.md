@@ -53,7 +53,7 @@ Rule: `n_batch <= ctx`
 - `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
 - `top_p`: *FLOAT*, default: 0.92, min: 0.0, max: 1.0 
 - `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0
-- `top_k`: *FLOAT*, default: 0, min: 0.0, max: 1.0 - for QwenVL recommended 0, for llava recommended 40
+- `top_k`: *INT*, default: 0, min: 0, max: 32768 - for QwenVL recommended 0, for llava recommended 40
 - `pool_size`: *INT*, default: 4194304, min: 1048576, max: 10485760 - if the ggml memory pool is not enough, then you should increase it
 
 ### Not customizable parameters:
@@ -86,7 +86,7 @@ For example:
 For example:
 `ggml-model-q8_0.gguf` + `mmproj-model-f16.gguf`
 
-3. Old model llava (joecaption):
+3. Old model llava (joecaption) true NSFW:
 - https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
@@ -97,7 +97,7 @@ Recommended parameter for `joecaption`:
 - `top_p` = 0.9
 - `repeat_penalty` = 1.2
 - `n_batch` = 512
-- `top_k` = 40 - const, not configurable
+- `top_k` = 40 
 
 4. Qwen3-VL-30B
 - https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main
