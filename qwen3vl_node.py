@@ -109,7 +109,7 @@ class Qwen3VL_GGUF_Node:
         gc.collect()
 
         model_filename = os.path.basename(model_path).lower()
-        if "llava" or "ministral" or "mistral" in model_filename:
+        if "llava" in model_filename or "ministral" in model_filename or "mistral" in model_filename:
             script_name = "llavavl_run.py"
         else:
             script_name = "qwen3vl_run.py"
@@ -556,6 +556,6 @@ class ModelPresetLoaderAdvanced:
             top_p,
             repeat_penalty,
             top_k,
-            pool_size
+            pool_size,
         )
 

@@ -1,11 +1,10 @@
 # qwen3vl_run.py
 import sys
-import os
 import json
-import base64
 import gc
-from io import BytesIO
-from PIL import Image
+
+def is_nonempty_string(s):
+    return isinstance(s, str) and s.strip() != ""
 
 def main():
     try:
@@ -20,19 +19,13 @@ def main():
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
-        images = config['images']
-        content = [{"type": "text", "text": config["user_prompt"]}]
-        for image in images:
-            if image != None:
-                data_url = f"data:image/png;base64,{image}"
-                content.append({
-                    "type": "image_url",
-                    "image_url": {"url": data_url}
-                })
-
-        chat_handler=None
         from llama_cpp import Llama
-        if images:
+
+        mmproj_path = config.get("mmproj_path")
+        is_vision_model = is_nonempty_string(mmproj_path)
+
+        images = config.get('images',[])
+        if images and is_vision_model:
             try:
                 from llama_cpp.llama_chat_format import Qwen3VLChatHandler
             except ImportError:
@@ -44,7 +37,6 @@ def main():
                     from llama_cpp.llama_chat_format import Qwen2VLChatHandler
                     chat_handler = Qwen2VLChatHandler(
                         clip_model_path=config["mmproj_path"],
-                        #image_min_tokens=1024,     
                         image_max_tokens=config.get("image_max_tokens", 4096),
                         force_reasoning=False,
                         verbose=False,
@@ -52,7 +44,7 @@ def main():
                 else:
                     chat_handler = Qwen25VLChatHandler(
                         clip_model_path=config["mmproj_path"],
-                        #image_min_tokens=1024,     
+
                         image_max_tokens=config.get("image_max_tokens", 4096),
                         force_reasoning=False,
                         verbose=False,
@@ -60,29 +52,51 @@ def main():
             else:
                 chat_handler = Qwen3VLChatHandler(
                     clip_model_path=config["mmproj_path"],
-                    #image_min_tokens=1024,      
+
                     image_max_tokens=config.get("image_max_tokens", 4096),
                     force_reasoning=False,
                     verbose=False,
                 )
 
-        llm = Llama(
-            model_path=config["model_path"],
-            chat_handler=chat_handler,
-            n_ctx=config.get("ctx", 8192),
-            n_gpu_layers=config.get("gpu_layers", 0),
-            image_min_tokens=1024,      
-            image_max_tokens=config.get("image_max_tokens", 4096),
-            n_batch=config.get("n_batch", 512),
-            swa_full=True,
-            verbose=False,
-            pool_size=config.get("pool_size", 4194304),
-        )
+        if images and is_vision_model:
 
-        messages = [
-            { "role": "system", "content": config["system_prompt"] },
-            { "role": "user", "content": content }
-        ]
+            content = [{"type": "text", "text": config["user_prompt"]}]
+            for image in images:
+                if image != None:
+                    data_url = f"data:image/png;base64,{image}"
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": data_url}
+                    })
+
+            messages = [
+                { "role": "system", "content": config["system_prompt"] },
+                { "role": "user", "content": content }
+            ]
+
+        else:
+            chat_handler=None
+            messages = [
+                { "role": "system", "content": config["system_prompt"] },
+                { "role": "user", "content": config["user_prompt"] }
+            ]    
+
+        llm_kwargs = {
+            "model_path": config["model_path"],
+            "n_ctx": config.get("ctx", 8192),
+            "n_gpu_layers": config.get("gpu_layers", 0),
+            "n_batch": config.get("n_batch", 512),
+            "swa_full": True,
+            "verbose": False,
+            "pool_size": config.get("pool_size", 4194304),
+        }
+
+        if is_vision_model:
+            llm_kwargs["chat_handler"] = chat_handler
+            llm_kwargs["image_min_tokens"] = 1024
+            llm_kwargs["image_max_tokens"] = config.get("image_max_tokens", 4096)    
+
+        llm = Llama(**llm_kwargs)
 
         result = llm.create_chat_completion(
             messages=messages,
@@ -92,7 +106,7 @@ def main():
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
             top_k=config.get("top_k", 0),
-            stop=["<|im_end|>", "<|im_start|>", "<im_end>", "<im_start>", "<|endoftext|>", "</im_end>", "</im_start>" ],
+            stop=["<|im_end|>", "<|im_start|>" ],
         )
 
         output = result["choices"][0]["message"]["content"]
