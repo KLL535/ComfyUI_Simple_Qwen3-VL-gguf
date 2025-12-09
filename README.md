@@ -21,6 +21,9 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 - `set CMAKE_ARGS="-DGGML_CUDA=on"`
 - `path_to_comfyui\python_embeded\python -m pip install -e .`
 (If you have embedded Python, this is usually the case).
+
+  *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed. Or, build without the `-e` flag.*
+  
 5. Wait for the package to build from source.
 (You can find ready-made WHL packages for your configuration)
 
