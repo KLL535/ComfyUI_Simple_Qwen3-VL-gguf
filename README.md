@@ -24,6 +24,8 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 
   *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed. Or, build without the `-e` flag.*
   
+  *Warning: Compilation can take a long time, somewhere between 30-60 minutes.*
+  
 5. Wait for the package to build from source.
 (You can find ready-made WHL packages for your configuration)
 
