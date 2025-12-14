@@ -1,6 +1,5 @@
 # nightly
-# V1.8.5
-- fix load model error
+# V2.0
 - add non visual models
 # V1.8
 - add mistral3 model

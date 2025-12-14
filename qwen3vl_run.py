@@ -24,6 +24,13 @@ def main():
         mmproj_path = config.get("mmproj_path")
         is_vision_model = is_nonempty_string(mmproj_path)
 
+        mmproj_kwargs = {
+            "clip_model_path": mmproj_path,
+            "image_max_tokens": config.get("image_max_tokens", 4096),
+            "force_reasoning": False,
+            "verbose": False,
+        }
+
         images = config.get('images',[])
         if images and is_vision_model:
             try:
@@ -35,28 +42,11 @@ def main():
                 except ImportError:
                     # для еще более старых версий
                     from llama_cpp.llama_chat_format import Qwen2VLChatHandler
-                    chat_handler = Qwen2VLChatHandler(
-                        clip_model_path=config["mmproj_path"],
-                        image_max_tokens=config.get("image_max_tokens", 4096),
-                        force_reasoning=False,
-                        verbose=False,
-                    )
+                    chat_handler = Qwen2VLChatHandler(**mmproj_kwargs)
                 else:
-                    chat_handler = Qwen25VLChatHandler(
-                        clip_model_path=config["mmproj_path"],
-
-                        image_max_tokens=config.get("image_max_tokens", 4096),
-                        force_reasoning=False,
-                        verbose=False,
-                    )
+                    chat_handler = Qwen25VLChatHandler(**mmproj_kwargs)
             else:
-                chat_handler = Qwen3VLChatHandler(
-                    clip_model_path=config["mmproj_path"],
-
-                    image_max_tokens=config.get("image_max_tokens", 4096),
-                    force_reasoning=False,
-                    verbose=False,
-                )
+                chat_handler = Qwen3VLChatHandler(**mmproj_kwargs)
 
         if images and is_vision_model:
 
@@ -95,6 +85,8 @@ def main():
             llm_kwargs["chat_handler"] = chat_handler
             llm_kwargs["image_min_tokens"] = 1024
             llm_kwargs["image_max_tokens"] = config.get("image_max_tokens", 4096)    
+
+        #llm_kwargs["flash_attn"] = True
 
         llm = Llama(**llm_kwargs)
 
