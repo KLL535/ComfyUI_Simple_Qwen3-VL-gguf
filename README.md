@@ -22,7 +22,7 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 - `path_to_comfyui\python_embeded\python -m pip install -e .`
 (If you have embedded Python, this is usually the case).
 
-  *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed. Or, build without the `-e` flag.*
+  *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed.* 
   
   *Warning: Compilation can take a long time, somewhere between 30-60 minutes.*
   
