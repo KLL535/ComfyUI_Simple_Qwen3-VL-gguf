@@ -60,6 +60,7 @@ Rule: `n_batch <= ctx`
 - `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0
 - `top_k`: *INT*, default: 0, min: 0, max: 32768 - for QwenVL recommended 0, for llava recommended 40
 - `pool_size`: *INT*, default: 4194304, min: 1048576, max: 10485760 - if the ggml memory pool is not enough, then you should increase it
+- `script`: *STRING*, default: "" - Here you can enter the name of the script to be called. If you don't enter anything, the script will be determined automatically based on the model file name. For now I publish: `qwen3vl_run.py` for `Qwen3` and `llavavl_run.py` for `llava`. 
 
 ### Not customizable parameters:
 - `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
@@ -117,16 +118,17 @@ My parameter for `ministral`:
         "Ministral-3-14B": {
             "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
-            "output_max_tokens": 1024,
-            "image_max_tokens": 2048,
-            "ctx": 4096,
+            "output_max_tokens": 2048,
+            "image_max_tokens": 4096,
+            "ctx": 8192,
             "n_batch": 1024,
             "gpu_layers": -1,
             "temperature": 0.3,
             "top_p": 0.92,
             "repeat_penalty": 1.1,
             "top_k": 40,
-            "pool_size": 4194304
+            "pool_size": 4194304,
+            "script": "llavavl_run.py"
         }
 ```
 ---
