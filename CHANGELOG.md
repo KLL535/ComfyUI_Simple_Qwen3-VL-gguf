@@ -1,4 +1,7 @@
 # nightly
+# V2.1
+- the method of passing images to the subprocess has been changed
+- input `script` has been added
 # V2.0
 - add non visual models
 # V1.8

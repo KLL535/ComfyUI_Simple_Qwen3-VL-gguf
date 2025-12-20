@@ -38,6 +38,7 @@ class Qwen3VL_GGUF_Node:
                 "image": ("IMAGE",),
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
+                "script": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
             }
         }
 
@@ -64,7 +65,8 @@ class Qwen3VL_GGUF_Node:
         pool_size,
         image=None,
         image2=None,
-        image3=None):
+        image3=None,
+        script=None):
         
         if unload_all_models == True:
             comfy.model_management.unload_all_models()
@@ -77,7 +79,7 @@ class Qwen3VL_GGUF_Node:
                 print("Unable to clear cache")
 
         input_images = [image, image2, image3]
-        images = []
+        temp_image_paths = []
         for img_batch in input_images:
             if img_batch is None:
                 continue  
@@ -94,25 +96,32 @@ class Qwen3VL_GGUF_Node:
             # Конвертируем в PIL.Image
             pil_img = Image.fromarray(img_np, mode='RGB')
 
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+                pil_img.save(f, format='PNG')
+                temp_image_paths.append(f.name)
+
             # Сохраняем в буфер как PNG
-            buffer = BytesIO()
-            pil_img.save(buffer, format="PNG")
+            #buffer = BytesIO()
+            #pil_img.save(buffer, format="PNG")
 
             # Кодируем в base64
-            img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            #img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
 
             # Добавляем в список
-            images.append(img_base64)
+            #images.append(img_base64)
 
         # Очистка перед запуском
         torch.cuda.empty_cache()
         gc.collect()
 
-        model_filename = os.path.basename(model_path).lower()
-        if "llava" in model_filename or "ministral" in model_filename or "mistral" in model_filename:
-            script_name = "llavavl_run.py"
+        if not script:
+            model_filename = os.path.basename(model_path).lower()
+            if "llava" in model_filename or "ministral" in model_filename or "mistral" in model_filename:
+                script_name = "llavavl_run.py"
+            else:
+                script_name = "qwen3vl_run.py"
         else:
-            script_name = "qwen3vl_run.py"
+            script_name = script
             
         # Путь к скрипту (рядом с этим файлом)
         node_dir = os.path.dirname(os.path.abspath(__file__))
@@ -127,7 +136,7 @@ class Qwen3VL_GGUF_Node:
             "temperature": temperature,
             "gpu_layers": gpu_layers,
             "ctx": ctx,
-            "images": images, 
+            "images": temp_image_paths, 
             "image_max_tokens": image_max_tokens,
             "n_batch": n_batch,
             "system_prompt":system_prompt,
@@ -182,6 +191,8 @@ class Qwen3VL_GGUF_Node:
             # Удаляем временный файл
             try:
                 os.unlink(tmp_config_path)
+                for path in temp_img_paths:
+                    os.unlink(path)
             except:
                 pass
 
@@ -502,6 +513,7 @@ class ModelPresetLoaderAdvanced:
         "FLOAT",   # repeat_penalty
         "INT",   # top_p
         "INT",     # pool_size
+        "STRING",  # script
     )
     
     RETURN_NAMES = (
@@ -517,6 +529,7 @@ class ModelPresetLoaderAdvanced:
         "repeat_penalty",
         "top_k",
         "pool_size",
+        "script",
     )
 
     FUNCTION = "load_preset"
@@ -543,6 +556,7 @@ class ModelPresetLoaderAdvanced:
         repeat_penalty = preset.get("repeat_penalty", 1.2)
         top_k = preset.get("top_k", 0)
         pool_size = preset.get("pool_size", 4194304)
+        script = preset.get("script", "")
         
         return (
             model_path,
@@ -557,5 +571,6 @@ class ModelPresetLoaderAdvanced:
             repeat_penalty,
             top_k,
             pool_size,
+            script,
         )
 

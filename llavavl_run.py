@@ -2,6 +2,8 @@
 import sys
 import json
 import gc
+import os
+from pathlib import Path
 
 def main():
     try:
@@ -20,20 +22,22 @@ def main():
 
         from llama_cpp import Llama
 
-        images = config['images']
+        images = config.get('images',[])
         if images:
             from llama_cpp.llama_chat_format import Llava15ChatHandler
             chat_handler = Llava15ChatHandler(
                 clip_model_path=config["mmproj_path"],  
             )
+
             content = [{"type": "text", "text": content_text_part}]
-            for image in images:
-                if image != None:
-                    data_url = f"data:image/png;base64,{image}"
+            for img_path in config["images"]:
+                if img_path:  # путь к файлу
+                    file_url = Path(img_path).resolve().as_uri()
                     content.append({
                         "type": "image_url",
-                        "image_url": {"url": data_url}
+                        "image_url": {"url": file_url}
                     })
+
             messages = [{ "role": "user", "content": content }]
         else:
             chat_handler = None

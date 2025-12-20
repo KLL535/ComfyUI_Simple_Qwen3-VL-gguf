@@ -2,6 +2,8 @@
 import sys
 import json
 import gc
+import os
+from pathlib import Path
 
 def is_nonempty_string(s):
     return isinstance(s, str) and s.strip() != ""
@@ -51,12 +53,13 @@ def main():
         if images and is_vision_model:
 
             content = [{"type": "text", "text": config["user_prompt"]}]
-            for image in images:
-                if image != None:
-                    data_url = f"data:image/png;base64,{image}"
+
+            for img_path in config["images"]:
+                if img_path:  # путь к файлу
+                    file_url = Path(img_path).resolve().as_uri()
                     content.append({
                         "type": "image_url",
-                        "image_url": {"url": data_url}
+                        "image_url": {"url": file_url}
                     })
 
             messages = [

@@ -21,7 +21,8 @@
             "top_p": 0.92,
             "repeat_penalty": 1.2,
             "top_k": 0,
-            "pool_size": 4194304
+            "pool_size": 4194304,
+            "script": "qwen3vl_run.py"
         },
         "Qwen3-VL-30B": {
             "model_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf",
@@ -35,7 +36,8 @@
             "top_p": 0.92,
             "repeat_penalty": 1.2,
             "top_k": 0,
-            "pool_size": 4194304
+            "pool_size": 4194304,
+            "script": "qwen3vl_run.py"
         },
         "Joycaption-Beta": {
             "model_path": "H:\\LLM2\\llama-joycaption-beta-one-hf-llava-q8_0\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
@@ -49,7 +51,8 @@
             "top_p": 0.9,
             "repeat_penalty": 1.2,
             "top_k": 40,
-            "pool_size": 4194304
+            "pool_size": 4194304,
+            "script": "llavavl_run.py"
         }
     }
 }
