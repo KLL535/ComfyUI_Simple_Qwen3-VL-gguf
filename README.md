@@ -10,7 +10,13 @@ This version was created to meet my requirements:
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this. There's also sdnq, but I haven't been able to get it running yet.
 
 # What's the problem:
-Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work for me.
+Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
+
+Check the version number of llama-cpp-python you're using.
+I used the version 0.3.17 or 0.3.18 from **JamePeng** and it supports qwen3.
+The standard version `llama-cpp-python` hasn't been updated for a long time.
+`llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
+
 ## Workaround (until support is added):
 1. Download this using Git:
 - https://github.com/JamePeng/llama-cpp-python
