@@ -6,7 +6,7 @@ This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models)
 2. The model must support the Qwen3-VL multimodal model
 3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, you have to reload the model each time, but this is faster, especially on good hardware with fast memory and disks)
-4. No pre-loaded models stored in some unknown location. You can use any models you already have. Just download them using any convenient method (via a browser or even on a flash drive from a friend) and simply specify their path on the disk. For me, this is the most convenient method.
+4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just download them using any convenient method (via a browser or even on a flash drive from a friend) and simply specify their path on the disk. For me, this is the most comfortable method.
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this. There's also sdnq, but I haven't been able to get it running yet.
 
 # What's the problem:
