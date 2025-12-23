@@ -160,7 +160,7 @@ For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
 
 # Speed test and memory full issue:
 LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
-Therefore, to get good speed, you cannot exceed the VRAM overflow.
+Therefore, VRAM overflows are bad.
 **Check in task manager if VRAM is getting full (which is causing slowdown)**.
 
 Memory overflow (speed down):
@@ -172,7 +172,7 @@ Model fits (good speed):
 <img width="223" height="181" alt="image" src="https://github.com/user-attachments/assets/fe1b21c5-e35e-4945-9c7a-4f820bda7776" />
 
 To make the model fit:
-1. Use stronger quantization
+1. Use stronger quantization Q8->Q6->Q4...
 2. Reduce `ctx`, but not too much, otherwise the response may be cut off.
 3. Use CPU offload (`gpu_layers` > 0, The lower the number, the more layers will be unloaded onto the CPU; the number of layers depends on the model, start decreasing from 40) - It may be slow if the processor is weak.
 
@@ -216,34 +216,21 @@ https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
 ---
 
-### Troubleshooting:
+## Troubleshooting:
 
-Check that the libraries are installed to the latest versions.
-Create a test.py file with the following content:
+### Llava15ChatHandler.init() got an unexpected keyword argument 'image_max_tokens'
+
+You have an old library `llama-cpp-python` installed, it does not support Qwen3
+Check that the library are latest versions. Run:
 ```
-import llama_cpp
-print("llama-cpp-python version:", llama_cpp.__version__)
-try:
-    from llama_cpp import llama_print_system_info
-    info = llama_print_system_info()
-    print(info.decode('utf-8'))
-except Exception as e2:
-    print("Failed:", e2)
-```
-Run it using your embedded python from the `python_embeded` folder :
-```
-H:\ComfyUI128\python_embeded>python temp\test.py
-llama-cpp-python version: 0.3.17
-ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
-ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
-ggml_cuda_init: found 1 CUDA devices:
-  Device 0: NVIDIA GeForce RTX 5080, compute capability 12.0, VMM: yes
-CUDA : ARCHS = 1200 | USE_GRAPHS = 1 | PEER_MAX_BATCH_SIZE = 128 | CPU : SSE3 = 1 | SSSE3 = 1 | AVX = 1 | AVX2 = 1 | F16C = 1 | FMA = 1 | AVX512 = 1 | LLAMAFILE = 1 | OPENMP = 1 | REPACK = 1 |
+cd *path_to_comfyui*\python_embeded
+python -c "from llama_cpp.llama_chat_format import Qwen3VLChatHandler; print('✅ Qwen3VLChatHandler loaded')"
+✅ Qwen3VLChatHandler loaded
 ```
 
 ---
 
-### Stuck issue:
+### Constant output model of the same word/fragment:
 If the model gets stuck on a response, you need to:
 - increase the `temperature`
 - decrease `top_p`
@@ -251,9 +238,9 @@ If the model gets stuck on a response, you need to:
 
 ---
 
-### ggml memory pool owerflow issue:
+### ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16):
 
-If an error occurs `ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16)`, try it:
+If an error occurs, try it:
 - increase `pool_size`
 - decrease `ctx`
 - decrease `image_max_tokens`
