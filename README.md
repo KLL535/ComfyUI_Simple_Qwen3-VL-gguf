@@ -50,7 +50,7 @@ python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
 # What's next:
-1. Use **ComfyUI Manager** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
+1. Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
 3. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
 4. Restarting the frontend (F5)
 5. Now the following node has appeared:
