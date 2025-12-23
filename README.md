@@ -33,7 +33,9 @@ Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
   *Warning: Compilation can take a long time, somewhere between 30-60 minutes.*
   
 5. Wait for the package to build from source.
-(You can find ready-made WHL packages for your configuration)
+   
+Or you can download WHL packages for your configuration: 
+- https://github.com/JamePeng/llama-cpp-python/releases
 
 # What's next:
 1. Use **ComfyUI Manager** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
