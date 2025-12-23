@@ -246,6 +246,15 @@ If an error occurs, try it:
 - decrease `image_max_tokens`
 - increase `n_batch`
 
+### Failed to load shared library 'D:\ComfyUI\venv\Lib\site-packages\llama_cpp\lib\ggml.dll
+
+If this dll files are **created**, but do not run:
+Download: https://github.com/lucasg/Dependencies/releases
+
+(select Dependencies_x64_Release.zip)
+Unzip and run `DependenciesGui.exe`.
+Drag the `ggml.dll` (and other) file into program: Look any red lines? 
+
 ---
 
 Maybe it will be useful to someone.
