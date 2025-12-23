@@ -18,24 +18,36 @@ The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
 
 ## Workaround (until support is added):
+**A:** Build from source code:
 1. Download this using Git:
 - https://github.com/JamePeng/llama-cpp-python
 2. Download this using Git:
 - https://github.com/ggml-org/llama.cpp
+  
 Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 3. Go to the llama-cpp-python folder and run the command:
-- `set CMAKE_ARGS="-DGGML_CUDA=on"`
-- `path_to_comfyui\python_embeded\python -m pip install -e .`
+```
+set CMAKE_ARGS="-DGGML_CUDA=on"
+*path_to_comfyui*\python_embeded\python -m pip install -e .
+```
 (If you have embedded Python, this is usually the case).
+
+5. Wait for the package to build from source.
 
   *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed.* 
   
   *Warning: Compilation can take a long time, somewhere between 30-60 minutes.*
   
-5. Wait for the package to build from source.
+
    
-Or you can download WHL packages for your configuration: 
+**B:** Or download WHL packages for your configuration: 
 - https://github.com/JamePeng/llama-cpp-python/releases
+  
+For example:
+```
+cd *path_to_comfyui*\python_embeded
+python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
+```
 
 # What's next:
 1. Use **ComfyUI Manager** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
