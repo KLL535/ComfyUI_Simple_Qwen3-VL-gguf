@@ -116,13 +116,11 @@ A simplified version of the node above. The model and its parameters mast be des
 ```
 {
     "_system_prompts": {
-        "✨ My": "You are a helpful and precise image captioning assistant. Write a \"some text\""
+        "✨ My system prompt": "You are a helpful and precise image captioning assistant. Write a \"some text\""
     },
     "_user_prompt_styles": {
-        "✨ My": "Transform style to \"some text\""
     },
     "_camera_preset": {
-        "✨ My": "Transform this exact scene using the following camera transformation: Replace camera settings with: \"some text\" this means: \"some text\""
     },
     "_model_presets": {
         "Qwen3-VL-8B": {
@@ -159,7 +157,9 @@ A simplified version of the node above. The model and its parameters mast be des
 }
 ```
 Rule:
-- Just be sure not to violate the JSON format, otherwise the node won't load. You need to escape the quotes for ", like this \\". 
+- Just be sure not to violate the JSON format, otherwise the node won't load.
+- You need to escape the quotes for ", like this \\".
+- Use \n for new line.
 - You also need to make sure that the last line of the list doesn't have a comma at the end.
 - To apply the changes, press F5 in Comfy-UI.
   
