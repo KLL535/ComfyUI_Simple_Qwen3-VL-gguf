@@ -7,10 +7,228 @@ import subprocess
 import torch
 import numpy as np
 import gc
-import base64
 import comfy.model_management
-from io import BytesIO
+import pickle
 from PIL import Image
+
+"""Function for loading sections from JSON files"""
+def load_json_section(section_key):
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    official_path = os.path.join(current_dir, "system_prompts.json")
+    user_path = os.path.join(current_dir, "system_prompts_user.json")
+
+    official_data = {}
+    if os.path.exists(official_path):
+        with open(official_path, "r", encoding="utf-8") as f:
+            official_data = json.load(f)
+
+    user_data = {}
+    if os.path.exists(user_path):
+        with open(user_path, "r", encoding="utf-8") as f:
+            user_data = json.load(f)
+
+    # Получаем секции
+    official_section = official_data.get(section_key, {})
+    user_section = user_data.get(section_key, {})
+
+    combined = {**official_section, **user_section}
+    return combined
+
+"""Clearing memory and caches"""
+def clear_memory_start(unload_all_models=False):
+    if unload_all_models:
+        comfy.model_management.unload_all_models()
+        comfy.model_management.soft_empty_cache(True)
+    try:
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+    except Exception as e:
+        print(f"Warning: during cache clearing: {e}")
+
+def clear_memory_end(temp_image_paths):
+    # Cleaning temporary image files
+    for path in temp_image_paths:
+        try:
+            if os.path.exists(path):
+                os.unlink(path)
+        except OSError as e:
+            print(f"Warning: failed to delete {path}: {e}")
+
+    # Final memory clearing
+    gc.collect()
+    torch.cuda.empty_cache()
+
+
+"""Processing images from ComfyUI into temporary files"""
+def process_images_to_temp_files(image_inputs):
+    temp_image_paths = []
+    for img_batch in image_inputs:
+        if img_batch is None:
+            continue
+            
+        # Tensor processing [B, H, W, C]
+        if img_batch.ndim == 4:
+            img_tensor = img_batch[0]  # first image
+        else:
+            img_tensor = img_batch
+        
+        if img_tensor.numel() == 0:
+            continue  
+        h, w = img_tensor.shape[-3:-1] 
+        if h == 0 or w == 0:
+            continue
+
+        # Converting to PIL Image
+        img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
+
+        if img_np.shape[-1] == 4:
+            # RGBA → RGB
+            alpha = img_np[..., 3:] / 255.0
+            rgb = img_np[..., :3]
+            background = np.full_like(rgb, 255) 
+            img_rgb = (rgb * alpha + background * (1 - alpha)).astype(np.uint8)
+            pil_img = Image.fromarray(img_rgb, mode='RGB')
+        else:
+            pil_img = Image.fromarray(img_np, mode='RGB')
+        
+        # Saving to a temporary file
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
+            pil_img.save(f, format='PNG')
+            temp_image_paths.append(f.name)
+    
+    return temp_image_paths
+
+"""Running the LLM script with the passed configuration"""
+def run_llm_script(script_name, config, timeout=300):
+    node_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(node_dir, script_name)
+    
+    if not os.path.exists(script_path):
+        return {
+            "status": "error",
+            "message": f"Script file '{script_name}' not found in {node_dir}",
+            "debug_info": f"Script path: {script_path}"
+        }
+
+    if os.path.basename(script_name) != script_name:
+        return {
+            "status": "error", 
+            "message": "Script name must not contain path separators"
+        }
+
+    # Creating a temporary config file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
+        json.dump(config, tmp_file, ensure_ascii=False)
+        tmp_config_path = tmp_file.name
+    
+    try:
+        # Launching an external process
+        result = subprocess.run(
+            [sys.executable, script_path, tmp_config_path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=node_dir
+        )
+        
+        if result.returncode != 0:
+            error_msg = f"Subprocess failed (code {result.returncode})\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            return {
+                "status": "error",
+                "message": f"Model inference failed. Check console for details.",
+                "debug_info": error_msg
+            }
+        
+        try:
+            output_data = json.loads(result.stdout)
+            return output_data
+
+        except json.JSONDecodeError:
+            return {
+                "status": "error",
+                "message": f"Invalid JSON output from script",
+                "debug_info": result.stdout
+            }
+            
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "error",
+            "message": "Inference timed out (5 min)."
+        }
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Subprocess launch failed: {e}"
+        }
+    finally:
+        # Delete the temporary config file
+        try:
+            os.unlink(tmp_config_path)
+        except:
+            pass
+
+"""Extracting conditioning from the result"""
+def extract_conditioning_from_result(output_data):
+    conditioning = None
+    cond_path = output_data.get("embedding_file", None)
+    if cond_path and os.path.exists(cond_path):
+        try:
+            with open(cond_path, 'rb') as f:
+                conditioning = pickle.load(f)
+            os.unlink(cond_path)
+        except Exception as e:
+            print(f"Warning: Failed to load conditioning: {e}")
+    
+    return conditioning
+
+"""Script Definition"""
+def define_script(script,model_path):
+    if script:
+        return script
+    if not model_path:
+        return "qwen3vl_run.py"
+    try:
+        model_filename = os.path.basename(model_path).lower()
+        if any(x in model_filename for x in ["llava", "ministral", "mistral"]):
+            return "llavavl_run.py"
+        else:
+            return "qwen3vl_run.py"
+    except Exception:
+        return "qwen3vl_run.py"
+
+"""The main pipeline for launching inference and processing the result"""
+def run_inference_pipeline(script_name, config):
+    if not script_name:
+        return "[ERROR] Script name is not defined", None
+    try:
+        gc.collect()
+        
+        # Running the script
+        result = run_llm_script(script_name, config, timeout=300)
+        
+        # Processing the result
+        if result.get("status") == "success":
+            text = result.get("output", "")
+            conditioning = extract_conditioning_from_result(result)
+            return text, conditioning
+
+        else:
+            error_msg = f"[ERROR] {result.get('message', 'Unknown error')}"
+            debug_info = result.get("debug_info")
+            if debug_info:
+                if isinstance(debug_info, dict):
+                    print(f"Inference Error - STDOUT:\n{debug_info.get('stdout', '')}")
+                    print(f"Inference Error - STDERR:\n{debug_info.get('stderr', '')}")
+                else:
+                    print(f"Inference Error: {debug_info}")
+            return error_msg, None
+            
+    except Exception as e:
+        error_msg = f"[ERROR] Unexpected error in inference pipeline: {str(e)}"
+        print(f"Inference Pipeline Error: {e}")
+        return error_msg, None
+
 
 class Qwen3VL_GGUF_Node:
     @classmethod
@@ -19,8 +237,8 @@ class Qwen3VL_GGUF_Node:
             "required": {
                 "system_prompt": ("STRING", {"multiline": False, "default": "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions."}),
                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
-                "model_path": ("STRING", {"default": "H:\\Qwen3VL-8B-Instruct-Q8_0.gguf"}),
-                "mmproj_path": ("STRING", {"default": "H:\\mmproj-Qwen3VL-8B-Instruct-F16.gguf"}),
+                "model_path": ("STRING", {"default": ""}),
+                "mmproj_path": ("STRING", {"default": ""}),
                 "output_max_tokens": ("INT", {"default": 2048, "min": 64, "max": 4096, "step": 64}),
                 "image_max_tokens": ("INT", {"default": 4096, "min": 1024, "max": 1024000, "step": 512}),
                 "ctx": ("INT", {"default": 8192, "min": 1024, "max": 1024000, "step": 512}),
@@ -42,7 +260,8 @@ class Qwen3VL_GGUF_Node:
             }
         }
 
-    RETURN_TYPES = ("STRING",)
+    RETURN_TYPES = ("STRING","CONDITIONING")
+    RETURN_NAMES = ("text","conditioning")
     FUNCTION = "run"
     CATEGORY = "multimodal/Qwen"
 
@@ -67,174 +286,177 @@ class Qwen3VL_GGUF_Node:
         image2=None,
         image3=None,
         script=None):
-        
-        if unload_all_models == True:
-            comfy.model_management.unload_all_models()
-            comfy.model_management.soft_empty_cache(True)
-            try:
-                gc.collect()
-                torch.cuda.empty_cache()
-                torch.cuda.ipc_collect()
-            except:
-                print("Unable to clear cache")
 
-        input_images = [image, image2, image3]
         temp_image_paths = []
-        for img_batch in input_images:
-            if img_batch is None:
-                continue  
+        try:
+            # 1. Clearing memory in start
+            clear_memory_start(unload_all_models)
 
-            # ComfyUI передаёт изображение как тензор формы [B, H, W, C] (обычно B=1)
-            if img_batch.ndim == 4:
-                img_tensor = img_batch[0]  # извлекаем первое (и единственное) изображение → [H, W, C]
-            else:
-                img_tensor = img_batch  # на случай, если вдруг уже [H, W, C]
+            # 2. Image processing
+            input_images = [image, image2, image3]
+            temp_image_paths = process_images_to_temp_files(input_images)        
 
-            # Преобразуем в numpy uint8 в диапазоне [0, 255]
-            img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
+            # 3. Script Definition
+            if not script and not model_path:
+                return ("[ERROR] model_path or script is not defined", None)
+            script_name = define_script(script,model_path)
 
-            # Конвертируем в PIL.Image
-            pil_img = Image.fromarray(img_np, mode='RGB')
+            config = {
+                "model_path": model_path,
+                "mmproj_path": mmproj_path,
+                "user_prompt": user_prompt,
+                "max_tokens": output_max_tokens,
+                "temperature": temperature,
+                "gpu_layers": gpu_layers,
+                "ctx": ctx,
+                "images": temp_image_paths, 
+                "image_max_tokens": image_max_tokens,
+                "n_batch": n_batch,
+                "system_prompt": system_prompt,
+                "seed": seed,
+                "repeat_penalty": repeat_penalty,
+                "top_p": top_p,
+                "top_k": top_k,
+                "pool_size": pool_size,
+            }
 
-            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-                pil_img.save(f, format='PNG')
-                temp_image_paths.append(f.name)
+            #DEBUG
+            #debug_config_path = os.path.join(os.path.dirname(__file__), "debug_config.json")
+            #with open(debug_config_path, "w", encoding="utf-8") as f:
+            #    json.dump(config, f, ensure_ascii=False, indent=2)
 
-            # Сохраняем в буфер как PNG
-            #buffer = BytesIO()
-            #pil_img.save(buffer, format="PNG")
+            # 4. Launching the inference pipeline
+            text, conditioning = run_inference_pipeline(script_name, config)
 
-            # Кодируем в base64
-            #img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+            return (text, conditioning)
 
-            # Добавляем в список
-            #images.append(img_base64)
+        except Exception as e:
+            error_msg = f"[ERROR] Unexpected error: {str(e)}"
+            print(f"Qwen3VL Node Error: {e}")
+            return (error_msg, None)
 
-        # Очистка перед запуском
-        torch.cuda.empty_cache()
-        gc.collect()
+        finally:
+            # 8. Clearing memory in end
+            clear_memory_end(temp_image_paths)
 
-        if not script:
-            model_filename = os.path.basename(model_path).lower()
-            if "llava" in model_filename or "ministral" in model_filename or "mistral" in model_filename:
-                script_name = "llavavl_run.py"
-            else:
-                script_name = "qwen3vl_run.py"
-        else:
-            script_name = script
-            
-        # Путь к скрипту (рядом с этим файлом)
-        node_dir = os.path.dirname(os.path.abspath(__file__))
-        script_path = os.path.join(node_dir, script_name)
 
-        # Создаём временный JSON-файл с параметрами
-        config = {
-            "model_path": model_path,
-            "mmproj_path": mmproj_path,
-            "user_prompt": user_prompt,
-            "max_tokens": output_max_tokens,
-            "temperature": temperature,
-            "gpu_layers": gpu_layers,
-            "ctx": ctx,
-            "images": temp_image_paths, 
-            "image_max_tokens": image_max_tokens,
-            "n_batch": n_batch,
-            "system_prompt":system_prompt,
-            "seed":seed,
-            "repeat_penalty":repeat_penalty,
-            "top_p":top_p,
-            "top_k":top_k,
-            "pool_size":pool_size,
+class SimpleQwen3VL_GGUF_Node:
+    @classmethod
+    def INPUT_TYPES(cls):
+        # Загружаем доступные пресеты
+        model_presets = load_json_section("_model_presets")
+        system_prompts = load_json_section("_system_prompts")
+        
+        model_preset_names = list(model_presets.keys()) if model_presets else ["None"]
+        system_preset_names = list(system_prompts.keys()) if system_prompts else ["None"]
+        
+        return {
+            "required": {
+                "model_preset": (model_preset_names, {"default": model_preset_names[0] if model_preset_names else "None"}),
+                "system_preset": (system_preset_names, {"default": system_preset_names[0] if system_preset_names else "None"}),
+                "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
+                "seed": ("INT", {"default": 42}),
+                "unload_all_models": ("BOOLEAN", {"default": False}),
+            },
+            "optional": {
+                "image": ("IMAGE",),
+                "image2": ("IMAGE",),
+                "image3": ("IMAGE",),
+                "system_prompt_override": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
+            }
         }
 
-        #DEBUG
-        #debug_config_path = os.path.join(os.path.dirname(__file__), "debug_config.json")
-        #with open(debug_config_path, "w", encoding="utf-8") as f:
-        #    json.dump(config, f, ensure_ascii=False, indent=2)
+    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING")
+    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt")
+    FUNCTION = "run"
+    CATEGORY = "multimodal/Qwen"
 
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
-            json.dump(config, tmp_file, ensure_ascii=False)
-            tmp_config_path = tmp_file.name
 
+    def run(self, 
+            model_preset,
+            system_preset,
+            user_prompt,
+            seed,
+            unload_all_models,
+            image=None,
+            image2=None,
+            image3=None,
+            system_prompt_override=""):
+        
+        temp_image_paths = []
         try:
-            # Запускаем ОТДЕЛЬНЫЙ процесс Python
-            result = subprocess.run(
-                [sys.executable, script_path, tmp_config_path],
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 минут
-                cwd=node_dir  # важно: чтобы скрипт видел llama_cpp и PIL
-            )
+            # 1. Clearing memory
+            clear_memory_start(unload_all_models)
+            
+            # 2. Loading a model preset
+            model_presets = load_json_section("_model_presets")
+            if model_preset not in model_presets:
+                return (f"[ERROR] Model preset '{model_preset}' not found", None, "", "")
+            
+            model_config = model_presets[model_preset]
+            
+            # 3. System prompt
+            if system_prompt_override and system_prompt_override.strip():
+                system_prompt = system_prompt_override.strip()
+            else:
+                system_prompts = load_json_section("_system_prompts")
+                system_prompt = system_prompts.get(system_preset, "").strip()
+            
+            # 4. Image processing
+            input_images = [image, image2, image3]
+            temp_image_paths = process_images_to_temp_files(input_images)
+            
+            # 5. Script Definition
+            model_path = model_config.get("model_path", "")
+            script = model_config.get("script", None)
+            if not script and not model_path:
+                return ("[ERROR] model_path or script is not defined", None, "", "")
+            script_name = define_script(script,model_path)
+            
+            # 6. Creating a configuration
+            config = {
+                "model_path": model_path,
+                "mmproj_path": model_config.get("mmproj_path", ""),
+                "user_prompt": user_prompt,
+                "system_prompt": system_prompt,
+                "max_tokens": model_config.get("output_max_tokens", 2048),
+                "image_max_tokens": model_config.get("image_max_tokens", 4096),
+                "ctx": model_config.get("ctx", 8192),
+                "n_batch": model_config.get("n_batch", 8192),
+                "gpu_layers": model_config.get("gpu_layers", -1),
+                "temperature": model_config.get("temperature", 0.7),
+                "top_p": model_config.get("top_p", 0.92),
+                "repeat_penalty": model_config.get("repeat_penalty", 1.2),
+                "top_k": model_config.get("top_k", 0),
+                "pool_size": model_config.get("pool_size", 4194304),
+                "seed": seed,
+                "images": temp_image_paths,
+            }
 
-            if result.returncode != 0:
-                full_error = f"Subprocess failed (code {result.returncode})\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-                print("🔥 Qwen3VL SUBPROCESS ERROR 🔥")
-                print(full_error)
-                return (f"[ERROR] Model inference failed. Check console for details.",)
+            # 7. Launching the inference pipeline
+            text, conditioning = run_inference_pipeline(script_name, config)
+            return (text, conditioning, system_prompt, user_prompt)
 
-            try:
-                output_data = json.loads(result.stdout)
-                if output_data["status"] == "success":
-                    return (output_data["output"],)
-                else:
-                    error_msg = f"[ERROR] {output_data['message']}"
-                    print("Qwen3VL Error:", output_data.get("traceback", ""))
-                    return (error_msg,)
-            except json.JSONDecodeError:
-                return (f"[ERROR] Invalid JSON output:\n{result.stdout}",)
-
-        except subprocess.TimeoutExpired:
-            return ("[ERROR] Inference timed out (5 min).",)
         except Exception as e:
-            return (f"[ERROR] Subprocess launch failed: {e}",)
+            error_msg = f"[ERROR] Unexpected error: {str(e)}"
+            print(f"Qwen3VL Node Error: {e}")
+            return (error_msg, None, "", "")
+
         finally:
-            # Удаляем временный файл
-            try:
-                os.unlink(tmp_config_path)
-                for path in temp_img_paths:
-                    os.unlink(path)
-            except:
-                pass
-
-            # Очистка (хотя память уже должна быть свободна)
-            gc.collect()
-            torch.cuda.empty_cache()
-
-def load_json_section(section_key):
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    official_path = os.path.join(current_dir, "system_prompts.json")
-    user_path = os.path.join(current_dir, "system_prompts_user.json")
-
-    official_data = {}
-    if os.path.exists(official_path):
-        with open(official_path, "r", encoding="utf-8") as f:
-            official_data = json.load(f)
-    else:
-        print(f"[WARNING] Official prompt file not found: {official_path}")
-
-    user_data = {}
-    if os.path.exists(user_path):
-        with open(user_path, "r", encoding="utf-8") as f:
-            user_data = json.load(f)
-
-    # Получаем секции
-    official_section = official_data.get(section_key, {})
-    user_section = user_section = user_data.get(section_key, {})
-
-    combined = {**official_section, **user_section}
-    return combined
+            # 8. Clearing memory in end
+            clear_memory_end(temp_image_paths)
 
 
 class MasterPromptLoader:
     @classmethod
     def INPUT_TYPES(cls):
-        # Загружаем system prompts и user styles
+        # Loading system prompts
         system_prompts = load_json_section("_system_prompts")
-        system_names = list(system_prompts.keys())
+        system_preset_names = list(system_prompts.keys()) if system_prompts else ["None"]
 
         return {
             "required": {
-                "master_preset": (system_names, )
+                "system_preset": (system_preset_names, {"default": system_preset_names[0] if system_preset_names else "None"}),
             },
             "optional": {
                 "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),        
@@ -247,25 +469,94 @@ class MasterPromptLoader:
     CATEGORY = "multimodal/Qwen"
 
     def load_prompt(self, 
-        master_preset,
+        system_preset,
         system_prompt_opt=""):
 
         system_prompts = load_json_section("_system_prompts")
-        system_prompt = system_prompts.get(master_preset, "").strip()
+        system_prompt = system_prompts.get(system_preset, "").strip()
 
-        if system_prompt_opt != None:
-            if system_prompt_opt.strip() != "":
-                system_prompt += '\n' + system_prompt_opt.strip()
+        if system_prompt_opt and system_prompt_opt.strip():
+            system_prompt += '\n' + system_prompt_opt.strip()
 
         return (system_prompt,)
+
+
+class ModelPresetLoaderAdvanced:
+    @classmethod
+    def INPUT_TYPES(s):
+        # Load presets from JSON
+        presets = load_json_section("_model_presets")
+        preset_names = list(presets.keys()) if presets else ["None"]
+        
+        return {
+            "required": {
+                "model_preset": (preset_names, {"default": preset_names[0] if preset_names else "None"})
+            }
+        }
+
+    RETURN_TYPES = (
+        "STRING",  # model_path
+        "STRING",  # mmproj_path
+        "INT",     # output_max_tokens
+        "INT",     # image_max_tokens
+        "INT",     # ctx
+        "INT",     # n_batch
+        "INT",     # gpu_layers
+        "FLOAT",   # temperature
+        "FLOAT",   # top_p
+        "FLOAT",   # repeat_penalty
+        "INT",     # top_k
+        "INT",     # pool_size
+        "STRING",  # script
+    )
+    
+    RETURN_NAMES = (
+        "model_path",
+        "mmproj_path", 
+        "output_max_tokens",
+        "image_max_tokens",
+        "ctx",
+        "n_batch",
+        "gpu_layers",
+        "temperature",
+        "top_p",
+        "repeat_penalty",
+        "top_k",
+        "pool_size",
+        "script",
+    )
+
+    FUNCTION = "load_preset"
+    CATEGORY = "multimodal/Qwen"
+
+    def load_preset(self, model_preset):
+        presets = load_json_section("_model_presets")
+        
+        if model_preset not in presets:
+            raise ValueError(f"Model preset '{model_preset}' not found in JSON")
+        
+        preset = presets[model_preset]
+        
+        return (
+            preset.get("model_path", ""),
+            preset.get("mmproj_path", ""),
+            preset.get("output_max_tokens", 2048),
+            preset.get("image_max_tokens", 4096),
+            preset.get("ctx", 8192),
+            preset.get("n_batch", 8192),
+            preset.get("gpu_layers", -1),
+            preset.get("temperature", 0.7),
+            preset.get("top_p", 0.92),
+            preset.get("repeat_penalty", 1.2),
+            preset.get("top_k", 0),
+            preset.get("pool_size", 4194304),
+            preset.get("script", ""),
+        )
+
 
 class MasterPromptLoaderAdvanced:
     @classmethod
     def INPUT_TYPES(cls):
-        # Загружаем system prompts и user styles
-        system_prompts = load_json_section("_system_prompts")
-        system_names = list(system_prompts.keys())
-        
         user_styles = load_json_section("_user_prompt_styles")
         style_names = ["No changes"] + list(user_styles.keys())
 
@@ -274,7 +565,6 @@ class MasterPromptLoaderAdvanced:
 
         return {
             "required": {
-                "master_preset": (system_names, ),
                 "style_preset": (style_names, {"default": "No changes"}),
                 "camera_preset": (camera_names, {"default": "No changes"}),
                 "caption_length": (["unlimited", "very_short", "short", "medium", "long", "very_long"], {"default": "unlimited"}),
@@ -300,8 +590,6 @@ class MasterPromptLoaderAdvanced:
                 "family_friendly": ("BOOLEAN", {"default": False, "tooltip": "Keep the caption suitable for all audiences (PG/SFW). No sexual, violent, or mature content."}),
                 "classify_content_rating": ("BOOLEAN", {"default": False, "tooltip": "Explicitly label the image as sfw, suggestive, or nsfw."}),
                 "focus_on_key_elements": ("BOOLEAN", {"default": False, "tooltip": "Describe only the most important subjects — omit background clutter, minor details, or decorations."}),
-                "European_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'European woman'."}),
-                "Slavic_woman": ("BOOLEAN", {"default": False, "tooltip": "Only if a woman is visibly present in the image, refer to her as 'Slavic woman'."}),
 
                 "describe_color_grading": ("BOOLEAN", {"default": False}),
                 "describe_motion_blur_or_shutter_effect": ("BOOLEAN", {"default": False}),
@@ -309,19 +597,17 @@ class MasterPromptLoaderAdvanced:
                 "describe_narrative_context_or_mood": ("BOOLEAN", {"default": False}),
                 "describe_lens_distortion_or_bokeh_quality": ("BOOLEAN", {"default": False}),
 
-                "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}), 
                 "user_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),        
 
             }
         }
 
-    RETURN_TYPES = ("STRING","STRING")
-    RETURN_NAMES = ("system_prompt","user_prompt")
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("user_prompt",)
     FUNCTION = "load_prompt"
     CATEGORY = "multimodal/Qwen"
 
     def load_prompt(self, 
-        master_preset, 
         style_preset,
         camera_preset,
         caption_length,
@@ -345,8 +631,6 @@ class MasterPromptLoaderAdvanced:
         family_friendly=False,
         classify_content_rating=False,
         focus_on_key_elements=False,
-        European_woman=False,
-        Slavic_woman=False,
 
         describe_color_grading=False,
         describe_motion_blur_or_shutter_effect=False,
@@ -354,21 +638,7 @@ class MasterPromptLoaderAdvanced:
         describe_narrative_context_or_mood=False,
         describe_lens_distortion_or_bokeh_quality=False,
 
-        system_prompt_opt="",
         user_prompt_opt=""):
-
-        # === Master === 
-
-        instructions = []
-        system_prompts = load_json_section("_system_prompts")
-        instructions.append(system_prompts.get(master_preset, "").strip())
-
-        # === system_prompt_opt === 
-        if system_prompt_opt != None:
-            if system_prompt_opt.strip() != "":
-                instructions.append(system_prompt_opt.strip())
-
-        system_prompt = "\n".join(instructions)
 
         # === User === 
 
@@ -456,12 +726,6 @@ class MasterPromptLoaderAdvanced:
         if family_friendly:
             instructions.append("Keep the description family-friendly (PG). Avoid any sexual, violent, or offensive content.")
 
-        if European_woman and not Slavic_woman:
-            instructions.append("If a woman are visible, refer to her as 'European woman'.")
-
-        if Slavic_woman and not European_woman:
-            instructions.append("If a woman are visible, refer to her as 'Slavic woman'.")
-
         if describe_color_grading:
             instructions.append("Describe the color grading and tonal palette (e.g., warm/cool tones, high contrast, desaturated, teal-and-orange, Kodak film emulation, monochrome).")
 
@@ -477,100 +741,12 @@ class MasterPromptLoaderAdvanced:
         if describe_lens_distortion_or_bokeh_quality:
             instructions.append("Comment on optical qualities such as bokeh smoothness, vignetting, lens flare, or distortion (e.g., creamy bokeh, anamorphic flare, barrel distortion, sharp edge-to-edge rendering).")
 
-        # === system_prompt_opt === 
+        # === user_prompt_opt === 
         if user_prompt_opt != None:
             if user_prompt_opt.strip() != "":
                 instructions.append(user_prompt_opt.strip())
 
         user_prompt = "\n".join(instructions)
 
-        return (system_prompt,user_prompt)
-
-
-class ModelPresetLoaderAdvanced:
-    @classmethod
-    def INPUT_TYPES(s):
-        # Load presets from JSON
-        presets = load_json_section("_model_presets")
-        preset_names = list(presets.keys()) if presets else ["None"]
-        
-        return {
-            "required": {
-                "model_preset": (preset_names, {"default": preset_names[0] if preset_names else "None"})
-            }
-        }
-
-    RETURN_TYPES = (
-        "STRING",  # model_path
-        "STRING",  # mmproj_path
-        "INT",     # output_max_tokens
-        "INT",     # image_max_tokens
-        "INT",     # ctx
-        "INT",     # n_batch
-        "INT",     # gpu_layers
-        "FLOAT",   # temperature
-        "FLOAT",   # top_p
-        "FLOAT",   # repeat_penalty
-        "INT",   # top_p
-        "INT",     # pool_size
-        "STRING",  # script
-    )
-    
-    RETURN_NAMES = (
-        "model_path",
-        "mmproj_path", 
-        "output_max_tokens",
-        "image_max_tokens",
-        "ctx",
-        "n_batch",
-        "gpu_layers",
-        "temperature",
-        "top_p",
-        "repeat_penalty",
-        "top_k",
-        "pool_size",
-        "script",
-    )
-
-    FUNCTION = "load_preset"
-    CATEGORY = "multimodal/Qwen"
-
-    def load_preset(self, model_preset):
-        presets = load_json_section("_model_presets")
-        
-        if model_preset not in presets:
-            raise ValueError(f"Model preset '{model_preset}' not found in JSON")
-        
-        preset = presets[model_preset]
-        
-        # Extract values with defaults
-        model_path = preset.get("model_path", "")
-        mmproj_path = preset.get("mmproj_path", "")
-        output_max_tokens = preset.get("output_max_tokens", 2048)
-        image_max_tokens = preset.get("image_max_tokens", 4096)
-        ctx = preset.get("ctx", 8192)
-        n_batch = preset.get("n_batch", 8192)
-        gpu_layers = preset.get("gpu_layers", -1)
-        temperature = preset.get("temperature", 0.7)
-        top_p = preset.get("top_p", 0.92)
-        repeat_penalty = preset.get("repeat_penalty", 1.2)
-        top_k = preset.get("top_k", 0)
-        pool_size = preset.get("pool_size", 4194304)
-        script = preset.get("script", "")
-        
-        return (
-            model_path,
-            mmproj_path,
-            output_max_tokens,
-            image_max_tokens,
-            ctx,
-            n_batch,
-            gpu_layers,
-            temperature,
-            top_p,
-            repeat_penalty,
-            top_k,
-            pool_size,
-            script,
-        )
+        return (user_prompt,)
 
