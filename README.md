@@ -98,7 +98,7 @@ Rule: `n_batch <= ctx`
 - `verbose` = False - doesn't clutter the console.
   
 ### Output:
-- `test` - generated text
+- `test`: *STRING* - generated text
 - `conditioning` - (**in development**), if get the hidden LLM layer or load the text encoder, you can get embeddings.
 
 ## 2. Simple Qwen-VL Vision Language Model (simplified version)
@@ -106,11 +106,14 @@ A simplified version of the node above. The model and its parameters mast be des
 
 <img width="581" height="510" alt="00000004" src="https://github.com/user-attachments/assets/513a21a2-2649-4158-9c6e-b3ee4f8d3e10" />
 
-### Parameters:
+### Parameters (additional):
 - `model preset`: *LIST* - allows you to select a model from templates from `system_prompts_user.json`. 
 - `system preset`: *LIST* - allows you to select a system prompt from templates
 - `system prompt override`: *STRING*, default: "" - If you supply text to this input, this text will be a system prompt, and **system_preset will be ignored**.
-- the remaining parameters are described above
+
+### Output (additional):
+- `system preset`: *STRING* - Current system prompt (if you want to keep it)
+- `user preset`: *STRING* - Current user prompt (same as input)
 
 ### system_prompts_user.json example:
 ```
