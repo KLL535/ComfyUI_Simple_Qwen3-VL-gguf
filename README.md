@@ -53,14 +53,23 @@ python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 1. Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
 3. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
 4. Restarting the frontend (F5)
-5. Now the following node has appeared:
+
+# Implementation Features:
+The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
+
+<img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
+
+# Nodes:
 - `Qwen-VL Vision Language Model` - The main node for working with LLM
+- `Simple Qwen-VL Vision Language Model` - Simplified node
 - `Master Prompt Loader` - Loads system prompt and user prompt presets
 - `Master Prompt Loader (advanced)` - Loads system prompt and user prompt presets. Contains a bunch of other options that are still under development.
 - `Model Preset Loader (Advanced)` - More convenient model selection from a json file.
-<img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
-# Parameters (update):
+## 1. Qwen-VL Vision Language Model (advanced version)
+<img width="502" height="640" alt="image" src="https://github.com/user-attachments/assets/461f5f17-203b-424e-8b76-a05c5f23998f" />
+
+### Parameters:
 - `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3 images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM.
 - `system prompt`: *STRING*, default: "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions." - role + rules + format.
 - `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
@@ -87,12 +96,78 @@ Rule: `n_batch <= ctx`
 - `force_reasoning` = False - reasoning mode off.
 - `swa_full` = True - disables Sliding Window Attention.
 - `verbose` = False - doesn't clutter the console.
+  
+### Output:
+- `test` - generated text
+- `conditioning` - (**in development**), if get the hidden LLM layer or load the text encoder, you can get embeddings.
 
-# Implementation Features:
-The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
+## 2. Simple Qwen-VL Vision Language Model (simplified version)
+A simplified version of the node above. The model and its parameters mast be described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
 
+<img width="581" height="510" alt="00000004" src="https://github.com/user-attachments/assets/513a21a2-2649-4158-9c6e-b3ee4f8d3e10" />
 
-### Models:
+### Parameters:
+- `model preset`: *LIST* - allows you to select a model from templates from `system_prompts_user.json`. 
+- `system preset`: *LIST* - allows you to select a system prompt from templates
+- `system prompt override`: *STRING*, default: "" - If you supply text to this input, this text will be a system prompt, and **system_preset will be ignored**.
+- the remaining parameters are described above
+
+### system_prompts_user.json example:
+```
+{
+    "_system_prompts": {
+        "✨ My": "You are a helpful and precise image captioning assistant. Write a \"some text\""
+    },
+    "_user_prompt_styles": {
+        "✨ My": "Transform style to \"some text\""
+    },
+    "_camera_preset": {
+        "✨ My": "Transform this exact scene using the following camera transformation: Replace camera settings with: \"some text\" this means: \"some text\""
+    },
+    "_model_presets": {
+        "Qwen3-VL-8B": {
+            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
+            "output_max_tokens": 2048,
+            "image_max_tokens": 4096,
+            "ctx": 8192,
+            "n_batch": 8192,
+            "gpu_layers": -1,
+            "temperature": 0.7,
+            "top_p": 0.92,
+            "repeat_penalty": 1.2,
+            "top_k": 0,
+            "pool_size": 4194304,
+            "script": "qwen3vl_run.py"
+        },
+        "Qwen3-30B-Q4-2507(text)": {
+            "model_path": "H:\\LLM2\\Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf",
+            "mmproj_path": "",
+            "output_max_tokens": 1536,
+            "image_max_tokens": 0,
+            "ctx": 2048,
+            "n_batch": 2048,
+            "gpu_layers": 41,
+            "temperature": 0.7,
+            "top_p": 0.92,
+            "repeat_penalty": 1.2,
+            "top_k": 0,
+            "pool_size": 4194304,
+            "script": "qwen3vl_run.py"
+        }
+    }
+}
+```
+Rule:
+- Just be sure not to violate the JSON format, otherwise the node won't load. You need to escape the quotes for ", like this \\". 
+- You also need to make sure that the last line of the list doesn't have a comma at the end.
+  
+Agreement:
+- The `system_prompts.json` file contains the project settings that I will be updating. Do not edit this file, or your changes will be deleted.
+- The `system_prompts_user.json` file contains the user settings. This file will not be updated. Edit this file.
+- The `system_prompts_user.example.json` file contains example.
+
+# Models:
 1. Regular Qwen:
 - https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
 For example:
@@ -183,32 +258,11 @@ If the memory is full before this node starts working and there isn't enough mem
 - https://github.com/SeanScripts/ComfyUI-Unload-Model
 But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
 
-# More options:
-I wanted to give creative freedom and control LLM, so you could write any system prompt or change it on the fly.
-But if anyone wants to use templates, here's a solution that won't deprive the node of its previous capabilities.
-If you need to use a template prompt, include a special loader `Master Prompt Loader`. If you need to add new templates, you can add them here: `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json` (The `system_prompts.json` file contains default presets, but they can be updated).
-Just be sure not to violate the JSON format, otherwise the node won't load. You need to escape the quotes for ", like this \\". You also need to make sure that the last line of the list doesn't have a comma at the end.
-Templates stolen from here:
-https://github.com/1038lab/ComfyUI-QwenVL
-
-<img width="1287" height="635" alt="image" src="https://github.com/user-attachments/assets/4700331c-7797-4090-82e2-efd86f5c17bc" />
-
-### Simplifying the selection of models:
-If you have a lot of models, you can write their PATHs and settings to the `system_prompts_user.json` file, as shown in the example `system_prompts_user.example.json`, and use the `Model Preset Loader (Advanced)` model selector, connecting it like this:
-<img width="739" height="624" alt="image" src="https://github.com/user-attachments/assets/c49273ed-6cbb-40fa-bc61-b2d8c164aeda" />
-
-Then you can collapse the node and read only the important settings.
-<img width="586" height="480" alt="image" src="https://github.com/user-attachments/assets/c453aba1-0b86-4812-a4df-d448fd9f591b" />
-
-Agreement:
-- The `system_prompts.json` file contains the project settings that I will be updating. Do not edit this file, or your changes will be deleted.
-- The `system_prompts_user.json` contains the exact same user settings. This file will not be updated. Edit this file.
-
 ### Under construction:
-- Styles - work well 90% of the time. But you cannot set up instructions that contradict each other.
-- Camera settings - only work with the 30B model, but give very interesting results, some settings are useful.
+- Styles - replacing an image style, work well.
+- Camera settings - instruction to describe the camera, can sometimes give interesting results.
 - The "describe..." descriptive group works for photorealism and forces the LLM to describe more details.
-- The other options - I don't see any point in them yet.
+- The other options - under construction
 The idea for this configurator is taken from here:
 https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
