@@ -1,5 +1,5 @@
 # ComfyUI_Simple_Qwen3-VL-gguf
-Simple Qwen3-VL gguf LLM model loader for Comfy-UI.
+Simple Qwen3-VL (and not only) gguf LLM model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
@@ -545,7 +545,6 @@ Drag the `ggml.dll` (and other) file into program: Look any red lines?
 Maybe it will be useful to someone.
 
 [!] Tested only on Windows. Tested only on RTX5080. Tested only on Python 3.13.2 and Pytorch 2.10.0.dev20251121+cu130
-Tested with Qwen3-VL-8B, Qwen3-VL-30B, llama-joycaption-beta-one.
 
 # Dependencies & Thanks:
 - https://github.com/JamePeng/llama-cpp-python
