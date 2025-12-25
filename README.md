@@ -66,7 +66,7 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 - `Master Prompt Loader (advanced)` - Loads system prompt and user prompt presets. Contains a bunch of other options that are still under development.
 - `Model Preset Loader (Advanced)` - More convenient model selection from a json file.
 
-## 1. Qwen-VL Vision Language Model (advanced version)
+# 1. Qwen-VL Vision Language Model (customizable version)
 <img width="502" height="640" alt="image" src="https://github.com/user-attachments/assets/461f5f17-203b-424e-8b76-a05c5f23998f" />
 
 <details>
@@ -107,7 +107,7 @@ Rule: `n_batch <= ctx`
 
 </details>
 
-## 2. Simple Qwen-VL Vision Language Model (simplified version)
+# 2. Simple Qwen-VL Vision Language Model (simplified version)
 A simplified version of the node above. The model and its parameters mast be described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
 
 <img width="581" height="510" alt="00000004" src="https://github.com/user-attachments/assets/513a21a2-2649-4158-9c6e-b3ee4f8d3e10" />
@@ -127,7 +127,7 @@ A simplified version of the node above. The model and its parameters mast be des
 
 </details>
 
-### system_prompts_user.json example:
+### Example system_prompts_user.json:
 
 <details>
 
