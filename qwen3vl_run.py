@@ -38,15 +38,11 @@ def main():
             try:
                 from llama_cpp.llama_chat_format import Qwen3VLChatHandler
             except ImportError:
-                # для старых версий
-                try:
-                    from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-                except ImportError:
-                    # для еще более старых версий
-                    from llama_cpp.llama_chat_format import Qwen2VLChatHandler
-                    chat_handler = Qwen2VLChatHandler(**mmproj_kwargs)
-                else:
-                    chat_handler = Qwen25VLChatHandler(**mmproj_kwargs)
+                print(json.dumps({
+                    "status": "error",
+                    "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher.",
+                }, ensure_ascii=True))
+                sys.exit(1)
             else:
                 chat_handler = Qwen3VLChatHandler(**mmproj_kwargs)
 

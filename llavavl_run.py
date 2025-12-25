@@ -5,6 +5,9 @@ import gc
 import os
 from pathlib import Path
 
+def is_nonempty_string(s):
+    return isinstance(s, str) and s.strip() != ""
+
 def main():
     try:
         if len(sys.argv) != 2:
@@ -22,11 +25,14 @@ def main():
 
         from llama_cpp import Llama
 
+        mmproj_path = config.get("mmproj_path")
+        is_vision_model = is_nonempty_string(mmproj_path)
+
         images = config.get('images',[])
-        if images:
+        if images and is_vision_model:
             from llama_cpp.llama_chat_format import Llava15ChatHandler
             chat_handler = Llava15ChatHandler(
-                clip_model_path=config["mmproj_path"],  
+                clip_model_path=mmproj_path,  
             )
 
             content = [{"type": "text", "text": content_text_part}]
@@ -43,14 +49,18 @@ def main():
             chat_handler = None
             messages = [{ "role": "user", "content": content_text_part }]
 
-        llm = Llama(
-            model_path=config["model_path"],
-            chat_handler=chat_handler,
-            n_ctx=config.get("ctx", 8192),
-            n_gpu_layers=config.get("gpu_layers", 0),
-            n_batch=config.get("n_batch", 512),
-            verbose=False,
-        )
+        llm_kwargs = {
+            "model_path":config["model_path"],
+            "n_ctx":config.get("ctx", 8192),
+            "n_gpu_layers":config.get("gpu_layers", 0),
+            "n_batch":config.get("n_batch", 512),
+            "verbose":False,
+        }
+
+        if is_vision_model:
+            llm_kwargs["chat_handler"] = chat_handler
+
+        llm = Llama(**llm_kwargs)
 
         result = llm.create_chat_completion(
             messages=messages,
