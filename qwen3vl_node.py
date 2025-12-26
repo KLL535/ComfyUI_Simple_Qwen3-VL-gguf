@@ -305,7 +305,7 @@ class Qwen3VL_GGUF_Node:
                 "model_path": model_path,
                 "mmproj_path": mmproj_path,
                 "user_prompt": user_prompt,
-                "max_tokens": output_max_tokens,
+                "output_max_tokens": output_max_tokens,
                 "temperature": temperature,
                 "gpu_layers": gpu_layers,
                 "ctx": ctx,
@@ -414,24 +414,13 @@ class SimpleQwen3VL_GGUF_Node:
             script_name = define_script(script,model_path)
             
             # 6. Creating a configuration
-            config = {
-                "model_path": model_path,
-                "mmproj_path": model_config.get("mmproj_path", ""),
+            overrides = {
                 "user_prompt": user_prompt,
                 "system_prompt": system_prompt,
-                "max_tokens": model_config.get("output_max_tokens", 2048),
-                "image_max_tokens": model_config.get("image_max_tokens", 4096),
-                "ctx": model_config.get("ctx", 8192),
-                "n_batch": model_config.get("n_batch", 8192),
-                "gpu_layers": model_config.get("gpu_layers", -1),
-                "temperature": model_config.get("temperature", 0.7),
-                "top_p": model_config.get("top_p", 0.92),
-                "repeat_penalty": model_config.get("repeat_penalty", 1.2),
-                "top_k": model_config.get("top_k", 0),
-                "pool_size": model_config.get("pool_size", 4194304),
-                "seed": seed,
                 "images": temp_image_paths,
+                "seed": seed,
             }
+            config = {**model_config, **overrides}
 
             # 7. Launching the inference pipeline
             text, conditioning = run_inference_pipeline(script_name, config)
