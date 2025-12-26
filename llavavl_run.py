@@ -9,19 +9,50 @@ def is_nonempty_string(s):
     return isinstance(s, str) and s.strip() != ""
 
 def main():
+    llm = None
+    chat_handler = None
     try:
         if len(sys.argv) != 2:
             print(json.dumps({
                 "status": "error",
-                "message": "Usage: python qwen3vl_run.py <config.json>"
+                "message": "Usage: python llavavl_run.py <config.json>"
             }, ensure_ascii=True))
             sys.exit(1)
 
         config_path = sys.argv[1]
+        if not Path(config_path).exists():
+            print(json.dumps({
+                "status": "error",
+                "message": "Config file not found"
+            }, ensure_ascii=True))
+            sys.exit(1)
+
         with open(config_path, 'r', encoding='utf-8') as f:
             config = json.load(f)
 
-        content_text_part = config["system_prompt"] + "\n\n" + config["user_prompt"]
+        ### START CODE ### 
+
+        model_path = config.get("model_path",None)
+        if not model_path:
+            print(json.dumps({
+                "status": "error",
+                "message": "Missing required field: model_path"
+            }, ensure_ascii=True))
+            sys.exit(1)
+
+        system_prompt = config.get("system_prompt","").strip()
+        user_prompt = config.get("user_prompt","").strip()
+
+        prompt_parts = []
+        if system_prompt:
+            prompt_parts.append(system_prompt)
+        if user_prompt:
+            prompt_parts.append(user_prompt)
+        prompt = "\n\n".join(prompt_parts)
+
+        cuda_device = config.get("cuda_device")
+        if cuda_device is not None:
+            os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_device)
 
         from llama_cpp import Llama
 
@@ -30,14 +61,34 @@ def main():
 
         images = config.get('images',[])
         if images and is_vision_model:
-            from llama_cpp.llama_chat_format import Llava15ChatHandler
-            chat_handler = Llava15ChatHandler(
-                clip_model_path=mmproj_path,  
-            )
 
-            content = [{"type": "text", "text": content_text_part}]
+            chat_handler_type = config.get("chat_handler", "llava16").lower()
+
+            if chat_handler_type == "llava15":
+                from llama_cpp.llama_chat_format import Llava15ChatHandler
+                chat_handler = Llava15ChatHandler(clip_model_path=mmproj_path)
+            elif chat_handler_type == "llava16":
+                from llama_cpp.llama_chat_format import Llava16ChatHandler
+                chat_handler = Llava16ChatHandler(clip_model_path=mmproj_path)
+            elif chat_handler_type == "bakllava":
+                from llama_cpp.llama_chat_format import BakLlavaChatHandler
+                chat_handler = BakLlavaChatHandler(clip_model_path=mmproj_path)
+            elif chat_handler_type == "moondream":
+                from llama_cpp.llama_chat_format import MoondreamChatHandler
+                chat_handler = MoondreamChatHandler(model_path=mmproj_path)
+            elif chat_handler_type == "minicpmv":
+                from llama_cpp.llama_chat_format import MiniCPMVChatHandler
+                chat_handler = MiniCPMVChatHandler(clip_model_path=mmproj_path)
+            else:
+                print(json.dumps({
+                    "status": "error",
+                    "message": f"Unknown chat handler type: {chat_handler_type}. Supported: llava15, llava16, bakllava, moondream, minicpmv"
+                }, ensure_ascii=True))
+                sys.exit(1)
+
+            content = [{ "type": "text", "text": prompt }]
             for img_path in config["images"]:
-                if img_path:  # путь к файлу
+                if img_path and Path(img_path).exists():  
                     file_url = Path(img_path).resolve().as_uri()
                     content.append({
                         "type": "image_url",
@@ -46,8 +97,7 @@ def main():
 
             messages = [{ "role": "user", "content": content }]
         else:
-            chat_handler = None
-            messages = [{ "role": "user", "content": content_text_part }]
+            messages = [{ "role": "user", "content": prompt }]
 
         llm_kwargs = {
             "model_path":config["model_path"],
@@ -57,7 +107,7 @@ def main():
             "verbose":False,
         }
 
-        if is_vision_model:
+        if chat_handler:
             llm_kwargs["chat_handler"] = chat_handler
 
         llm = Llama(**llm_kwargs)
@@ -70,14 +120,12 @@ def main():
             repeat_penalty=config.get("repeat_penalty", 1.2),   
             top_p=config.get("top_p", 0.92),
             top_k=config.get("top_k", 0),
-            stop=["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"]
+            stop=config.get("stop", ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"])
         )
 
         output = result["choices"][0]["message"]["content"]
 
-        del llm
-        del chat_handler
-        gc.collect()
+        ### END CODE ### 
 
         print(json.dumps({"status": "success", "output": output}, ensure_ascii=True))
 
@@ -89,6 +137,13 @@ def main():
             "traceback": traceback.format_exc()
         }, ensure_ascii=True))
         sys.exit(1)
+
+    finally:
+        if llm:
+            del llm
+        if chat_handler:
+            del chat_handler
+        gc.collect()
 
 if __name__ == "__main__":
     main()
