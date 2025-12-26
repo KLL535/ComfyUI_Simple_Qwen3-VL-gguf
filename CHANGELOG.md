@@ -1,4 +1,6 @@
 # nightly
+# V2.3
+- add `simplified version`
 # V2.1
 - the method of passing images to the subprocess has been changed
 - input `script` has been added
