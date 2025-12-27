@@ -102,8 +102,8 @@ Rule: `n_batch <= ctx`
 - `verbose` = False - doesn't clutter the console.
   
 ### Output:
-- `test`: *STRING* - generated text
-- `conditioning` - (**in development**), if get the hidden LLM layer or load the text encoder, you can get embeddings.
+- `text`: *STRING* - generated text
+- `conditioning` - (**in development**)
 
 </details>
 
@@ -116,12 +116,18 @@ A simplified version of the node above. The model and its parameters mast be des
 
 <summary>Parameters</summary>
 
-### Parameters (additional):
+### Parameters:
+- `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3 images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM.
 - `model preset`: *LIST* - allows you to select a model from templates from `system_prompts_user.json`. 
 - `system preset`: *LIST* - allows you to select a system prompt from templates
 - `system prompt override`: *STRING*, default: "" - If you supply text to this input, this text will be a system prompt, and **system_preset will be ignored**.
+- `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
+- `seed`: *INT*, default: 42
+- `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
 
-### Output (additional):
+### Output:
+- `text`: *STRING* - generated text
+- `conditioning` - (**in development**)
 - `system preset`: *STRING* - Current system prompt (if you want to keep it)
 - `user preset`: *STRING* - Current user prompt (same as input)
 
