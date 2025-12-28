@@ -495,7 +495,7 @@ But sometimes the model would still load between this node and my node. So I jus
 The idea for this configurator is taken from here:
 https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
 
-<img width="396" height="821" alt="image" src="https://github.com/user-attachments/assets/ca8437de-e940-4ed4-964e-4b6cfbe5f1cb" />
+<img width="400" height="735" alt="image" src="https://github.com/user-attachments/assets/3905e7b1-018d-43b8-93f2-c83419b984d6" />
 
 ---
 
@@ -542,7 +542,20 @@ Download: https://github.com/lucasg/Dependencies/releases
 Unzip and run `DependenciesGui.exe`.
 Drag the `ggml.dll` (and other) file into program: Look any red lines? 
 
-**The reasons for this error are still unclear.**
+Check that you have **CUDA Toolkit** installed?
+For example:
+`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0`
+Try installing: https://developer.nvidia.com/cuda-downloads
+
+Сheck PATH in Environment Variable:
+For example:
+`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin\x64`
+`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin`
+
+Check driver version:
+`nvidia-smi` in cmd
+
+Check that you have windows **Visual C++ Redistributable** installed? Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
 
 </details>
 
