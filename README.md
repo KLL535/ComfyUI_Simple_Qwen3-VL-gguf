@@ -3,9 +3,9 @@ Simple Qwen3-VL (and not only) gguf LLM model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
-1. The model must support gguf (gguf models run faster than transformer models)
-2. The model must support the Qwen3-VL multimodal model
-3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, you have to reload the model each time, but this is faster, especially on good hardware with fast memory and disks)
+1. The model must support gguf (gguf models run faster than transformer models).
+2. The model must support the Qwen3-VL multimodal model.
+3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
 4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk. For me, this is the most comfortable method.
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this. 
 
@@ -533,29 +533,45 @@ If an error occurs, try it:
 - decrease `image_max_tokens`
 - increase `n_batch`
 
-### 4. Failed to load shared library 'D:\ComfyUI\venv\Lib\site-packages\llama_cpp\lib\ggml.dll
+### 4. Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll
 
-If this dll files are **created**, but do not run:
-Download: https://github.com/lucasg/Dependencies/releases
+1. Check that the files exist at the specified path.
 
-(select Dependencies_x64_Release.zip)
-Unzip and run `DependenciesGui.exe`.
-Drag the `ggml.dll` (and other) file into program: Look any red lines? 
-
-Check that you have **CUDA Toolkit** installed?
+2. Check that you have **CUDA Toolkit** installed?
 For example:
 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0`
-Try installing: https://developer.nvidia.com/cuda-downloads
+- Try installing: https://developer.nvidia.com/cuda-downloads
 
-Сheck PATH in Environment Variable:
-For example:
-`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin\x64`
-`C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin`
+- Сheck **PATH** in Environment Variable to **CUDA Toolkit** (For example: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin`):
 
-Check driver version:
-`nvidia-smi` in cmd
+3. Check that the **NVIDIA Driver** and  CUDA Toolkit versions match:
+Run command in CMD `nvidia-smi`
 
-Check that you have windows **Visual C++ Redistributable** installed? Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+4. Check that you have **Visual C++ Redistributable** installed? 
+Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+
+5. If this dll files are **created**, but do not run:
+Download: https://github.com/lucasg/Dependencies/releases
+(select Dependencies_x64_Release.zip).
+Unzip and run **DependenciesGui.exe**.
+Drag the `ggml.dll` (and other 6 dll) file into program. 
+Look any red lines? 
+
+6. If library not compile, check that you have **Visual Studio 2022** installed? 
+- Install Visual Studio 2022.  
+- Install packages (they will not be installed by default):
+  
+☑ Desktop development with C++ (in Workloads tab).
+
+☑ MSVC v143 - VS 2022 C++ x64/x86 build tools (in Individual components tab).
+
+☑ Windows 10/11 SDK (in Individual components tab).
+
+☑ CMake tools for Visual Studio (in Individual components tab).
+
+- Create **PATH** in Environment Variable to MSVC (they will not be created by default).
+Run command in CMD to automatically set the paths before each MSVC compilation run:
+`"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
 
 </details>
 
