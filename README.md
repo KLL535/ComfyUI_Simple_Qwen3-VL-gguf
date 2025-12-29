@@ -535,7 +535,7 @@ If an error occurs, try it:
 
 ### 4. Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll
 
-1. Check that the files exist at the specified path.
+1. Check that the files `ggml.dll, ggml-base.dll, ggml-cpu.dll, ggml-cuda.dll, llama.dll, mtmd.dll` exist at the specified path.
 
 2. Check that you have **CUDA Toolkit** installed?
 For example:
@@ -554,7 +554,7 @@ Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-v
 Download: https://github.com/lucasg/Dependencies/releases
 (select Dependencies_x64_Release.zip).
 Unzip and run **DependenciesGui.exe**.
-Drag the `ggml.dll` (and other 6 dll) file into program. 
+Drag the `ggml.dll` (**and other dll**) file into program. 
 Look any red lines? 
 
 6. If library not compile, check that you have **Visual Studio 2022** installed? 
