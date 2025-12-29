@@ -541,23 +541,23 @@ If an error occurs, try it:
 For example:
 `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0`
 - Try installing: https://developer.nvidia.com/cuda-downloads
-
-- Сheck **PATH** in Environment Variable to **CUDA Toolkit** (For example: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin`):
+- Сheck **PATH** in Environment Variable to **CUDA Toolkit** (For example: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin`).
+- After installing CUDA Toolkit, restart your computer.
 
 3. Check that the **NVIDIA Driver** and  CUDA Toolkit versions match:
-Run command in CMD `nvidia-smi`
+Run command in CMD `nvidia-smi`.
 
-4. Check that you have **Visual C++ Redistributable** installed? 
-Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+5. Check that you have **Visual C++ Redistributable** installed? 
+Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170 Install both versions (x86 and x64).
 
-5. If this dll files are **created**, but do not run:
+6. If this dll files are **created**, but do not run:
 Download: https://github.com/lucasg/Dependencies/releases
 (select Dependencies_x64_Release.zip).
 Unzip and run **DependenciesGui.exe**.
 Drag the `ggml.dll` (**and other dll**) file into program. 
-Look any red lines? 
+Look any red or yellow warnings? 
 
-6. If library not compile, check that you have **Visual Studio 2022** installed? 
+7. If library not compile, check that you have **Visual Studio 2022** installed? 
 - Install Visual Studio 2022.  
 - Install packages (they will not be installed by default):
   
@@ -570,8 +570,11 @@ Look any red lines?
 ☑ CMake tools for Visual Studio (in Individual components tab).
 
 - Create **PATH** in Environment Variable to MSVC (they will not be created by default).
-Run command in CMD to automatically set the paths before each MSVC compilation run:
-`"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
+CMD comand to automatically set the paths before each MSVC compilatio:
+`call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
+Run this command every time before compiling.
+
+7. If you use **python_embeded** for Comfy-UI, may need to add missing libs folders: `python_embeded\include`, `python_embeded\libs` (Not Lib\site-packages), `python_embeded\DLLs`: From here https://github.com/astral-sh/python-build-standalone/releases download Python **appropriate** version (for example `cpython-3.13.11+20251217-x86_64-pc-windows-msvc-install_only.tar.gz`), unzip and copy the necessary folders to `python_embeded`. 
 
 </details>
 
