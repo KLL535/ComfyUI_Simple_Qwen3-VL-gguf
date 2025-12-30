@@ -60,11 +60,12 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 <img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
 # Nodes:
-- `Qwen-VL Vision Language Model` - The main node for working with LLM
-- `Simple Qwen-VL Vision Language Model` - Simplified node
-- `Master Prompt Loader` - Loads system prompt and user prompt presets
-- `Master Prompt Loader (advanced)` - Loads system prompt and user prompt presets. Contains a bunch of other options that are still under development.
-- `Model Preset Loader (Advanced)` - More convenient model selection from a json file.
+📚 SimpleQwenVL:
+- `Qwen-VL Vision Language Model` - LLM, customizable version
+- `Simple Qwen-VL Vision Language Model` - LLM, simplified version
+- `Master Prompt Loader` - Loads system prompt presets
+- `Simple Style Selector` - Loads style presets for user prompt
+- `Simple Camera Selector` - Loads camera presets for user prompt
 
 # 1. Qwen-VL Vision Language Model (customizable version)
 <img width="502" height="640" alt="image" src="https://github.com/user-attachments/assets/461f5f17-203b-424e-8b76-a05c5f23998f" />
@@ -133,7 +134,7 @@ A simplified version of the node above. The model and its parameters mast be des
 
 </details>
 
-### Example system_prompts_user.json:
+# Example system_prompts_user.json:
 
 <details>
 
@@ -145,8 +146,10 @@ A simplified version of the node above. The model and its parameters mast be des
         "✨ My system prompt": "You are a helpful and precise image captioning assistant. Write a \"some text\""
     },
     "_user_prompt_styles": {
+        "✨ My": "Transform style to \"some text\""
     },
     "_camera_preset": {
+        "✨ My": "Transform this exact scene using the following camera transformation: Replace camera settings with: \"some text\" this means: \"some text\""
     },
     "_model_presets": {
         "Qwen3-VL-8B": {
@@ -198,6 +201,43 @@ A simplified version of the node above. The model and its parameters mast be des
 
 </details>
 
+## 3. Master Prompt Loader
+Allows select a system prompt from templates. In the simplified version of LLM this switch is built in.
+<img width="602" height="245" alt="image" src="https://github.com/user-attachments/assets/fbe21fb5-3e9b-4ddc-872f-c722de8190fc" />
+
+<details>
+
+<summary>Parameters</summary>
+
+### Parameters:
+- `system prompt opt`: *STRING* - input user text (postfix)
+- `system preset`: *LIST* - allows you to select a system prompt from templates
+
+### Output:
+- `system prompt`: *STRING* - output = system prompt + input user text, connect to LLM system_prompt input
+
+</details>
+
+## 4. Simple Style Selector/Simple Camera Selector
+Allows select a user prompt from templates:
+- Styles - replacing an image style, work well.
+- Camera settings - instruction to describe the camera, can sometimes give interesting results.
+
+<img width="932" height="240" alt="image" src="https://github.com/user-attachments/assets/53278c09-71f7-4775-a6d1-75c7f909fef1" />
+
+<details>
+
+<summary>Parameters</summary>
+
+### Parameters:
+- `user prompt`: *STRING* - input user text (prefix)
+- `style/camera preset`: *LIST* - allows you to select a style/camera templates
+
+### Output:
+- `user prompt`: *STRING* - output = input user text + style/camera prompt, connect to LLM user_prompt input
+- `style/camera name`: *STRING* - preset name (if you want to keep it)
+
+</details>
 
 
 # Models (tested):
@@ -486,16 +526,6 @@ Therefore, it is difficult to estimate the speed, but for me, with a prompt of 3
 If the memory is full before this node starts working and there isn't enough memory, I used this project before node:
 - https://github.com/SeanScripts/ComfyUI-Unload-Model
 But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
-
-### Under construction:
-- Styles - replacing an image style, work well.
-- Camera settings - instruction to describe the camera, can sometimes give interesting results.
-- The "describe..." descriptive group works for photorealism and forces the LLM to describe more details.
-- The other options - under construction
-The idea for this configurator is taken from here:
-https://huggingface.co/spaces/fancyfeast/joy-caption-beta-one
-
-<img width="400" height="735" alt="image" src="https://github.com/user-attachments/assets/3905e7b1-018d-43b8-93f2-c83419b984d6" />
 
 ---
 
