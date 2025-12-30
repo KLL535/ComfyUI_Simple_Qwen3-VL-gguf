@@ -9,6 +9,9 @@ import numpy as np
 import gc
 import comfy.model_management
 import pickle
+import random
+import hashlib
+import time
 from PIL import Image
 
 """Function for loading sections from JSON files"""
@@ -263,7 +266,7 @@ class Qwen3VL_GGUF_Node:
     RETURN_TYPES = ("STRING","CONDITIONING")
     RETURN_NAMES = ("text","conditioning")
     FUNCTION = "run"
-    CATEGORY = "multimodal/Qwen"
+    CATEGORY = "📚 SimpleQwenVL"
 
     def run(self, 
         system_prompt, 
@@ -369,7 +372,7 @@ class SimpleQwen3VL_GGUF_Node:
     RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING")
     RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt")
     FUNCTION = "run"
-    CATEGORY = "multimodal/Qwen"
+    CATEGORY = "📚 SimpleQwenVL"
 
 
     def run(self, 
@@ -455,7 +458,7 @@ class MasterPromptLoader:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("system_prompt",)
     FUNCTION = "load_prompt"
-    CATEGORY = "multimodal/Qwen"
+    CATEGORY = "📚 SimpleQwenVL"
 
     def load_prompt(self, 
         system_preset,
@@ -469,6 +472,122 @@ class MasterPromptLoader:
 
         return (system_prompt,)
 
+class SimpleStyleSelector:
+
+    @classmethod
+    def IS_CHANGED(cls, style_preset, user_prompt="", **kwargs):
+        if style_preset == "Random":
+            return float(time.time())
+        else:
+            return hashlib.md5(f"{style_preset}_{user_prompt}".encode()).hexdigest()
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        try:
+            user_styles = load_json_section("_user_prompt_styles")
+            style_names = ["No changes", "Random"] + list(user_styles.keys())
+        except:
+            style_names = ["No changes", "Random"]
+
+        return {
+            "required": {
+                "style_preset": (style_names, {"default": "No changes"}),
+            },
+            "optional": {
+                "user_prompt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("user_prompt", "style_name")
+    FUNCTION = "load"
+    CATEGORY = "📚 SimpleQwenVL"
+
+    def load(self, style_preset, user_prompt=""):
+        user_styles = load_json_section("_user_prompt_styles") or {}
+        
+        style_text = ""
+        style_name = "" 
+        
+        if style_preset == "Random":
+            if user_styles:
+                random.seed(time.time_ns() if hasattr(time, 'time_ns') else time.time())
+                style_name = random.choice(list(user_styles.keys()))
+                style_text = user_styles[style_name].strip()
+        
+        elif style_preset != "No changes":
+            if style_preset in user_styles:
+                style_name = style_preset
+                style_text = user_styles[style_preset].strip()
+
+        result_parts = []
+        if user_prompt.strip():
+            result_parts.append(user_prompt.strip())
+        if style_text:
+            result_parts.append(style_text)
+        
+        final_prompt = "\n".join(result_parts)
+
+        return (final_prompt, style_name)
+
+class SimpleCameraSelector:
+
+    @classmethod
+    def IS_CHANGED(cls, camera_preset, user_prompt="", **kwargs):
+        if camera_preset == "Random":
+            return float(time.time())
+        else:
+            return hashlib.md5(f"{camera_preset}_{user_prompt}".encode()).hexdigest()
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        # Загружаем пресеты камеры из JSON
+        try:
+            camera_presets = load_json_section("_camera_preset")
+            camera_names = ["No changes", "Random"] + list(camera_presets.keys())
+        except:
+            camera_names = ["No changes", "Random"]
+
+        return {
+            "required": {
+                "camera_preset": (camera_names, {"default": "No changes"}),
+            },
+            "optional": {
+                "user_prompt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("user_prompt", "camera_name")
+    FUNCTION = "load"
+    CATEGORY = "📚 SimpleQwenVL"
+
+    def load(self, camera_preset, user_prompt=""):
+        camera_presets = load_json_section("_camera_preset") or {}
+        
+        camera_text = ""
+        camera_name = ""  
+        
+        if camera_preset == "Random":
+            if camera_presets:
+                random.seed(time.time_ns() if hasattr(time, 'time_ns') else time.time())
+                camera_name = random.choice(list(camera_presets.keys()))
+                camera_text = camera_presets[camera_name].strip()
+        
+        elif camera_preset != "No changes":
+            if camera_preset in camera_presets:
+                camera_name = camera_preset
+                camera_text = camera_presets[camera_preset].strip()
+
+        result_parts = []
+        if user_prompt.strip():
+            result_parts.append(user_prompt.strip())
+        if camera_text:
+            result_parts.append(camera_text)
+        
+        final_prompt = "\n".join(result_parts)
+
+        return (final_prompt, camera_name)
 
 class ModelPresetLoaderAdvanced:
     @classmethod
@@ -516,7 +635,7 @@ class ModelPresetLoaderAdvanced:
     )
 
     FUNCTION = "load_preset"
-    CATEGORY = "multimodal/Qwen"
+    CATEGORY = "📚 SimpleQwenVL"
 
     def load_preset(self, model_preset):
         presets = load_json_section("_model_presets")
@@ -541,7 +660,6 @@ class ModelPresetLoaderAdvanced:
             preset.get("pool_size", 4194304),
             preset.get("script", ""),
         )
-
 
 class MasterPromptLoaderAdvanced:
     @classmethod
@@ -594,7 +712,7 @@ class MasterPromptLoaderAdvanced:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("user_prompt",)
     FUNCTION = "load_prompt"
-    CATEGORY = "multimodal/Qwen"
+    CATEGORY = "📚 SimpleQwenVL"
 
     def load_prompt(self, 
         style_preset,

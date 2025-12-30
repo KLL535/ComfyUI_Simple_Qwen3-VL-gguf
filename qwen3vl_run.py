@@ -76,7 +76,7 @@ def main():
 
             content = [{"type": "text", "text": user_prompt}]
 
-            for img_path in config["images"]:
+            for img_path in images:
                 if img_path and Path(img_path).exists():
                     file_url = Path(img_path).resolve().as_uri()
                     content.append({
