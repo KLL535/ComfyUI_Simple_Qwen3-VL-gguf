@@ -41,13 +41,13 @@ def load_json_section(section_key):
 def clear_memory_start(unload_all_models=False):
     if unload_all_models:
         comfy.model_management.unload_all_models()
-        comfy.model_management.soft_empty_cache(True)
-    try:
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
-    except Exception as e:
-        print(f"Warning: during cache clearing: {e}")
+        comfy.model_management.soft_empty_cache()
+        try:
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        except Exception as e:
+            print(f"Warning: during cache clearing: {e}")
 
 def clear_memory_end(temp_image_paths):
     # Cleaning temporary image files
