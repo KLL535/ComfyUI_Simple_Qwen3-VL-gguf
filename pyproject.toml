@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI_Simple_Qwen3-VL-gguf"
 description = "Simple Qwen3-VL gguf LLM model loader"
-version = "2.3"
+version = "2.4"
 license = {file = "LICENSE"}
 dependencies = ["llama-cpp-python"]
 

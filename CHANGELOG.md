@@ -1,4 +1,7 @@
 # nightly
+# V2.4
+- add `Simple Style Selector`
+- add `Simple Camera Selector`
 # V2.3
 - add `simplified version`
 # V2.1
