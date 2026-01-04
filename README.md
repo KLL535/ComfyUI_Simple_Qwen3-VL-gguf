@@ -39,6 +39,7 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
 
 <summary>4. For fast build with Ninja</summary>
 
+In this case, the load on all CPU cores and the compilation will complete much faster (but in this mode my processor gets very hot).
 - Make sure Ninja is installed with Visual Studio 2022:
 
 ```
@@ -50,8 +51,7 @@ ninja --version
 ```
 set CMAKE_GENERATOR=Ninja
 set MAX_JOBS=32
-```
-In this case, the load on all CPU cores and the compilation will complete much faster.
+``` 
 
 </details>
 
