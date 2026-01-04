@@ -18,29 +18,65 @@ The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
 
 ## Workaround (until support is added):
-**A:** Build from source code:
+
+<details>
+
+<summary>A. Build llama-cpp-python from source code</summary>
+
 1. Download this using Git:
 - https://github.com/JamePeng/llama-cpp-python
 2. Download this using Git:
 - https://github.com/ggml-org/llama.cpp
   
 Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
-3. Go to the llama-cpp-python folder and run the command:
+
+3. Automatically set the paths to MSVC:
+```
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+```
+
+<details>
+
+<summary>4. For fast build with Ninja</summary>
+
+- Make sure Ninja is installed with Visual Studio 2022:
+
+```
+ninja --version
+1.12.1
+```
+- Run the command. **32** is the number of cores on your processor that you want to use, write your number:
+
+```
+set CMAKE_GENERATOR=Ninja
+set MAX_JOBS=32
+```
+In this case, the load on all CPU cores and the compilation will complete much faster.
+
+</details>
+
+5. Go to the llama-cpp-python folder
+6. Run the command: 
+
 ```
 set CMAKE_ARGS="-DGGML_CUDA=on"
 *path_to_comfyui*\python_embeded\python -m pip install -e .
 ```
-(If you have embedded Python, this is usually the case).
+The command above is for embedded python. This is most often the case for Comfy-UI.
 
-5. Wait for the package to build from source.
+- Wait for the package to build from source. In this case, the load one CPU core and the compilation will complete much slower.
 
-  *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed.* 
+*Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed.* 
   
-  *Warning: Compilation can take a long time, somewhere between 30-60 minutes.*
-  
+*Warning: If you compiled without Ninja, compilation can take a long time, somewhere between 30-60 minutes.*
 
-   
-**B:** Or download WHL packages for your configuration: 
+</details>
+
+
+<details>
+
+<summary>B. Or download WHL packages for your configuration</summary>
+
 - https://github.com/JamePeng/llama-cpp-python/releases
   
 For example:
@@ -48,6 +84,8 @@ For example:
 cd *path_to_comfyui*\python_embeded
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
+
+</details>
 
 # What's next:
 1. Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
@@ -600,7 +638,7 @@ Look any red or yellow warnings?
 ☑ CMake tools for Visual Studio (in Individual components tab).
 
 - Create **PATH** in Environment Variable to MSVC (they will not be created by default).
-CMD comand to automatically set the paths before each MSVC compilatio:
+CMD comand to automatically set the paths to MSVC:
 `call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
 Run this command every time before compiling.
 
