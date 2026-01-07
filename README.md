@@ -64,7 +64,7 @@ set CMAKE_ARGS="-DGGML_CUDA=on"
 ```
 The command above is for embedded python. This is most often the case for Comfy-UI.
 
-- Wait for the package to build from source. In this case, the load one CPU core and the compilation will complete much slower.
+- Wait for the package to build from source. 
 
 *Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed.* 
   
