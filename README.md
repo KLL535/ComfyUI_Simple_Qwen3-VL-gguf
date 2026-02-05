@@ -237,6 +237,17 @@ A simplified version of the node above. The model and its parameters mast be des
 - The `system_prompts_user.json` file contains the user settings. This file will not be updated. Edit this file.
 - The `system_prompts_user.example.json` file contains example.
 
+### Special Rule:
+1. You can delete or rename the `system_prompts.json` file, and then only your information from the `system_prompts_user.json` file will remain.
+2. To prevent the file from being restored after a Git update, use a command that disables updates for this file:
+```
+git update-index --skip-worktree system_prompts.json
+```
+4. You can also disable tracking of your changes to the `system_prompts_user.json` file so that the repository is not considered modified:
+```
+git update-index --assume-unchanged system_prompts_user.json
+```
+
 </details>
 
 ## 3. Master Prompt Loader
