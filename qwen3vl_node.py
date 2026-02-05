@@ -13,29 +13,41 @@ import random
 import hashlib
 import time
 from PIL import Image
+import importlib.util
 
 """Function for loading sections from JSON files"""
-def load_json_section(section_key):
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    official_path = os.path.join(current_dir, "system_prompts.json")
-    user_path = os.path.join(current_dir, "system_prompts_user.json")
-
-    official_data = {}
-    if os.path.exists(official_path):
-        with open(official_path, "r", encoding="utf-8") as f:
-            official_data = json.load(f)
-
-    user_data = {}
-    if os.path.exists(user_path):
-        with open(user_path, "r", encoding="utf-8") as f:
-            user_data = json.load(f)
-
-    # Получаем секции
-    official_section = official_data.get(section_key, {})
-    user_section = user_data.get(section_key, {})
-
-    combined = {**official_section, **user_section}
-    return combined
+def load_json_section(section_key, file_paths=None):
+    """
+    Load and merge JSON sections from multiple files.
+    
+    Args:
+        section_key (str): Key to extract from JSON (e.g., "_model_presets", "_system_prompts")
+        file_paths (list): List of file paths to load. If None, uses default files.
+    
+    Returns:
+        dict: Merged dictionary from all files
+    """
+    if file_paths is None:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        file_paths = [
+            os.path.join(current_dir, "system_prompts.json"),
+            os.path.join(current_dir, "system_prompts_user.json")
+        ]
+    
+    combined_data = {}
+    
+    for file_path in file_paths:
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    section_data = data.get(section_key, {})
+                    # Merge: later files override earlier ones
+                    combined_data.update(section_data)
+            except (json.JSONDecodeError, IOError) as e:
+                print(f"Warning: Could not load {file_path}: {e}", file=sys.stderr)
+    
+    return combined_data
 
 """Clearing memory and caches"""
 def clear_memory_start(unload_all_models=False):
@@ -50,68 +62,150 @@ def clear_memory_start(unload_all_models=False):
             print(f"Warning: during cache clearing: {e}")
 
 def clear_memory_end(temp_image_paths):
-    # Cleaning temporary image files
+    """Очищает временные файлы"""
     for path in temp_image_paths:
-        try:
-            if os.path.exists(path):
+        # Проверяем, что это строка/путь, а не PIL Image
+        if isinstance(path, str) and os.path.exists(path):
+            try:
                 os.unlink(path)
-        except OSError as e:
-            print(f"Warning: failed to delete {path}: {e}")
+            except Exception as e:
+                print(f"Warning: Could not delete temp file {path}: {e}", file=sys.stderr)
 
-    # Final memory clearing
-    gc.collect()
-    torch.cuda.empty_cache()
-
-
-"""Processing images from ComfyUI into temporary files"""
-def process_images_to_temp_files(image_inputs):
-    temp_image_paths = []
+def process_images(
+    image_inputs,
+    file_mode=True,
+    device='auto',
+    file_format='JPEG',
+    jpeg_quality=95
+):
+    """
+    Подготовка изображений 
+    Args:
+        image_inputs: список тензоров [image, image2, image3]
+        file_mode: если False - возвращает PIL изображения, иначе временные пути
+        device: 'cuda', 'cpu', или 'auto' для автоматического выбора
+        file_format: 'JPEG' для скорости, 'PNG' для качества
+        jpeg_quality: качество JPEG (1-100)
+    
+    Returns:
+        list: либо пути к файлам, либо PIL изображения
+    """
+    # Определение устройства
+    if device == 'auto':
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    elif device == 'cuda' and not torch.cuda.is_available():
+        print("Warning: CUDA unavailable, using CPU")
+        device = 'cpu'
+    
+    # Оптимизация CUDA 
+    if device == 'cuda':
+        torch.backends.cudnn.benchmark = True
+    
+    results = []
+    batch_count = 0
+    
     for img_batch in image_inputs:
+        batch_count += 1
+        
         if img_batch is None:
             continue
             
-        # Tensor processing [B, H, W, C]
+        # Берем первый элемент батча если нужно
         if img_batch.ndim == 4:
-            img_tensor = img_batch[0]  # first image
+            img_tensor = img_batch[0]
         else:
             img_tensor = img_batch
         
+        # Проверки на пустые тензоры и нулевые размеры
         if img_tensor.numel() == 0:
-            continue  
-        h, w = img_tensor.shape[-3:-1] 
-        if h == 0 or w == 0:
+            print(f"Warning: Image {batch_count}: Empty tensor, skipping")
             continue
-
-        # Converting to PIL Image
-        img_np = (img_tensor * 255).clamp(0, 255).cpu().numpy().astype(np.uint8)
-
-        if img_np.shape[-1] == 4:
-            # RGBA → RGB
-            alpha = img_np[..., 3:] / 255.0
-            rgb = img_np[..., :3]
-            background = np.full_like(rgb, 255) 
-            img_rgb = (rgb * alpha + background * (1 - alpha)).astype(np.uint8)
-            pil_img = Image.fromarray(img_rgb, mode='RGB')
-        else:
-            pil_img = Image.fromarray(img_np, mode='RGB')
         
-        # Saving to a temporary file
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as f:
-            pil_img.save(f, format='PNG')
-            temp_image_paths.append(f.name)
+        if img_tensor.shape[-3] == 0 or img_tensor.shape[-2] == 0:
+            print(f"Warning: Image {batch_count}: Zero dimensions, skipping")
+            continue
+        
+        # Перемещение на нужное устройство
+        if img_tensor.device.type != device:
+            img_tensor = img_tensor.to(device)
+        
+        # Обработка RGBA каналов
+        if img_tensor.shape[-1] == 4:
+            # Для скорости просто отбрасываем альфа-канал
+            img_tensor = img_tensor[..., :3]
+        
+        # Конвертация в 8-bit (предполагаем вход в диапазоне [0, 1])
+        # Используем fused операции для скорости
+        img_tensor = img_tensor.mul(255).clamp(0, 255).byte()
+        
+        # Конвертация в numpy
+        if img_tensor.device.type == 'cuda':
+            img_np = img_tensor.cpu().numpy()
+        else:
+            img_np = img_tensor.numpy()
+        
+        # Создание PIL изображения
+        channels = img_np.shape[-1] if img_np.ndim == 3 else 1
+        mode = 'RGB' if channels == 3 else 'L' if channels == 1 else 'RGB'
+        pil_img = Image.fromarray(img_np, mode=mode)
+        
+        # Сохранение или возврат
+        if file_mode:
+            suffix = '.jpg' if file_format == 'JPEG' else '.png'
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+                if file_format == 'JPEG':
+                    # JPEG с оптимальными параметрами для скорости
+                    pil_img.save(f, format='JPEG', quality=jpeg_quality, 
+                                 optimize=True, subsampling=0)
+                else:
+                    # PNG для точности
+                    pil_img.save(f, format='PNG', optimize=True)
+                results.append(f.name)
+        else:
+            results.append(pil_img)
     
-    return temp_image_paths
+    return results
+
+"""Extracting conditioning from the result"""
+def extract_conditioning_from_result(output_data, file_mode=True):
+    conditioning = None
+    if file_mode:
+        cond_path = output_data.get("embedding_file", None)
+        if cond_path and os.path.exists(cond_path):
+            try:
+                with open(cond_path, 'rb') as f:
+                    conditioning = pickle.load(f)
+                os.unlink(cond_path)
+            except Exception as e:
+                print(f"Warning: Failed to load conditioning: {e}")
+    else:
+        conditioning = output_data.get("embedding", None)
+    return conditioning
+
+"""Script Definition"""
+def define_script(script,model_path):
+    if script:
+        return script
+    if not model_path:
+        return "qwen3vl_run.py"
+    try:
+        model_filename = os.path.basename(model_path).lower()
+        if any(x in model_filename for x in ["llava", "ministral", "mistral"]):
+            return "llavavl_run.py"
+        else:
+            return "qwen3vl_run.py"
+    except Exception:
+        return "qwen3vl_run.py"
 
 """Running the LLM script with the passed configuration"""
-def run_llm_script(script_name, config, timeout=300):
+def run_script_subprocess(script_name, config, timeout=300):
     node_dir = os.path.dirname(os.path.abspath(__file__))
     script_path = os.path.join(node_dir, script_name)
     
     if not os.path.exists(script_path):
         return {
             "status": "error",
-            "message": f"Script file '{script_name}' not found in {node_dir}",
-            "debug_info": f"Script path: {script_path}"
+            "message": f"Script file '{script_name}' not found in {node_dir}"
         }
 
     if os.path.basename(script_name) != script_name:
@@ -159,11 +253,13 @@ def run_llm_script(script_name, config, timeout=300):
             "status": "error",
             "message": "Inference timed out (5 min)."
         }
+
     except Exception as e:
         return {
             "status": "error", 
             "message": f"Subprocess launch failed: {e}"
         }
+
     finally:
         # Delete the temporary config file
         try:
@@ -171,49 +267,55 @@ def run_llm_script(script_name, config, timeout=300):
         except:
             pass
 
-"""Extracting conditioning from the result"""
-def extract_conditioning_from_result(output_data):
-    conditioning = None
-    cond_path = output_data.get("embedding_file", None)
-    if cond_path and os.path.exists(cond_path):
-        try:
-            with open(cond_path, 'rb') as f:
-                conditioning = pickle.load(f)
-            os.unlink(cond_path)
-        except Exception as e:
-            print(f"Warning: Failed to load conditioning: {e}")
-    
-    return conditioning
+_SCRIPT_MODULE_CACHE = {}
 
-"""Script Definition"""
-def define_script(script,model_path):
-    if script:
-        return script
-    if not model_path:
-        return "qwen3vl_run.py"
-    try:
-        model_filename = os.path.basename(model_path).lower()
-        if any(x in model_filename for x in ["llava", "ministral", "mistral"]):
-            return "llavavl_run.py"
-        else:
-            return "qwen3vl_run.py"
-    except Exception:
-        return "qwen3vl_run.py"
+def run_script_direct(script_name, config):
+    """Выполняет скрипт напрямую с поддержкой PIL изображений"""
+    node_dir = os.path.dirname(os.path.abspath(__file__))
+    script_path = os.path.join(node_dir, script_name)
+    
+    # Загружаем или получаем из кэша модуль
+    if script_path not in _SCRIPT_MODULE_CACHE:
+        spec = importlib.util.spec_from_file_location(
+            f"script_{os.path.basename(script_name)}", 
+            script_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _SCRIPT_MODULE_CACHE[script_path] = module
+    
+    module = _SCRIPT_MODULE_CACHE[script_path]
+    
+    if hasattr(module, 'run_inference_direct'):
+        return module.run_inference_direct(config)
+    else:
+        return {
+            "status": "error",
+            "message": f"Script {script_name} does not support direct execution."
+        }
 
 """The main pipeline for launching inference and processing the result"""
 def run_inference_pipeline(script_name, config):
     if not script_name:
         return "[ERROR] Script name is not defined", None
+    
     try:
         gc.collect()
         
-        # Running the script
-        result = run_llm_script(script_name, config, timeout=300)
+        # Проверяем флаг subprocess в конфигурации модели
+        use_subprocess = config.get("subprocess", True)  # по умолчанию True
+        
+        if use_subprocess:
+            # Используем subprocess (изоляция для llama.cpp)
+            result = run_script_subprocess(script_name, config, timeout=300)
+        else:
+            # Запускаем напрямую без subprocess
+            result = run_script_direct(script_name, config)
         
         # Processing the result
         if result.get("status") == "success":
             text = result.get("output", "")
-            conditioning = extract_conditioning_from_result(result)
+            conditioning = extract_conditioning_from_result(result, use_subprocess)
             return text, conditioning
 
         else:
@@ -297,7 +399,7 @@ class Qwen3VL_GGUF_Node:
 
             # 2. Image processing
             input_images = [image, image2, image3]
-            temp_image_paths = process_images_to_temp_files(input_images)        
+            temp_image_paths = process_images(input_images)        
 
             # 3. Script Definition
             if not script and not model_path:
@@ -312,7 +414,7 @@ class Qwen3VL_GGUF_Node:
                 "temperature": temperature,
                 "gpu_layers": gpu_layers,
                 "ctx": ctx,
-                "images": temp_image_paths, 
+                "images_path": temp_image_paths, 
                 "image_max_tokens": image_max_tokens,
                 "n_batch": n_batch,
                 "system_prompt": system_prompt,
@@ -322,11 +424,6 @@ class Qwen3VL_GGUF_Node:
                 "top_k": top_k,
                 "pool_size": pool_size,
             }
-
-            #DEBUG
-            #debug_config_path = os.path.join(os.path.dirname(__file__), "debug_config.json")
-            #with open(debug_config_path, "w", encoding="utf-8") as f:
-            #    json.dump(config, f, ensure_ascii=False, indent=2)
 
             # 4. Launching the inference pipeline
             text, conditioning = run_inference_pipeline(script_name, config)
@@ -342,21 +439,78 @@ class Qwen3VL_GGUF_Node:
             # 8. Clearing memory in end
             clear_memory_end(temp_image_paths)
 
-
 class SimpleQwen3VL_GGUF_Node:
+
+    _config_cache = {
+        'model_presets': None,
+        'system_prompts': None,
+        'florence_detected': None,
+        'last_modified': {}
+    }
+
+    @classmethod
+    def _get_config_files(cls):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return {
+            'main': os.path.join(current_dir, "system_prompts.json"),
+            'user': os.path.join(current_dir, "system_prompts_user.json"),
+            'florence': os.path.join(current_dir, "florence_system_prompts.json")
+        }
+    
+    @classmethod
+    def _needs_reload(cls):
+        """Check if config files were modified"""
+        files = cls._get_config_files()
+        for name, path in files.items():
+            if os.path.exists(path):
+                mtime = os.path.getmtime(path)
+                if cls._config_cache['last_modified'].get(name, 0) < mtime:
+                    return True
+        return False
+    
+    @classmethod
+    def _load_configs(cls):
+        """Load and cache all configs"""
+        if not cls._needs_reload() and cls._config_cache['model_presets'] is not None:
+            return
+        
+        files = cls._get_config_files()
+        file_list = [files['main'], files['user']]
+        
+        # Load model presets first
+        cls._config_cache['model_presets'] = load_json_section("_model_presets", file_list)
+        
+        # Check for Florence models
+        florence_exists = any(
+            preset.get("script") == "florence2_run.py"
+            for preset in cls._config_cache['model_presets'].values()
+        )
+        cls._config_cache['florence_detected'] = florence_exists
+        
+        # Load system prompts with Florence file if needed
+        if florence_exists and os.path.exists(files['florence']):
+            file_list.append(files['florence'])
+        
+        cls._config_cache['system_prompts'] = load_json_section("_system_prompts", file_list)
+        
+        # Update modification times
+        for name, path in files.items():
+            if os.path.exists(path):
+                cls._config_cache['last_modified'][name] = os.path.getmtime(path)
+
+
     @classmethod
     def INPUT_TYPES(cls):
-        # Загружаем доступные пресеты
-        model_presets = load_json_section("_model_presets")
-        system_prompts = load_json_section("_system_prompts")
-        
-        model_preset_names = list(model_presets.keys()) if model_presets else ["None"]
-        system_preset_names = list(system_prompts.keys()) if system_prompts else ["None"]
+
+        cls._load_configs()  # Auto-reload if files changed
+
+        model_presets = list(cls._config_cache['model_presets'].keys()) or ["None"]
+        system_presets = list(cls._config_cache['system_prompts'].keys()) or ["None"]
         
         return {
             "required": {
-                "model_preset": (model_preset_names, {"default": model_preset_names[0] if model_preset_names else "None"}),
-                "system_preset": (system_preset_names, {"default": system_preset_names[0] if system_preset_names else "None"}),
+                "model_preset": (model_presets, {"default": model_presets[0]}),
+                "system_preset": (system_presets, {"default": system_presets[0]}),
                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
                 "seed": ("INT", {"default": 42}),
                 "unload_all_models": ("BOOLEAN", {"default": False}),
@@ -374,59 +528,111 @@ class SimpleQwen3VL_GGUF_Node:
     FUNCTION = "run"
     CATEGORY = "📚 SimpleQwenVL"
 
-
     def run(self, 
-            model_preset,
-            system_preset,
-            user_prompt,
-            seed,
-            unload_all_models,
-            image=None,
-            image2=None,
-            image3=None,
-            system_prompt_override=""):
+        model_preset,
+        system_preset,
+        user_prompt,
+        seed,
+        unload_all_models,
+        image=None,
+        image2=None,
+        image3=None,
+        system_prompt_override=""):
+    
+        DEBUG = False
+
+        #1. Config loading
+        if DEBUG:
+            start_total = time.time()
+        
+        self._load_configs()
+
+        if DEBUG:
+            print(f">>> Config loading: {time.time() - start_total:.3f}s")
+            start_memory_clear = time.time()
         
         temp_image_paths = []
         try:
-            # 1. Clearing memory
+
+            #2. Memory clear start
             clear_memory_start(unload_all_models)
+
+            if DEBUG:
+                print(f">>> Memory clear start: {time.time() - start_memory_clear:.3f}s")
+                start_model_load = time.time()
             
-            # 2. Loading a model preset
-            model_presets = load_json_section("_model_presets")
+            #3. Model config loading
+            model_presets = self._config_cache['model_presets']
             if model_preset not in model_presets:
-                return (f"[ERROR] Model preset '{model_preset}' not found", None, "", "")
-            
+                return (f"[ERROR] Model preset '{model_preset}' not found", None, "", "")    
             model_config = model_presets[model_preset]
-            
-            # 3. System prompt
+
+            if DEBUG:
+                print(f">>> Model config loading: {time.time() - start_model_load:.3f}s")
+                start_prompt_processing = time.time()
+                
+            #4. Prompt processing
             if system_prompt_override and system_prompt_override.strip():
                 system_prompt = system_prompt_override.strip()
             else:
-                system_prompts = load_json_section("_system_prompts")
+                system_prompts = self._config_cache['system_prompts']
                 system_prompt = system_prompts.get(system_preset, "").strip()
+
+            if DEBUG:
+                print(f">>> Prompt processing: {time.time() - start_prompt_processing:.3f}s")
+                start_script_def = time.time()
             
-            # 4. Image processing
-            input_images = [image, image2, image3]
-            temp_image_paths = process_images_to_temp_files(input_images)
-            
-            # 5. Script Definition
+            #5. Script definition
             model_path = model_config.get("model_path", "")
             script = model_config.get("script", None)
             if not script and not model_path:
                 return ("[ERROR] model_path or script is not defined", None, "", "")
-            script_name = define_script(script,model_path)
+            script_name = define_script(script, model_path)
+
+            if DEBUG:
+                print(f">>> Script definition: {time.time() - start_script_def:.3f}s")
+                start_image_processing = time.time()
             
-            # 6. Creating a configuration
+            #6. Image processing
+            input_images = [image, image2, image3]
+            
+            use_subprocess = model_config.get("subprocess", True)
+            
+            if use_subprocess:
+                temp_image_paths = process_images(input_images)
+                images_key = "images_path"
+                images_value = temp_image_paths
+            else:
+                pil_images = process_images(input_images, file_mode=False)
+                images_key = "images" 
+                images_value = pil_images
+                temp_image_paths = []
+
+            if DEBUG:
+                print(f">>> Image processing: {time.time() - start_image_processing:.3f}s")
+                start_config_creation = time.time()
+            
+            #7. Config creation
             overrides = {
                 "user_prompt": user_prompt,
                 "system_prompt": system_prompt,
-                "images": temp_image_paths,
+                images_key: images_value,
                 "seed": seed,
             }
             config = {**model_config, **overrides}
 
-            # 7. Launching the inference pipeline
+            if DEBUG:
+                print(f">>> Config creation: {time.time() - start_config_creation:.3f}s")
+                start_inference = time.time()
+
+            #8. Config creation
             text, conditioning = run_inference_pipeline(script_name, config)
+
+            if DEBUG:
+                print(f">>> Inference pipeline: {time.time() - start_inference:.3f}s")
+                total_time = time.time() - start_total
+                print(f"TOTAL TIME: {total_time:.3f}s")
+            
             return (text, conditioning, system_prompt, user_prompt)
 
         except Exception as e:
@@ -435,9 +641,11 @@ class SimpleQwen3VL_GGUF_Node:
             return (error_msg, None, "", "")
 
         finally:
-            # 8. Clearing memory in end
+            if DEBUG:
+                start_cleanup = time.time()
             clear_memory_end(temp_image_paths)
-
+            if DEBUG:
+                print(f">>> Cleanup: {time.time() - start_cleanup:.3f}s")
 
 class MasterPromptLoader:
     @classmethod

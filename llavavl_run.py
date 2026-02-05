@@ -5,30 +5,34 @@ import gc
 import os
 from pathlib import Path
 
+if os.name == "nt":
+    py_root = os.path.dirname(sys.executable)
+    for rel in (r"Lib\site-packages\torch\lib", r"Lib\site-packages\llama_cpp\lib"):
+        p = os.path.join(py_root, rel)
+        if os.path.isdir(p):
+            os.add_dll_directory(p)
+
 def is_nonempty_string(s):
     return isinstance(s, str) and s.strip() != ""
 
-def main():
+def main(config_dict=None):
     llm = None
     chat_handler = None
     try:
-        if len(sys.argv) != 2:
-            print(json.dumps({
-                "status": "error",
-                "message": "Usage: python llavavl_run.py <config.json>"
-            }, ensure_ascii=True))
-            sys.exit(1)
-
-        config_path = sys.argv[1]
-        if not Path(config_path).exists():
-            print(json.dumps({
-                "status": "error",
-                "message": "Config file not found"
-            }, ensure_ascii=True))
-            sys.exit(1)
-
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        if config_dict is not None:
+            # Direct call with config dictionary
+            config = config_dict
+        else:
+            # Command line call
+            if len(sys.argv) != 2:
+                print(json.dumps({"status": "error", "message": "sys.argv != 2"}, ensure_ascii=True))
+                sys.exit(1)
+            config_path = sys.argv[1]
+            if not Path(config_path).exists():
+                print(json.dumps({"status": "error", "message": "Config file not found"}, ensure_ascii=True))
+                sys.exit(1)
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
 
         ### START CODE ### 
 
@@ -59,7 +63,7 @@ def main():
         mmproj_path = config.get("mmproj_path")
         is_vision_model = is_nonempty_string(mmproj_path)
 
-        images = config.get('images',[])
+        images = config.get('images_path',[])
         if images and is_vision_model:
 
             chat_handler_type = config.get("chat_handler", "llava16").lower()
@@ -87,7 +91,7 @@ def main():
                 sys.exit(1)
 
             content = [{ "type": "text", "text": prompt }]
-            for img_path in config["images"]:
+            for img_path in images:
                 if img_path and Path(img_path).exists():  
                     file_url = Path(img_path).resolve().as_uri()
                     content.append({

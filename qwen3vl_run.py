@@ -5,30 +5,34 @@ import gc
 import os
 from pathlib import Path
 
+if os.name == "nt":
+    py_root = os.path.dirname(sys.executable)
+    for rel in (r"Lib\site-packages\torch\lib", r"Lib\site-packages\llama_cpp\lib"):
+        p = os.path.join(py_root, rel)
+        if os.path.isdir(p):
+            os.add_dll_directory(p)
+
 def is_nonempty_string(s):
     return isinstance(s, str) and s.strip() != ""
 
-def main():
+def main(config_dict=None):
     llm = None
     chat_handler = None
     try:
-        if len(sys.argv) != 2:
-            print(json.dumps({
-                "status": "error",
-                "message": "Usage: python qwen3vl_run.py <config.json>"
-            }, ensure_ascii=True))
-            sys.exit(1)
-
-        config_path = sys.argv[1]
-        if not Path(config_path).exists():
-            print(json.dumps({
-                "status": "error",
-                "message": "Config file not found"
-            }, ensure_ascii=True))
-            sys.exit(1)
-
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        if config_dict is not None:
+            # Direct call with config dictionary
+            config = config_dict
+        else:
+            # Command line call
+            if len(sys.argv) != 2:
+                print(json.dumps({"status": "error", "message": "sys.argv != 2"}, ensure_ascii=True))
+                sys.exit(1)
+            config_path = sys.argv[1]
+            if not Path(config_path).exists():
+                print(json.dumps({"status": "error", "message": "Config file not found"}, ensure_ascii=True))
+                sys.exit(1)
+            with open(config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
 
         ### START CODE ### 
 
@@ -52,27 +56,40 @@ def main():
         mmproj_path = config.get("mmproj_path")
         is_vision_model = is_nonempty_string(mmproj_path)
 
-        mmproj_kwargs = {
-            "clip_model_path": mmproj_path,
-            "image_max_tokens": config.get("image_max_tokens", 4096),
-            "force_reasoning": False,
-            "verbose": False,
-        }
-
-        images = config.get('images',[])
+        images = config.get('images_path',[])
         if images and is_vision_model:
-            try:
-                from llama_cpp.llama_chat_format import Qwen3VLChatHandler
-            except ImportError:
+
+            chat_handler_type = config.get("chat_handler", "qwen3").lower()
+
+            mmproj_kwargs = {
+                "clip_model_path": mmproj_path,
+                "force_reasoning": False,
+                "verbose": False,
+            }
+
+            if chat_handler_type == "qwen3":
+                try:
+                    from llama_cpp.llama_chat_format import Qwen3VLChatHandler
+                except ImportError:
+                    print(json.dumps({
+                        "status": "error",
+                        "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher.",
+                    }, ensure_ascii=True))
+                    sys.exit(1)
+                mmproj_kwargs["image_max_tokens"] = config.get("image_max_tokens", 4096)    
+                chat_handler = Qwen3VLChatHandler(**mmproj_kwargs)
+            elif chat_handler_type == "qwen25":
+                from llama_cpp.llama_chat_format import Qwen25VLChatHandler
+                chat_handler = Qwen25VLChatHandler(**mmproj_kwargs)
+            elif chat_handler_type == "qwen2":
+                from llama_cpp.llama_chat_format import Qwen2VLChatHandler
+                chat_handler = Qwen2VLChatHandler(**mmproj_kwargs)
+            else:
                 print(json.dumps({
                     "status": "error",
-                    "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher.",
+                    "message": f"Unknown chat handler type: {chat_handler_type}",
                 }, ensure_ascii=True))
                 sys.exit(1)
-            else:
-                chat_handler = Qwen3VLChatHandler(**mmproj_kwargs)
-
-        if images and is_vision_model:
 
             content = [{"type": "text", "text": user_prompt}]
 
@@ -99,11 +116,12 @@ def main():
         llm_kwargs = {
             "model_path": model_path,
             "n_ctx": config.get("ctx", 8192),
-            "n_gpu_layers": config.get("gpu_layers", 0),
-            "n_batch": config.get("n_batch", 512),
+            "n_gpu_layers": config.get("gpu_layers", -1),
+            "n_batch": config.get("n_batch", 2048),
             "swa_full": True,
             "verbose": False,
             "pool_size": config.get("pool_size", 4194304),
+            "n_threads": config.get("cpu_threads", os.cpu_count() or 8),
         }
 
         if chat_handler:
