@@ -1,4 +1,8 @@
 # qwen3vl_run.py
+import torch
+import os
+os.add_dll_directory(os.path.join(os.path.dirname(torch.__file__), 'lib'))
+
 import sys
 import json
 import gc
