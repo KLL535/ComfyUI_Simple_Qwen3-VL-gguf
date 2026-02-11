@@ -5,12 +5,15 @@ import gc
 import os
 from pathlib import Path
 
+_DLL_DIR_HANDLES = []
 if os.name == "nt":
     py_root = os.path.dirname(sys.executable)
     for rel in (r"Lib\site-packages\torch\lib", r"Lib\site-packages\llama_cpp\lib"):
         p = os.path.join(py_root, rel)
         if os.path.isdir(p):
-            os.add_dll_directory(p)
+            _DLL_DIR_HANDLES.append(os.add_dll_directory(p))
+            # optional but very robust for ctypes/llama.cpp dependency resolution:
+            os.environ["PATH"] = p + os.pathsep + os.environ.get("PATH", "")
 
 def is_nonempty_string(s):
     return isinstance(s, str) and s.strip() != ""

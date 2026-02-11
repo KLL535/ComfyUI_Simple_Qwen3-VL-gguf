@@ -1,4 +1,8 @@
 # nightly
+# V3.1
+- adding paths to torch to search for libraries
+# V3.0
+- new qwen3vl_node
 # V2.4
 - add `Simple Style Selector`
 - add `Simple Camera Selector`
