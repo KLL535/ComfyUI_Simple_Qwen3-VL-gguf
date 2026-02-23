@@ -23,52 +23,57 @@ The standard version `llama-cpp-python` hasn't been updated for a long time.
 
 <summary>A. Build llama-cpp-python from source code</summary>
 
-1. Download this using Git:
+1. Clone the repositories using Git:
 - https://github.com/JamePeng/llama-cpp-python
-2. Download this using Git:
 - https://github.com/ggml-org/llama.cpp
-  
-Place the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
+```
+git clone https://github.com/JamePeng/llama-cpp-python.git
+git clone https://github.com/ggml-org/llama.cpp.git
+```
+2. Move the second project `llama.cpp\` in the `llama-cpp-python\vendor\` folder
 
-3. Automatically set the paths to MSVC:
+3. Automatically set the paths to MSVC (Windows only):
 ```
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
 ```
 
 <details>
 
-<summary>4. For fast build with Ninja</summary>
+<summary>4. Optional: For fast build with Ninja</summary>
 
-In this case, the load on all CPU cores and the compilation will complete much faster (but in this mode my processor gets very hot).
-- Make sure Ninja is installed with Visual Studio 2022:
+Using Ninja enables parallel compilation across CPU cores, significantly reducing build time (but may increase CPU temperature).
+Verify Ninja is installed with Visual Studio 2022:
 
 ```
 ninja --version
 1.12.1
 ```
-- Run the command. **32** is the number of cores on your processor that you want to use, write your number:
+- Configure environment variables (replace 32 with your desired number of cores):
 
 ```
 set CMAKE_GENERATOR=Ninja
-set MAX_JOBS=32
+set MAX_JOBS=16
 ``` 
 
 </details>
 
 5. Go to the llama-cpp-python folder
-6. Run the command: 
+```
+cd *path_to_src*\llama-cpp-python
+```
+6. Set CUDA support and install the package: 
 
 ```
 set CMAKE_ARGS="-DGGML_CUDA=on"
-*path_to_comfyui*\python_embeded\python -m pip install -e .
+*path_to_comfyui*\python_embeded\python -m pip install .
 ```
-The command above is for embedded python. This is most often the case for Comfy-UI.
+✅ The command above is for embedded Python (typical for ComfyUI). Adjust the Python path if you're using a system or virtual environment.
+⚠️ Note about -e flag:
+If you choose to install with -e (editable mode):
+`python -m pip install -e .`
+Do not delete the source folder after installation — the editable install relies on the original directory structure.
 
-- Wait for the package to build from source. 
-
-*Warning: If you compiled with the `-e` flag, don't delete the folder you compiled from, it's needed.* 
-  
-*Warning: If you compiled without Ninja, compilation can take a long time, somewhere between 30-60 minutes.*
+⏱️ Build time: Without Ninja, compilation may take 30–60 minutes depending on your hardware.
 
 </details>
 
@@ -86,6 +91,8 @@ python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
 </details>
+
+This project requires the **CUDA Toolkit** to be installed. Try installing: https://developer.nvidia.com/cuda-downloads
 
 # What's next:
 1. Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
@@ -584,7 +591,7 @@ But sometimes the model would still load between this node and my node. So I jus
 
 <summary>troubleshooting</summary>
 
-### 1. Llava15ChatHandler.init() got an unexpected keyword argument 'image_max_tokens'
+### 1. Issue: Llava15ChatHandler.init() got an unexpected keyword argument 'image_max_tokens'
 
 You have an old library `llama-cpp-python` installed, it does not support Qwen3
 Check that the library are latest versions. Run:
@@ -596,7 +603,7 @@ python -c "from llama_cpp.llama_chat_format import Qwen3VLChatHandler; print('�
 
 ---
 
-### 2. Constant output model of the same word/fragment:
+### 2. Issue: Constant output model of the same word/fragment:
 If the model gets stuck on a response, you need to:
 - increase the `temperature`
 - decrease `top_p`
@@ -604,7 +611,7 @@ If the model gets stuck on a response, you need to:
 
 ---
 
-### 3. ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16):
+### 3. Issue: ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16):
 
 If an error occurs, try it:
 - increase `pool_size`
@@ -612,7 +619,7 @@ If an error occurs, try it:
 - decrease `image_max_tokens`
 - increase `n_batch`
 
-### 4. Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll
+### 4. Issue: Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll 
 
 1. Check that the files `ggml.dll, ggml-base.dll, ggml-cpu.dll, ggml-cuda.dll, llama.dll, mtmd.dll` exist at the specified path.
 
@@ -653,7 +660,37 @@ CMD comand to automatically set the paths to MSVC:
 `call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
 Run this command every time before compiling.
 
-7. If you use **python_embeded** for Comfy-UI, may need to add missing libs folders: `python_embeded\include`, `python_embeded\libs` (Not Lib\site-packages), `python_embeded\DLLs`: From here https://github.com/astral-sh/python-build-standalone/releases download Python **appropriate** version (for example `cpython-3.13.11+20251217-x86_64-pc-windows-msvc-install_only.tar.gz`), unzip and copy the necessary folders to `python_embeded`. 
+7. If you use **python_embeded** for Comfy-UI, may need to add missing libs folders: `python_embeded\include`, `python_embeded\libs` (Not Lib\site-packages), `python_embeded\DLLs`: From here https://github.com/astral-sh/python-build-standalone/releases download Python **appropriate** version (for example `cpython-3.13.11+20251217-x86_64-pc-windows-msvc-install_only.tar.gz`), unzip and copy the necessary folders to `python_embeded`.
+
+#### Update: #### 
+**Runtime library detection for GGML CUDA support**
+
+`ggml` requires certain CUDA runtime libraries (e.g., `cudart64_*.dll`, `cublas64_*.dll`) to function properly. These libraries are typically provided by:
+- The **CUDA Toolkit** (system-wide installation), OR
+- An existing **PyTorch** installation (which bundles compatible CUDA runtime libraries in its package folder).
+
+The build scripts now automatically search for these libraries in PyTorch's directory if they are not found in the standard CUDA paths.
+https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/15
+
+### 5. Issue: If automatic GPU detection fails
+
+If automatic GPU detection fails, you may need to manually specify your GPU architecture.
+Find your Compute Capability (for example 8.6 for RTX 3050). Replace 86 with your value.
+
+```
+set CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=86 
+set FORCE_CMAKE=1
+python -m pip install .
+```
+GPU → CMake Value
+```
+RTX 50-series (Blackwell) → 120
+RTX 40-series → 89
+RTX 30-series → 86
+RTX 20-series → 75
+```
+
+https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/15
 
 </details>
 
