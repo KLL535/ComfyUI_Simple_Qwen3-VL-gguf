@@ -13,7 +13,7 @@ This version was created to meet my requirements:
 Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
 
 Check the version number of llama-cpp-python you're using.
-I used the version 0.3.17 or 0.3.18 from **JamePeng** and it supports qwen3.
+I used the version 0.3.17 or latest from **JamePeng** and it supports qwen3.
 The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
 
@@ -99,6 +99,8 @@ This project requires CUDA runtime libraries. They can be sourced from:
 - **OR** an existing **PyTorch** installation *(sufficient for running pre-built extensions)*
 
 > 💡 **Tip:** If you use ComfyUI, you likely already have PyTorch. In that case, you probably **don't need to install the CUDA Toolkit separately** — the necessary libraries will be found automatically.
+
+> ⚠️ After installing **CUDA Toolkit**, restart your computer.
 
 # What's next:
 1. Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
