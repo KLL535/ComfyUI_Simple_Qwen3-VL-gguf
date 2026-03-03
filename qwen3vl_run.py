@@ -152,8 +152,11 @@ def main(config_dict=None):
             max_tokens=config.get("output_max_tokens", 2048),
             temperature=config.get("temperature", 0.7),
             seed=config.get("seed", 42),
-            repeat_penalty=config.get("repeat_penalty", 1.2),   
+            repeat_penalty=config.get("repeat_penalty", 1.1),   
+            frequency_penalty=config.get("frequency_penalty", 0.0),   
+            present_penalty=config.get("present_penalty", 0.0),   
             top_p=config.get("top_p", 0.92),
+            min_p=config.get("min_p", 0.05),
             top_k=config.get("top_k", 0),
             stop=config.get("stop", ["<|im_end|>", "<|im_start|>" ]),
         )
