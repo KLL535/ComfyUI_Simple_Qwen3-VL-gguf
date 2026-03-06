@@ -39,11 +39,14 @@ def main(config_dict=None):
 
         ### START CODE ### 
 
-        model_path = config.get("model_path",None)
+        # Retrieve and trim whitespace from model_path to prevent "File not found" errors
+        model_path_raw = config.get("model_path", None)
+        model_path = model_path_raw.strip() if is_nonempty_string(model_path_raw) else None
+
         if not model_path:
             print(json.dumps({
                 "status": "error",
-                "message": "Missing required field: model_path"
+                "message": "Missing or invalid field: model_path"
             }, ensure_ascii=True))
             sys.exit(1)    
 
@@ -65,7 +68,7 @@ def main(config_dict=None):
             chat_handler_type = config.get("chat_handler", "qwen3").lower()
 
             mmproj_kwargs = {
-                "clip_model_path": mmproj_path,
+                "clip_model_path": mmproj_path.strip() if mmproj_path else None,
                 "verbose": False,
             }
 
@@ -185,4 +188,3 @@ def main(config_dict=None):
 
 if __name__ == "__main__":
     main()
-    
