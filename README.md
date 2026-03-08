@@ -217,8 +217,8 @@ Possible model configurations that can be passed to the `config_override` input.
 | image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
 | gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
 | chat_handler | string | qwen3 | Type of chat handler: "qwen3", "qwen35", "qwen25", "qwen2", "llava15", "llava16", "bakllava", "moondream", "minicpmv". This field must be specified in the config |
-| enable_thinking | bool | auto | For Qwen3.5, enables the thinking process in the response. |
-| add_vision_id | bool | False | For Qwen3.5, adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
+| enable_thinking | bool | False | For Qwen3.5, enables the thinking process in the response. |
+| add_vision_id | bool | auto | For Qwen3.5, adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
 | force_reasoning | bool | False | For Qwen3, forces reasoning mode. |
 | merge_system_and_user | bool | False | If True, combines system and user prompts into a single user message.Used for some llava-type models. |
 | cuda_device | int/str | None | Sets CUDA_VISIBLE_DEVICES to the specified device(s). May not work reliably due to implementation limitations. |
