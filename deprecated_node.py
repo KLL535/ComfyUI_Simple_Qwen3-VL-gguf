@@ -1,5 +1,5 @@
 # deprecated_node.py
-from .qwen3vl_node import clear_memory_start,clear_memory_end,process_images,run_inference_pipeline,old_config_patch,CATEGORY_NAME
+from .qwen3vl_node import clear_memory_start,clear_temp_files,process_images,run_inference_pipeline,old_config_patch,CATEGORY_NAME
 
 class Qwen3VL_GGUF_Node:
     @classmethod
@@ -106,4 +106,4 @@ class Qwen3VL_GGUF_Node:
 
         finally:
             # 8. Clearing memory in end
-            clear_memory_end(temp_image_paths)
+            clear_temp_files(temp_image_paths)

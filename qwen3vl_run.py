@@ -2,7 +2,6 @@
 import sys
 import io
 import json
-import gc
 import os
 import base64
 import traceback
@@ -287,7 +286,6 @@ def unload_model():
         del _cached_llm
         _cached_llm = None
     _cached_model_hash = None
-    gc.collect()
 
 # Режим подпроцесса
 

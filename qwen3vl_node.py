@@ -95,17 +95,27 @@ def load_cached_section(section_name: str) -> Dict:
     return cache.get(section_name, {}).copy()
 
 # ========== Вспомогательные функции ==========
-def clear_memory_start():
+def clear_memory_start(gccollect = False, debug = False):
+    t_start = time.perf_counter()   
     comfy.model_management.unload_all_models()
     comfy.model_management.soft_empty_cache()
+    _debug_print(debug, "clear memory: unload_all_models", t_start)
+                
     try:
-        gc.collect()
+        if gccollect:
+            t_start = time.perf_counter()   
+            gc.collect()
+            _debug_print(debug, "clear memory: gc.collect", t_start)
+
+        t_start = time.perf_counter()   
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
+        _debug_print(debug, "clear memory: cuda.empty_cache", t_start)
+
     except Exception as e:
         print(f"[WARNING] during cache clearing: {e}", file=sys.stderr)
 
-def clear_memory_end(temp_image_paths):
+def clear_temp_files(temp_image_paths):
     for path in temp_image_paths:
         if isinstance(path, str) and os.path.exists(path):
             try:
@@ -245,14 +255,14 @@ def run_script_subprocess(script_name, config, timeout=300):
         except:
             pass
 
-def run_inference_pipeline(script_name, config, mode="subprocess"):
+def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = False, debug = False):
     global _current_module
     if not script_name:
         return "[ERROR] Script name is not defined", None
     try:
-        gc.collect()
+
         if mode == "subprocess":
-            unload_model()
+            unload_model(gccollect, debug)
             result = run_script_subprocess(script_name, config, timeout=300)
         else:
             if script_name == "qwen3vl_run.py":
@@ -260,11 +270,14 @@ def run_inference_pipeline(script_name, config, mode="subprocess"):
             else:
                 return f"Direct execution not supported for script '{script_name}'", None
             if _current_module is not None and _current_module != module:
-                unload_model()
+                unload_model(gccollect, debug)
+
             result = module.run_inference_direct(config)
             _current_module = module
+
             if mode == "direct_clean":
-                unload_model()
+                unload_model(gccollect, debug)
+
         if result.get("status") == "success":
             text = result.get("output", "")
             conditioning = extract_conditioning_from_result(result, mode)
@@ -284,11 +297,18 @@ def run_inference_pipeline(script_name, config, mode="subprocess"):
         print(f"Inference Pipeline Error: {e}")
         return error_msg, None
 
-def unload_model():
+def unload_model(gccollect = False,debug = False):
+    t_start = time.perf_counter()        
     global _current_module
     if _current_module is not None:
         _current_module.unload_model()
         _current_module = None
+    _debug_print(debug, "unload_model", t_start)
+
+    if gccollect:
+        t_start = time.perf_counter()
+        gc.collect()
+        _debug_print(debug, "gc.collect", t_start)
 
 # ========== Основная нода ==========
 class SimpleQwen3VL_GGUF_Node:
@@ -441,14 +461,14 @@ class SimpleQwen3VL_GGUF_Node:
             # Получаем имя скрипта
             script_name = config.get("script", None)
             debug = config.get("debug", False)
+            gccollect_start = config.get("force_gc_start", False)
+            gccollect = config.get("force_gc_unload", False)
 
             _debug_print(debug, "config read", t0, f"| mode {mode}")
  
             # Очистка моделей
             if unload_all_models:
-                t1 = time.perf_counter()   
-                clear_memory_start()
-                _debug_print(debug, "clear memory", t1)
+                clear_memory_start(gccollect_start, debug = debug)
 
             # Обработка изображений
             t1 = time.perf_counter()        
@@ -484,12 +504,16 @@ class SimpleQwen3VL_GGUF_Node:
                 raise ValueError(f"Script {script_name} is not defined")
 
             # Запуск инференса
-            text, conditioning = run_inference_pipeline(script_name, final_config, mode)
+            text, conditioning = run_inference_pipeline(script_name, final_config, mode, gccollect, debug = debug)
 
             return (text, conditioning, system_prompt, user_prompt)
 
         finally:
-            clear_memory_end(temp_image_paths)
+
+            if temp_image_paths:
+                t_start = time.perf_counter()
+                clear_temp_files(temp_image_paths)
+                _debug_print(debug, "clear_temp_files", t_start)
 
             # Расчёт скорости генерации
             try:
