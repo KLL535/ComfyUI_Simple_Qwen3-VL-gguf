@@ -298,17 +298,17 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
         return error_msg, None
 
 def unload_model(gccollect = False,debug = False):
-    t_start = time.perf_counter()        
     global _current_module
     if _current_module is not None:
+        t_start = time.perf_counter()        
         _current_module.unload_model()
         _current_module = None
-    _debug_print(debug, "unload_model", t_start)
+        _debug_print(debug, "unload_model", t_start)
 
-    if gccollect:
-        t_start = time.perf_counter()
-        gc.collect()
-        _debug_print(debug, "gc.collect", t_start)
+        if gccollect:
+            t_start = time.perf_counter()
+            gc.collect()
+            _debug_print(debug, "gc.collect", t_start)
 
 # ========== Основная нода ==========
 class SimpleQwen3VL_GGUF_Node:
