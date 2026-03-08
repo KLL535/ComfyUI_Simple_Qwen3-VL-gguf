@@ -6,18 +6,18 @@ This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models).
 2. The model must support the Qwen3-VL, Qwen3.5 multimodal model.
 3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
-> 💡 **Tip:** The latest update added a new `keep_vram` mode, which allows you to keep the model from being unloaded from memory.
+> 💡 **Update:** The latest update added a new `keep_vram` mode, which allows you to keep the model from being unloaded from memory.
 4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk. For me, this is the most comfortable method.
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
 # Last update:
-**Nightly**
+**08.03.2026 - Nightly**
 - Three execution modes have been added: `subprocess` — inference runs in a separate process (safe, isolated); `direct_clean` — in the main process with model unloading after each run; `keep_vram` — the model remains in VRAM for repeated use.
 - Added `config_override` - the ability to add/override any configuration parameters via a text input directly in the node
 - Integrated **json_repair** to automatically repair invalid JSON in `config_override` and `system_prompts_user.json`
 - Expanded documentation on configuration fields and operating modes
 
-**V3.2**
+**04.03.2026 - V3.2**
 - Added support for Qwen3.5
 
 # Correct installation of llama-cpp-python:
@@ -226,6 +226,8 @@ Possible model configurations that can be passed to the `config_override` input.
 | verbose | bool | False | Enables verbose logging from llama.cpp |
 | silent | bool | False | Completely clears the terminal of llama_cpp error messages. Use with caution – may hide important warnings. |
 | debug | bool | False | Enables output of the time count for each stage to the console. (e.g., [DEBUG] total time: 7.818s | 397 word (50.8 word/sec)) |
+| force_gc_start | bool | False | Enables garbage collection after memory clearing when the `unload_all_models` flag is active. |
+| force_gc_unload | bool | False | Enables garbage collection after deleting the LLM model. If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
 
 The following settings are generated automatically. They DO NOT need to be write in the config.
 | Field | Type | Description |
