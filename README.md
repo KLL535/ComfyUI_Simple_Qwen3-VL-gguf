@@ -5,7 +5,8 @@ Simple gguf LLM Qwen3-VL, Qwen3.5 and others model loader for Comfy-UI.
 This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models).
 2. The model must support the Qwen3-VL, Qwen3.5 multimodal model.
-3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower). The latest update now includes a mode where the model is not unloaded from VRAM.
+3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
+> 💡 **Tip:** The latest update added a new `keep_vram` mode, which allows you to keep the model from being unloaded from memory.
 4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk. For me, this is the most comfortable method.
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
@@ -63,7 +64,7 @@ cd *path_to_src*\llama-cpp-python
 6. Set CUDA support and install the package: 
 
 ```
-*path_to_comfyui*\python -m pip install json_repair
+*path_to_comfyui*\python -m pip install json_repair,colorama
 
 set CMAKE_ARGS="-DGGML_CUDA=on"
 *path_to_comfyui*\python_embeded\python -m pip install .
@@ -89,7 +90,7 @@ For example:
 ```
 cd *path_to_comfyui*\python_embeded
 
-python -m pip install json_repair
+python -m pip install json_repair,colorama
 
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
@@ -121,26 +122,30 @@ This project requires CUDA runtime libraries. They can be sourced from:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 > 💡 **Update:** The llama_python_cpp code has been improved and no longer leaks memory, so it is now possible to call llama_cpp directly.
 
-<img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
+| Mode | Characteristics | Benefits |
+|--------|--------|--------|
+| subprocess | Inference runs in a separate Python process. The model is loaded and unloaded for each execution. All temporary files (images) are cleaned up automatically. |	• Complete isolation – no VRAM leaks between runs. • Safe for Comfy-UI or main script. |
+| direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are passed as PIL objects (no temporary files).	| • Faster than subprocess (no process spawn overhead). • Good for repeated calls with different models/configs. • Still frees VRAM after each use. |
+| keep_vram | Inference runs in the main process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. Images are passed as PIL objects. |	• Maximum speed for multiple inferences with identical settings. • Ideal for batch processing or iterative workflows where memory is high/models are small. | 
 
 # Nodes:
 🌐 SimpleQwenVL:
-- `Simple Qwen-VL Vision Language Model` - LLM, universal version
+- `Simple Qwen-VL Vision Language Model` - A universal Vision-Language model node supporting various GGUF models.
 
 Utils:
-- `Master Prompt Loader` - Loads system prompt presets
-- `Simple Style Selector` - Loads style presets for user prompt
-- `Simple Camera Selector` - Loads camera presets for user prompt
-- `Simple Qwen Unload` - If you select the mode with saving the model in memory, this node allows you to clear the model from memory.
-- `Simple Remove Think` - In the case of using thinking models, this node allows you to cut off the <think> section.
-- `Simple Trigger Node` - This node allows you to establish a strict sequence of launching parts in complex projects. For example, place it before the Load Checkpoint, and then the loader will execute only after the trigger input is received. Otherwise, the Load Checkpoint may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
+- `Master Prompt Loader` - Loads system prompt presets from a JSON configuration file (`system_prompts.json` / `system_prompts_user.json`). Supports override via an optional string input. Useful for managing complex or frequently used system prompts, ensuring consistency across workflows.
+- `Simple Style Selector` - Loads user prompt style presets from the configuration file. Can randomly select a style or apply a named preset. The selected style text is appended to the user prompt, enabling dynamic variation in generation.
+- `Simple Camera Selector` - Similar to Style Selector but for camera-related descriptions. Appends camera preset text to the user prompt, useful for image captioning tasks that require specific photographic context.
+- `Simple Qwen Unload` - Forces unloading of the currently loaded Qwen model from VRAM. Essential when using keep_vram mode to manually free memory after a series of inferences, or to reset the model state before loading a different configuration. Also useful in combination with the Trigger Node to manage memory in complex pipelines.
+- `Simple Remove Think` - Removes <think>...</think> sections from model output. Also handles cases where only a closing </think> tag is present, trimming everything before it. Designed for reasoning models (DeepSeek-R1 etc.) that output a thought process before the final answer. The node returns only the cleaned response.
+- `Simple Trigger Node` - Enforces execution order in complex workflows. For example, place it before the `Load Checkpoint`, and then the loader will execute only after the trigger input is received. Otherwise, the `Load Checkpoint` may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
   
 Deprecated version:
-- `Qwen-VL Vision Language Model` - LLM, the old version is saved, but is no longer being developed.
+- `Qwen-VL Vision Language Model` - Legacy version of the main node. Retained for backward compatibility with old workflows but no longer actively developed.
 > 💡 **Tip:** The problem is that the set of parameters for different models changes and is constantly updated. Trying to include all possible parameters in the parameter list results in a monster, and Comfi-UI doesn't allow dynamically changing this parameter list depending on the model. Therefore, I decided to combine all the parameters into a single text input and call it `config_override`. This is simply a multi-line text field in which you can list as many parameters as needed. If some parameters are left unspecified, default values ​​will be used. This same list can then be saved to a JSON file and selected using a `model_preset`.
 
 # Simple Qwen-VL Vision Language Model (universal version)
-A simplified version of the node above. The model and its parameters mast be described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
+A universal version. The model and its parameters mast be passed to the `config_override` input or described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
 
 <img width="540" height="536" alt="image" src="https://github.com/user-attachments/assets/727f1fc7-84eb-414f-9a7d-95cacdcc8e35" />
 
@@ -162,14 +167,6 @@ A simplified version of the node above. The model and its parameters mast be des
 `keep-vram` - A new mode that doesn't unload the model and keeps it in memory until a node with a different mode or the `Simple Qwen Unload` node appears again. This is useful for batch to avoid unnecessary model unloading and loading if LLM tasks follow one another.
 - `config override`: *STRING*, default: "" - Allows you to redefine some fields in `model preset` template or completely set a new model configuration if `model preset` is `None`.
 
-You don't have to follow the json format if **json_repair** is installed - it will fix it.
-```
-cd *path_to_comfyui*\python_embeded
-python -m pip install json_repair
-```
-
-<img width="477" height="414" alt="image" src="https://github.com/user-attachments/assets/700e3f30-c91b-4c86-a911-4c8bd95907f6" />
-
 ### Output:
 - `text`: *STRING* - generated text
 - `conditioning` - (**in development**)
@@ -178,13 +175,105 @@ python -m pip install json_repair
 
 </details>
 
-# Example system_prompts_user.json:
+# Model Configs:
+
+Possible model configurations that can be passed to the `config_override` input.
 
 <details>
 
-<summary>json</summary>
+<summary>Configs</summary>
 
-You don't have to follow the json format if **json_repair** is installed - it will fix it.
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| model_path | string |  | Path to the GGUF model file. Relative paths are supported. The path is specified relative to `ComfyUI\custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf` |
+| mmproj_path | string |  | Path to the multimodal projector file (required for vision models) |
+| ctx | int | 8192 | Context size (n_ctx), maximum tokens the model can process. A smaller number saves memory, but if there are many pictures and the answer is big, then the answer can be truncated. `image_max_tokens + input_text_max_tokens + output_max_tokens <= ctx`  |
+| n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = ctx` can speed up processing |
+| n_ubatch | int | 512 | 	Micro-batch size for advanced memory management |
+| image_min_tokens | int | 1024 | Minimum number of tokens to allocate for image embeddings |
+| image_max_tokens | int | 4096 | Maximum number of tokens to allocate for image embeddings |
+| output_max_tokens | int | 2048 | Maximum number of tokens to generate. A smaller number saves time, but may result in a truncated response. Thinking models require many output tokens |
+| temperature | float | 0.7 | Sampling temperature; Lower values (e.g., 0.1) make output more deterministic and focused; higher values (e.g., 1.5) increase randomness and creativity |
+| top_p | float | 0.92 | Nucleus sampling probability (0.0–1.0). The model considers only the tokens whose cumulative probability reaches top_p. Lower values make output more focused |
+| min_p | float | 0.05 | Minimum probability for a token to be considered in sampling. Tokens with probability below min_p are ignored |
+| top_k | int | 0 | Top-k sampling. limits to the k most likely tokens. 0 disables top-k |
+| repeat_penalty | float | 1.1 | Penalty for repeating tokens (≥1.0). Values >1 discourage repetition |
+| frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce the likelihood of frequently used tokens |
+| present_penalty | float | 0.0 | Penalty based on token presence. Positive values reduce the likelihood of tokens that have already appeared |
+| stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]) |
+| swa_full | bool | True | Enable full Stochastic Weight Averaging (SWA). |
+| pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
+| cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
+| image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
+| gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
+| chat_handler | string | qwen3 | Type of chat handler: "qwen3", "qwen35", "qwen25", "qwen2", "llava15", "llava16", "bakllava", "moondream", "minicpmv". This field must be specified in the config |
+| enable_thinking | bool | auto | For Qwen3.5, enables the thinking process in the response. |
+| add_vision_id | bool | False | For Qwen3.5, adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
+| force_reasoning | bool | False | For Qwen3, forces reasoning mode. |
+| merge_system_and_user | bool | False | If True, combines system and user prompts into a single user message.Used for some llava-type models. |
+| cuda_device | int/str | None | Sets CUDA_VISIBLE_DEVICES to the specified device(s). May not work reliably due to implementation limitations. |
+| script | string |  | Name of the Python script to execute ("qwen3vl_run.py"). This field must be specified in the config. |
+| verbose | bool | False | Enables verbose logging from llama.cpp |
+| silent | bool | False | Completely clears the terminal of llama_cpp error messages. Use with caution – may hide important warnings. |
+| debug | bool | False | Enables output of the time count for each stage to the console. (e.g., [DEBUG] total time: 7.818s | 397 word (50.8 word/sec)) |
+
+The following settings are generated automatically. They DO NOT need to be write in the config.
+| Field | Type | Description |
+|--------|--------|--------|
+| system_prompt | string | System prompt that sets the behavior and context for the model. - add automatically in node |
+| user_prompt | string | User input query or instruction. - add automatically in node |
+| seed | int | Random seed for reproducible generation. - add automatically in node |
+| images or images_path | list | List of images (PIL Images or file paths) – add automatically in node |
+| config_hash | string | Hash of the configuration for model caching – generated automatically in node |
+
+</details>
+
+You don't have to follow the JSON format exactly. If **json_repair** is installed - it will fix it.
+```
+cd *path_to_comfyui*\python_embeded
+python -m pip install json_repair
+```
+
+<details>
+  
+<summary>config_override input</summary>
+
+You can pass `config_override` as a JSON dictionary or without formatting.
+
+`config_override` example:
+
+```
+"model_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\Qwen3.5-9B-Q4_K_M.gguf",
+"mmproj_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\mmproj-BF16.gguf",
+"chat_handler": "qwen35",
+"enable_thinking": false,
+"ctx": 8192,
+"n_batch": 8192,
+"n_ubatch": 1024,
+"image_max_tokens": 4096,
+"output_max_tokens": 2048,
+"gpu_layers": -1,
+"temperature": 0.7,
+"top_p": 0.8,
+"min_p": 0.05,
+"top_k": 20,
+"repeat_penalty": 1.0,
+"present_penalty": 1.1,
+"pool_size": 4194304,
+"script": "qwen3vl_run.py",
+"silent": true,
+"debug": true,
+```
+
+</details>
+
+<details>
+
+<summary>system_prompts_user.json file</summary>
+
+You can save your favorite configs to a JSON file and they will be available for selection in the drop-down list `model preset`.
+
+`system_prompts_user.json` example:
 
 ```json
 {
@@ -257,6 +346,8 @@ git update-index --assume-unchanged system_prompts_user.json
 </details>
 
 # Utils
+
+Description of additional utilities
 
 <details>
 
