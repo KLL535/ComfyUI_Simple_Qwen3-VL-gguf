@@ -10,7 +10,10 @@ import time
 from PIL import Image
 
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
+current_dir = str(Path(__file__).parent)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
 from debug_print import _debug_print
 
 # Глобальный кеш для модели (чтобы сохранять между прямыми вызовами)

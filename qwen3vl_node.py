@@ -23,7 +23,9 @@ except ImportError:
 CATEGORY_NAME = "🌐 SimpleQwenVL"
 
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent))
+current_dir = str(Path(__file__).parent)
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 from debug_print import _debug_print,_debug_result
 import qwen3vl_run
 
@@ -460,6 +462,8 @@ class SimpleQwen3VL_GGUF_Node:
                 temp_image_paths = []
 
             _debug_print(debug, "process_images", t1)
+
+            config["image_count"] = len(images_value) if images_value else 0
 
             script_name, config = old_config_patch(script_name, config)
 
