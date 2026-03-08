@@ -10,6 +10,16 @@ This version was created to meet my requirements:
 4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk. For me, this is the most comfortable method.
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
+# Last update:
+**Nightly**
+- Three execution modes have been added: `subprocess` — inference runs in a separate process (safe, isolated); `direct_clean` — in the main process with model unloading after each run; `keep_vram` — the model remains in VRAM for repeated use.
+- Added `config_override` - the ability to add/override any configuration parameters via a text input directly in the node
+- Integrated **json_repair** to automatically repair invalid JSON in `config_override` and `system_prompts_user.json`
+- Expanded documentation on configuration fields and operating modes
+
+**V3.2**
+- Added support for Qwen3.5
+
 # Correct installation of llama-cpp-python:
 Qwen3 support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
 The standard version `llama-cpp-python` hasn't been updated for a long time.
