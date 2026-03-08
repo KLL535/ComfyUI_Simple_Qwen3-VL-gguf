@@ -1,1 +1,4 @@
 llama-cpp-python>=0.3.17
+pillow>=9.0.0
+json_repair>=0.19.0
+colorama>=0.4.6
