@@ -1,23 +1,22 @@
 # ComfyUI_Simple_Qwen3-VL-gguf
-Simple Qwen3-VL, Qwen3.5 (and not only) gguf LLM model loader for Comfy-UI.
+Simple gguf LLM Qwen3-VL, Qwen3.5 and others model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models).
-2. The model must support the Qwen3-VL multimodal model.
-3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
+2. The model must support the Qwen3-VL, Qwen3.5 multimodal model.
+3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower). The latest update now includes a mode where the model is not unloaded from VRAM.
 4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk. For me, this is the most comfortable method.
-5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this. 
+5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
-# What's the problem:
-Qwen3-VL support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
-
-Check the version number of llama-cpp-python you're using.
-I used the version 0.3.17 or latest from **JamePeng** and it supports qwen3.
+# Correct installation of llama-cpp-python:
+Qwen3 support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
 The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
 
-## Workaround (until support is added):
+Check the version number of llama-cpp-python you're using.
+Version 0.3.17 or latest from **JamePeng** supports qwen3-VL.
+Version 0.3.30 or latest supports qwen3.5.
 
 <details>
 
@@ -64,6 +63,8 @@ cd *path_to_src*\llama-cpp-python
 6. Set CUDA support and install the package: 
 
 ```
+*path_to_comfyui*\python -m pip install json_repair
+
 set CMAKE_ARGS="-DGGML_CUDA=on"
 *path_to_comfyui*\python_embeded\python -m pip install .
 ```
@@ -80,13 +81,16 @@ Do not delete the source folder after installation — the editable install reli
 
 <details>
 
-<summary>B. Or download WHL packages for your configuration</summary>
+<summary>B. OR download WHL packages for your configuration</summary>
 
 - https://github.com/JamePeng/llama-cpp-python/releases
   
 For example:
 ```
 cd *path_to_comfyui*\python_embeded
+
+python -m pip install json_repair
+
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
@@ -96,75 +100,49 @@ python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 
 This project requires CUDA runtime libraries. They can be sourced from:
 - The **CUDA Toolkit**: https://developer.nvidia.com/cuda-downloads *(recommended for compiling from source)*
-- **OR** an existing **PyTorch** installation *(sufficient for running pre-built extensions)*
+- OR an existing **PyTorch** installation *(sufficient for running pre-built extensions)*
 
 > 💡 **Tip:** If you use ComfyUI, you likely already have PyTorch. In that case, you probably **don't need to install the CUDA Toolkit separately** — the necessary libraries will be found automatically.
 
 > 💡 **Tip:** After installing **CUDA Toolkit**, restart your computer.
 
-# What's next:
-1. Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf** or copy this project using git to the folder `path_to_comfyui\ComfyUI\custom_nodes`
-3. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
-4. Restarting the frontend (F5)
+# Installation of ComfyUI_Simple_Qwen3-VL-gguf:
+1.Installation to custom_nodes
+- Use **ComfyUI Manager** and find **ComfyUI_Simple_Qwen3-VL-gguf**
+- OR copy this project to the folder `path_to_comfyui\ComfyUI\custom_nodes`
+```
+  cd path_to_comfyui\ComfyUI\custom_nodes
+  git clone https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf
+```
+2. Restart ComfyUI. We check in the console that custom nodes are loading without errors.
+3. Restarting the frontend (F5)
 
 # Implementation Features:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
+> 💡 **Update:** The llama_python_cpp code has been improved and no longer leaks memory, so it is now possible to call llama_cpp directly.
 
 <img width="1810" height="625" alt="+++" src="https://github.com/user-attachments/assets/b7a8605b-0f95-4751-8db1-76c043ff3309" />
 
 # Nodes:
-📚 SimpleQwenVL:
-- `Qwen-VL Vision Language Model` - LLM, customizable version
-- `Simple Qwen-VL Vision Language Model` - LLM, simplified version
+🌐 SimpleQwenVL:
+- `Simple Qwen-VL Vision Language Model` - LLM, universal version
+
+Utils:
 - `Master Prompt Loader` - Loads system prompt presets
 - `Simple Style Selector` - Loads style presets for user prompt
 - `Simple Camera Selector` - Loads camera presets for user prompt
-
-# 1. Qwen-VL Vision Language Model (customizable version)
-<img width="502" height="640" alt="image" src="https://github.com/user-attachments/assets/461f5f17-203b-424e-8b76-a05c5f23998f" />
-
-<details>
-
-<summary>Parameters</summary>
-
-### Parameters:
-- `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3 images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM.
-- `system prompt`: *STRING*, default: "You are a highly accurate vision-language assistant. Provide detailed, precise, and well-structured image descriptions." - role + rules + format.
-- `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
-- `model_path`: *STRING*, default: `H:\Qwen3VL-8B-Instruct-Q8_0.gguf` - The path to the model is written here
-- `mmproj_path`: *STRING*, default: `H:\mmproj-Qwen3VL-8B-Instruct-F16.gguf` - The path to the mmproj model is written here; it is required and usually located in the same place as the model.
-- `output_max_tokens`: *INT*, default: 2048, min: 64, max: 4096 - The max number of tokens to output. A smaller number saves memory, but may result in a truncated response.
-- `image_max_tokens`: *INT*, default: 4096, min: 1024, max: 1024000 - The max number of tokens to image. A smaller number saves memory, but the image requires a lot of tokens, so you can't set them too few. 
-- `ctx`: *INT*, default: 8192, min: 0, max: 1024000. - A smaller number saves memory.
-Rule: `image_max_tokens + text_max_tokens + output_max_tokens <= ctx` 
-- `n_batch`: *INT*, default: 512, min: 64, max: 1024000 - Number of tokens processed simultaneously. A smaller number saves memory. Setting `n_batch = ctx` will speed up the work
-Rule: `n_batch <= ctx`
-- `gpu_layers`: *INT*, default: -1, min: -1, max: 100 - Allows you to transfer some layers to the CPU. If there is not enough memory, you can use the CPU, but this will significantly slow down the work. -1 means all layers in GPU. 0 means all layers in CPU.
-- `temperature`: *FLOAT*, default: 0.7, min: 0.0, max: 1.0 
-- `seed`: *INT*, default: 42
-- `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
-- `top_p`: *FLOAT*, default: 0.92, min: 0.0, max: 1.0 
-- `repeat_penalty`: *FLOAT*, default: 1.2, min: 1.0, max: 2.0
-- `top_k`: *INT*, default: 0, min: 0, max: 32768 - for QwenVL recommended 0, for llava recommended 40
-- `pool_size`: *INT*, default: 4194304, min: 1048576, max: 10485760 - if the ggml memory pool is not enough, then you should increase it
-- `script`: *STRING*, default: "" - Here you can enter the name of the script to be called. If you don't enter anything, the script will be determined automatically based on the model file name. For now I publish: `qwen3vl_run.py` for `Qwen3` and `llavavl_run.py` for `llava`. 
-
-### Not customizable parameters:
-- `image_min_tokens` = 1024 - minimum number of tokens allocated for the image.
-- `force_reasoning` = False - reasoning mode off.
-- `swa_full` = True - disables Sliding Window Attention.
-- `verbose` = False - doesn't clutter the console.
+- `Simple Qwen Unload` - If you select the mode with saving the model in memory, this node allows you to clear the model from memory.
+- `Simple Remove Think` - In the case of using thinking models, this node allows you to cut off the <think> section.
+- `Simple Trigger Node` - This node allows you to establish a strict sequence of launching parts in complex projects. For example, place it before the Load Checkpoint, and then the loader will execute only after the trigger input is received. Otherwise, the Load Checkpoint may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
   
-### Output:
-- `text`: *STRING* - generated text
-- `conditioning` - (**in development**)
+Deprecated version:
+- `Qwen-VL Vision Language Model` - LLM, the old version is saved, but is no longer being developed.
+> 💡 **Tip:** The problem is that the set of parameters for different models changes and is constantly updated. Trying to include all possible parameters in the parameter list results in a monster, and Comfi-UI doesn't allow dynamically changing this parameter list depending on the model. Therefore, I decided to combine all the parameters into a single text input and call it `config_override`. This is simply a multi-line text field in which you can list as many parameters as needed. If some parameters are left unspecified, default values ​​will be used. This same list can then be saved to a JSON file and selected using a `model_preset`.
 
-</details>
-
-# 2. Simple Qwen-VL Vision Language Model (simplified version)
+# Simple Qwen-VL Vision Language Model (universal version)
 A simplified version of the node above. The model and its parameters mast be described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
 
-<img width="581" height="510" alt="00000004" src="https://github.com/user-attachments/assets/513a21a2-2649-4158-9c6e-b3ee4f8d3e10" />
+<img width="540" height="536" alt="image" src="https://github.com/user-attachments/assets/727f1fc7-84eb-414f-9a7d-95cacdcc8e35" />
 
 <details>
 
@@ -178,6 +156,19 @@ A simplified version of the node above. The model and its parameters mast be des
 - `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
 - `seed`: *INT*, default: 42
 - `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
+- `mode`: *LIST*, default: "subprocess" - operating mode:
+`subprocess` - Allows you to isolate llama_cpp - no memory leaks, after completing one inference the model is completely cleared from memory, no crashes of comfi-ui in case of critical errors.
+`direct-clean` - A new mode that also unloads the model but works directly avoids the overhead of calling a subprocess.
+`keep-vram` - A new mode that doesn't unload the model and keeps it in memory until a node with a different mode or the `Simple Qwen Unload` node appears again. This is useful for batch to avoid unnecessary model unloading and loading if LLM tasks follow one another.
+- `config override`: *STRING*, default: "" - Allows you to redefine some fields in `model preset` template or completely set a new model configuration if `model preset` is `None`.
+
+You don't have to follow the json format if **json_repair** is installed - it will fix it.
+```
+cd *path_to_comfyui*\python_embeded
+python -m pip install json_repair
+```
+
+<img width="477" height="414" alt="image" src="https://github.com/user-attachments/assets/700e3f30-c91b-4c86-a911-4c8bd95907f6" />
 
 ### Output:
 - `text`: *STRING* - generated text
@@ -193,8 +184,10 @@ A simplified version of the node above. The model and its parameters mast be des
 
 <summary>json</summary>
 
+You don't have to follow the json format if **json_repair** is installed - it will fix it.
+
 ```json
-   {
+{
     "_system_prompts": {
         "✨ My system prompt": "You are a helpful and precise image captioning assistant. Write a \"some text\""
     },
@@ -202,12 +195,31 @@ A simplified version of the node above. The model and its parameters mast be des
         "✨ My": "Transform style to \"some text\""
     },
     "_camera_preset": {
-        "✨ My": "Transform this exact scene using the following camera transformation: Replace camera settings with: \"some text\" this means: \"some text\""
     },
     "_model_presets": {
+        "Qwen3.5-9B-Q4_K_M": {
+            "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
+            "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
+            "output_max_tokens": 2048,
+            "image_max_tokens": 4096,
+            "ctx": 8192,
+            "n_batch": 8192,
+            "gpu_layers": -1,
+            "temperature": 0.7,
+            "top_p": 0.8,
+            "min_p": 0.05,
+            "repeat_penalty": 1.0,
+            "present_penalty": 1.1,
+            "top_k": 20,
+            "pool_size": 4194304,
+            "chat_handler": "qwen35",
+            "enable_thinking": false,
+            "script": "qwen3vl_run.py",
+            "debug": true
+        },
         "Qwen3-VL-8B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
+            "model_path": "..\\..\\..\\..\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+            "mmproj_path": "..\\..\\..\\..\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
             "output_max_tokens": 2048,
             "image_max_tokens": 4096,
             "ctx": 8192,
@@ -215,57 +227,43 @@ A simplified version of the node above. The model and its parameters mast be des
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
-            "repeat_penalty": 1.2,
+            "repeat_penalty": 1.1,
             "top_k": 0,
             "pool_size": 4194304,
-            "script": "qwen3vl_run.py"
-        },
-        "Qwen3-30B-Q4-2507(text)": {
-            "model_path": "H:\\LLM2\\Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf",
-            "mmproj_path": "",
-            "output_max_tokens": 1536,
-            "image_max_tokens": 0,
-            "ctx": 2048,
-            "n_batch": 2048,
-            "gpu_layers": 41,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "repeat_penalty": 1.2,
-            "top_k": 0,
-            "pool_size": 4194304,
-            "script": "qwen3vl_run.py"
+            "script": "qwen3vl_run.py",
+            "debug": true
         }
     }
 }
 ```
-
-### Rule:
-- Just be sure not to violate the JSON format, otherwise the node won't load.
-- You need to escape the quotes for ", like this \\".
-- Use \n for new line.
-- Maintain indents of the same number of spaces for each level; tabs are not allowed.
-- You also need to make sure that the last line of the list doesn't have a comma at the end.
-- To apply the changes, press F5 in Comfy-UI.
   
 ### Agreement:
 - The `system_prompts.json` file contains the project settings that I will be updating. Do not edit this file, or your changes will be deleted.
 - The `system_prompts_user.json` file contains the user settings. This file will not be updated. Edit this file.
 - The `system_prompts_user.example.json` file contains example.
+- You can delete or rename the `system_prompts.json` file, and then only your information from the `system_prompts_user.json` file will remain.
 
-### Special Rule:
-1. You can delete or rename the `system_prompts.json` file, and then only your information from the `system_prompts_user.json` file will remain.
-2. To prevent the file from being restored after a Git update, use a command that disables updates for this file:
+### Git Rule:
+
+1. To prevent the file from being restored after a Git update, use a command that disables updates for this file:
 ```
 git update-index --skip-worktree system_prompts.json
 ```
-4. You can also disable tracking of your changes to the `system_prompts_user.json` file so that the repository is not considered modified:
+2. You can also disable tracking of your changes to the `system_prompts_user.json` file so that the repository is not considered modified:
 ```
 git update-index --assume-unchanged system_prompts_user.json
 ```
 
 </details>
 
-## 3. Master Prompt Loader
+# Utils
+
+<details>
+
+<summary>Utils</summary>
+
+## Master Prompt Loader
+
 Allows select a system prompt from templates. In the simplified version of LLM this switch is built in.
 <img width="602" height="245" alt="image" src="https://github.com/user-attachments/assets/fbe21fb5-3e9b-4ddc-872f-c722de8190fc" />
 
@@ -282,7 +280,7 @@ Allows select a system prompt from templates. In the simplified version of LLM t
 
 </details>
 
-## 4. Simple Style Selector/Simple Camera Selector
+## Simple Style Selector/Simple Camera Selector
 Allows select a user prompt from templates:
 - Styles - replacing an image style, work well.
 - Camera settings - instruction to describe the camera, can sometimes give interesting results.
@@ -303,6 +301,7 @@ Allows select a user prompt from templates:
 
 </details>
 
+</details>
 
 # Models (tested):
 
@@ -369,8 +368,8 @@ Write your paths
 
 ```json
         "Qwen3-VL-8B": {
-            "model_path": "H:\\LLM2\\Qwen3VL-8B-Instruct-Q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\mmproj-Qwen3VL-8B-Instruct-F16.gguf",
+            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
             "output_max_tokens": 2048,
             "image_max_tokens": 4096,
             "ctx": 8192,
@@ -378,9 +377,10 @@ Write your paths
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
-            "repeat_penalty": 1.2,
+            "repeat_penalty": 1.1,
             "top_k": 0,
             "pool_size": 4194304,
+            "chat_handler": "qwen3",
             "script": "qwen3vl_run.py"
         },
 ```
@@ -413,6 +413,7 @@ Write your paths
             "repeat_penalty": 1.2,
             "top_k": 0,
             "pool_size": 4194304,
+            "chat_handler": "qwen3",
             "script": "qwen3vl_run.py"
         },
 ```
@@ -433,19 +434,22 @@ Write your paths
 
 ```json
         "Joycaption-Beta": {
-            "model_path": "H:\\LLM\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
-            "mmproj_path": "H:\\LLM\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
+            "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
             "output_max_tokens": 1024,
             "image_max_tokens": 2048,
             "ctx": 4096,
-            "n_batch": 512,
+            "n_batch": 1024,
             "gpu_layers": -1,
             "temperature": 0.6,
             "top_p": 0.9,
             "repeat_penalty": 1.2,
             "top_k": 40,
             "pool_size": 4194304,
-            "script": "llavavl_run.py"
+            "chat_handler": "llava15",
+            "script": "qwen3vl_run.py",
+            "stop": ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"],
+            "merge_system_and_user": true
         },
 ```
 
@@ -481,6 +485,7 @@ Write your paths
             "repeat_penalty": 1.2,
             "top_k": 0,
             "pool_size": 4194304,
+            "chat_handler": "qwen3",
             "script": "qwen3vl_run.py"
         },
 ```
@@ -514,7 +519,10 @@ Write your paths
             "repeat_penalty": 1.1,
             "top_k": 40,
             "pool_size": 4194304,
-            "script": "llavavl_run.py"
+            "chat_handler": "llava15",
+            "script": "qwen3vl_run.py",
+            "stop": ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"],
+            "merge_system_and_user": true
         },
 ```
 
@@ -545,6 +553,7 @@ Write your paths. The `mmproj` line must be empty. In this mode images are ignor
             "repeat_penalty": 1.2,
             "top_k": 0,
             "pool_size": 4194304,
+            "chat_handler": "qwen3",
             "script": "qwen3vl_run.py"
         },
 ```
@@ -577,7 +586,10 @@ Write your paths. The `mmproj` line must be empty. In this mode images are ignor
             "repeat_penalty": 1.1,
             "top_k": 40,
             "pool_size": 4194304,
-            "script": "llavavl_run.py"
+            "chat_handler": "llava15",
+            "script": "qwen3vl_run.py",
+            "stop": ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"],
+            "merge_system_and_user": true
         },
 ```
 
@@ -609,6 +621,7 @@ Write your paths. The `mmproj` line must be empty. In this mode images are ignor
             "repeat_penalty": 1.2,
             "top_k": 0,
             "pool_size": 4194304,
+            "chat_handler": "qwen3",
             "script": "qwen3vl_run.py"
         }
 ```
