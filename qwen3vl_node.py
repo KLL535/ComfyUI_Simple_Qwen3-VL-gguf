@@ -527,24 +527,25 @@ def old_config_patch(script_name, config):
 
     # если не задан скрипт - определяем модель по имени файла
     if script_name is None:
+        script_name = "qwen3vl_run.py"
+        config["script"] = script_name
+
         model_path = config.get("model_path") or ""
         if isinstance(model_path, str) and model_path:
             model_filename = os.path.basename(model_path).lower()
             if any(x in model_filename for x in ("llava", "ministral", "mistral")):
-                script_name = "llavavl_run.py"
-            else:
-                script_name = "qwen3vl_run.py"
-        else:
-            script_name = "qwen3vl_run.py"
+                if config.get("chat_handler") is None:
+                    config["chat_handler"] = "llava16"
+
+        if config.get("chat_handler") is None:
+            config["chat_handler"] = "qwen3"
 
     # если задан скрипт llavavl_run.py - перенаправляем на обработку в qwen3vl_run.py
-    if script_name == "llavavl_run.py":
-        if config.get("stop") is None:
-            config["stop"] = ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"]
-        if config.get("chat_handler") is None:
-            config["chat_handler"] = "llava15"
-        config["merge_system_and_user"] = True
+    elif script_name == "llavavl_run.py":
         script_name = "qwen3vl_run.py"
         config["script"] = script_name
+
+        if config.get("chat_handler") is None:
+            config["chat_handler"] = "llava16"
 
     return script_name, config
