@@ -543,6 +543,8 @@ For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
+> 💡 **Warning:** The llava16 handler is unstable in `keep-vram` mode (freezes the image), do not use this mode for such models!
+
 ```json
         "Joycaption-Beta": {
             "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
@@ -620,6 +622,8 @@ We cram 5 layers out of 40 (`gpu_layers` = 35) into the CPU and get x2 speedup.
 
 For example:
 `Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
+
+> 💡 **Warning:** The llava16 handler is unstable in `keep-vram` mode (freezes the image), do not use this mode for such models!
 
 ```json
         "Ministral-3-14B": {
