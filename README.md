@@ -147,7 +147,7 @@ Utils:
 - `Simple Style Selector` - Loads user prompt style presets from the configuration file. Can randomly select a style or apply a named preset. The selected style text is appended to the user prompt, enabling dynamic variation in generation.
 - `Simple Camera Selector` - Similar to Style Selector but for camera-related descriptions. Appends camera preset text to the user prompt, useful for image captioning tasks that require specific photographic context.
 - `Simple Qwen Unload` - Forces unloading of the currently loaded Qwen model from VRAM. Essential when using keep_vram mode to manually free memory after a series of inferences, or to reset the model state before loading a different configuration. Also useful in combination with the Trigger Node to manage memory in complex pipelines.
-- `Simple Remove Think` - Removes <think>...</think> sections from model output. Also handles cases where only a closing </think> tag is present, trimming everything before it. Designed for reasoning models (DeepSeek-R1 etc.) that output a thought process before the final answer. The node returns only the cleaned response.
+- `Simple Remove Think` - Removes `think` sections from model output. Also handles cases where only a closing `think` tag is present, trimming everything before it. Designed for reasoning models (DeepSeek-R1 etc.) that output a thought process before the final answer. The node returns only the cleaned response.
 - `Simple Trigger Node` - Enforces execution order in complex workflows. For example, place it before the `Load Checkpoint`, and then the loader will execute only after the trigger input is received. Otherwise, the `Load Checkpoint` may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
   
 Deprecated version:
@@ -197,7 +197,7 @@ Possible model configurations that can be passed to the `config_override` input.
 |--------|--------|--------|--------|
 | model_path | string |  | Path to the GGUF model file. Relative paths are supported. The path is specified relative to `ComfyUI\custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf` |
 | mmproj_path | string |  | Path to the multimodal projector file (required for vision models) |
-| ctx | int | 8192 | Context size (n_ctx), maximum tokens the model can process. A smaller number saves memory, but if there are many pictures and the answer is big, then the answer can be truncated. `image_max_tokens + input_text_max_tokens + output_max_tokens <= ctx`  |
+| ctx | int | 8192 | Context size (n_ctx), maximum tokens the model can process. 💡 Increasing this parameter increases memory consumption, but if there are many pictures and the answer is big, then the answer can be truncated or error if the input data does not fit into the context. Rule: `image_max_tokens + input_text_max_tokens + output_max_tokens <= ctx` |
 | n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = ctx` can speed up processing |
 | n_ubatch | int | 512 | 	Micro-batch size for advanced memory management |
 | image_min_tokens | int | 1024 | Minimum number of tokens to allocate for image embeddings |
@@ -210,24 +210,25 @@ Possible model configurations that can be passed to the `config_override` input.
 | repeat_penalty | float | 1.1 | Penalty for repeating tokens (≥1.0). Values >1 discourage repetition |
 | frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce the likelihood of frequently used tokens |
 | present_penalty | float | 0.0 | Penalty based on token presence. Positive values reduce the likelihood of tokens that have already appeared |
-| stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]) |
-| swa_full | bool | True | Enable full Stochastic Weight Averaging (SWA). |
+| swa_full | bool | False | Enable full Stochastic Weight Averaging (SWA). 💡 Enabling this setting may cause higher memory consumption. |
 | pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
 | cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
 | image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
 | gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
-| chat_handler | string | qwen3 | Type of chat handler: "qwen3", "qwen35", "qwen25", "qwen2", "llava15", "llava16", "bakllava", "moondream", "minicpmv". This field must be specified in the config |
-| enable_thinking | bool | False | For Qwen3.5, enables the thinking process in the response. |
-| add_vision_id | bool | auto | For Qwen3.5, adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
-| force_reasoning | bool | False | For Qwen3, forces reasoning mode. |
 | merge_system_and_user | bool | False | If True, combines system and user prompts into a single user message.Used for some llava-type models. |
 | cuda_device | int/str | None | Sets CUDA_VISIBLE_DEVICES to the specified device(s). May not work reliably due to implementation limitations. |
 | script | string |  | Name of the Python script to execute ("qwen3vl_run.py"). This field must be specified in the config. |
 | verbose | bool | False | Enables verbose logging from llama.cpp |
 | silent | bool | False | Completely clears the terminal of llama_cpp error messages. Use with caution – may hide important warnings. |
 | debug | bool | False | Enables output of the time count for each stage to the console. (e.g., [DEBUG] total time: 7.818s | 397 word (50.8 word/sec)) |
-| force_gc_start | bool | False | Enables garbage collection after memory clearing when the `unload_all_models` flag is active. |
-| force_gc_unload | bool | False | Enables garbage collection after deleting the LLM model. If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
+| force_gc_start | bool | False | Enables garbage collection after memory clearing when the `unload_all_models` flag is active. 💡 If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
+| force_gc_unload | bool | False | Enables garbage collection after deleting the LLM model. 💡 If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
+| chat_handler | string |  | Type of chat handler: "qwen35", "qwen3", "qwen25", "gemma3", "llava15", "llava16", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha". 💡 Specify for multimodal models. |
+| chat_format | string |  | Type of chat format for text model: "llama-2", "llama-3", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma", "qwen" 💡 Required to be specified for text models only. |
+| stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]). 💡 Important: Llama automatically adds stop tokens based on `chat_handler` or `chat_format`. Pass `stop` only if you want to override the default behavior. |
+| enable_thinking | bool | False | For "Qwen35, "minicpmv45", "glm46v" enables the thinking process in the response. |
+| add_vision_id | bool | auto | For "Qwen35", "Qwen3" adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
+| force_reasoning | bool | False | For "Qwen3" forces reasoning mode. |
 
 The following settings are generated automatically. They DO NOT need to be write in the config.
 | Field | Type | Description |
@@ -257,23 +258,24 @@ You can pass `config_override` as a JSON dictionary or without formatting.
 ```
 "model_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\Qwen3.5-9B-Q4_K_M.gguf",
 "mmproj_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\mmproj-BF16.gguf",
-"chat_handler": "qwen35",
-"enable_thinking": false,
-"ctx": 8192,
-"n_batch": 8192,
-"n_ubatch": 1024,
-"image_max_tokens": 4096,
 "output_max_tokens": 2048,
+"image_min_tokens": 1024,
+"image_max_tokens": 2048,
+"ctx": 8192,
+"n_batch": 2048,
+"n_ubatch": 512,
 "gpu_layers": -1,
 "temperature": 0.7,
 "top_p": 0.8,
 "min_p": 0.05,
 "top_k": 20,
 "repeat_penalty": 1.0,
-"present_penalty": 1.1,
+"present_penalty": 1.5,
 "pool_size": 4194304,
+"chat_handler": "qwen35",
+"enable_thinking": true,
 "script": "qwen3vl_run.py",
-"silent": true,
+"silent": false,
 "debug": true,
 ```
 
@@ -290,10 +292,10 @@ You can save your favorite configs to a JSON file and they will be available for
 ```json
 {
     "_system_prompts": {
-        "✨ My system prompt": "You are a helpful and precise image captioning assistant. Write a \"some text\""
+        "My system prompt": "You are a helpful and precise image captioning assistant. Write a \"some text\""
     },
     "_user_prompt_styles": {
-        "✨ My": "Transform style to \"some text\""
+        "My style": "Transform style to \"some text\""
     },
     "_camera_preset": {
     },
@@ -302,36 +304,44 @@ You can save your favorite configs to a JSON file and they will be available for
             "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
             "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
             "ctx": 8192,
-            "n_batch": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.8,
             "min_p": 0.05,
-            "repeat_penalty": 1.0,
-            "present_penalty": 1.1,
             "top_k": 20,
+            "repeat_penalty": 1.0,
+            "present_penalty": 1.5,
             "pool_size": 4194304,
             "chat_handler": "qwen35",
-            "enable_thinking": false,
+            "enable_thinking": true,
             "script": "qwen3vl_run.py",
+            "silent": false,
             "debug": true
         },
         "Qwen3-VL-8B": {
-            "model_path": "..\\..\\..\\..\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
-            "mmproj_path": "..\\..\\..\\..\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
+            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
             "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
             "ctx": 8192,
-            "n_batch": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
+            "min_p": 0.01,
+            "top_k": 40,
             "repeat_penalty": 1.1,
-            "top_k": 0,
             "pool_size": 4194304,
+            "chat_handler": "qwen3",
             "script": "qwen3vl_run.py",
+            "silent": false,
             "debug": true
         }
     }
@@ -406,161 +416,167 @@ Allows select a user prompt from templates:
 
 </details>
 
-# Models (tested):
+# Models (for example):
 
-1. Qwen3.5 (Only for Simple Qwen-VL Vision Language Model node)
-   
+<details>
+
+<summary>Qwen3.5-9B</summary>
+
 - https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF
 - https://huggingface.co/unsloth/Qwen3.5-2B-GGUF
 - https://huggingface.co/unsloth/Qwen3.5-4B-GGUF
 - https://huggingface.co/unsloth/Qwen3.5-9B-GGUF
-  
+
 For example:
 `Qwen3.5-9B-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 
-<details>
+And a new option appeared `enable_thinking": true`, - If you want the model to think (this may give a better result), write true, but this will take more time and require more context, plus the `think` section will have to be cut off later.
 
-<summary>json</summary>
-
-Write your paths.
+Other parameters should be selected based on recommendations, based on the task, or empirically, as you prefer.
 
 ```json
         "Qwen3.5-9B-Q4_K_M": {
             "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
             "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
             "ctx": 8192,
-            "n_batch": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.8,
             "min_p": 0.05,
             "repeat_penalty": 1.0,
-            "present_penalty": 1.1,
+            "present_penalty": 1.5,
             "top_k": 20,
             "pool_size": 4194304,
             "chat_handler": "qwen35",
-            "enable_thinking": false,
-            "script": "qwen3vl_run.py"
+            "enable_thinking": true,
+            "script": "qwen3vl_run.py",
+            "silent": false,
+            "debug": true
         },
 ```
 
-For Qwen3.5 it is necessary to specify the handler `"chat_handler": "qwen35"`,
-
-And a new option appeared `enable_thinking": false`, - If you want the model to think (this may give a better result), write true, but this will take more time and require more context, plus the `</think>` section will have to be cut off later.
-
-You can also override stop tokens if needed: `"stop": ["<|im_end|>", "<|im_start|>"]`
-
-Other parameters should be selected based on recommendations, based on the task, or empirically, as you prefer.
-
 </details>
-
----
-
-2. Qwen3VL (Old but pretty good model):
-- https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
-For example:
-`Qwen3VL-8B-Instruct-Q8_0.gguf` + `mmproj-Qwen3VL-8B-Instruct-F16.gguf`
 
 <details>
 
-<summary>json</summary>
+<summary>Qwen3-VL-8B</summary>
 
-Write your paths
-
-```json
-        "Qwen3-VL-8B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
-            "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
-            "ctx": 8192,
-            "n_batch": 8192,
-            "gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "repeat_penalty": 1.1,
-            "top_k": 0,
-            "pool_size": 4194304,
-            "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py"
-        },
-```
-
-</details>
-
----
-3. Uncensored Qwen (but the model isn't trained on NSFW and doesn't understand it well):
+- https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
 - https://huggingface.co/mradermacher/Qwen3-VL-8B-Instruct-abliterated-v2.0-GGUF
+
 For example:
 `Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf` + `Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf`
 
-<details>
-
-<summary>json</summary>
-
-Write your paths
-
 ```json
-        "Qwen3-VL-8B-abliterated-v2": {
+        "Qwen3-VL-8B": {
             "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
             "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
             "ctx": 8192,
-            "n_batch": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
-            "repeat_penalty": 1.2,
-            "top_k": 0,
+            "min_p": 0.01,
+            "top_k": 40,
+            "repeat_penalty": 1.1,
             "pool_size": 4194304,
             "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py"
+            "script": "qwen3vl_run.py",
+            "silent": false,
+            "debug": true
         },
 ```
 
 </details>
 
----
-4. Joecaption_beta (NSFW):
-- https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
-For example:
-`llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
+<details>
+
+<summary>Gemma3-12B</summary>
+
+- https://huggingface.co/unsloth/gemma-3-12b-it-GGUF
+  
+For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
+
+```json
+        "Gemma3-12B-Q4": {
+            "model_path": "H:\\LLM2\\gemma3_12b\\gemma-3-12b-it-Q4_K_M.gguf",
+            "mmproj_path": "H:\\LLM2\\gemma3_12b\\mmproj-BF16.gguf",
+            "output_max_tokens": 2048,
+            "image_min_tokens": 256,
+            "image_max_tokens": 256,
+            "ctx": 8192,
+            "n_batch": 4096,
+            "n_ubatch": 512,
+            "gpu_layers": -1,
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "min_p": 0.01,
+            "top_k": 0,
+            "repeat_penalty": 1.0,
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
+            "pool_size": 4194304,
+            "chat_handler": "gemma3",
+            "script": "qwen3vl_run.py",
+            "silent": false,
+            "debug": true
+        },
+```
+
+</details>
 
 <details>
 
-<summary>json</summary>
+<summary>Joycaption-Beta</summary>
 
-Write your paths
+- https://huggingface.co/concedo/llama-joycaption-beta-one-hf-llava-mmproj-gguf/tree/main
+
+For example:
+`llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
 ```json
         "Joycaption-Beta": {
             "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
             "mmproj_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
             "output_max_tokens": 1024,
-            "image_max_tokens": 2048,
-            "ctx": 4096,
-            "n_batch": 1024,
+            "image_min_tokens": 576,
+            "image_max_tokens": 576,
+            "ctx": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.6,
             "top_p": 0.9,
-            "repeat_penalty": 1.2,
+            "min_p": 0.01,
             "top_k": 40,
+            "repeat_penalty": 1.2,
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "llava15",
+            "chat_handler": "llava16",
             "script": "qwen3vl_run.py",
-            "stop": ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"],
-            "merge_system_and_user": true
+            "silent": false,
+            "debug": true
         },
 ```
 
 </details>
 
----
-5. Qwen3-VL-30B
+<details>
+
+<summary>Qwen3-VL-30B</summary>
+
 - https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main
+
 For example:
 `Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf` + `mmproj-BF16.gguf`
 
@@ -568,165 +584,167 @@ Pushing into 16Gb memory (image 1M):
 The model fills up the memory and runs for a long time 60 sec.
 We cram 5 layers out of 40 (`gpu_layers` = 35) into the CPU and get x2 speedup.
 
-<details>
-
-<summary>json</summary>
-
-Write your paths
-
 ```json
         "Qwen3-VL-30B": {
             "model_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf",
             "mmproj_path": "H:\\LLM2\\mmproj-BF16.gguf",
             "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 1024,
             "ctx": 8192,
-            "n_batch": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": 35,
             "temperature": 0.7,
             "top_p": 0.92,
-            "repeat_penalty": 1.2,
+            "min_p": 0.01,
             "top_k": 0,
+            "repeat_penalty": 1.2,
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py"
+            "script": "qwen3vl_run.py",
+            "silent": false,
+            "debug": true
         },
 ```
 
 </details>
 
----
-
-6. Ministral-3-14B 
-- https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/tree/main
-For example:
-`Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
-
 <details>
 
-<summary>json</summary>
+<summary>Ministral-3-14B</summary>
 
-Write your paths
+- https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512-GGUF/tree/main
+
+For example:
+`Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
 
 ```json
         "Ministral-3-14B": {
             "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
             "output_max_tokens": 2048,
-            "image_max_tokens": 4096,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 1024,
             "ctx": 8192,
-            "n_batch": 1024,
+            "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.3,
             "top_p": 0.92,
-            "repeat_penalty": 1.1,
+            "min_p": 0.01,
             "top_k": 40,
+            "repeat_penalty": 1.1,
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "llava15",
+            "chat_handler": "llava16", 
+            "chat_format": "mistral-instruct",
             "script": "qwen3vl_run.py",
-            "stop": ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"],
-            "merge_system_and_user": true
+            "silent": false,
+            "debug": true
         },
 ```
 
 </details>
 
----
-7. Qwen3-30B-A3B-Instruct-2507-Q4_K_S (**not vision**)
-- https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/tree/main
-For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
-
 <details>
 
-<summary>json</summary>
+<summary>Qwen3-30B-A3B-Instruct-2507-Q4_K_S(text)</summary>
 
-Write your paths. The `mmproj` line must be empty. In this mode images are ignored.
+- https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/tree/main
+
+For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
 
 ```json
         "Qwen3-30B-Q4-2507(text)": {
             "model_path": "H:\\LLM2\\Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf",
-            "mmproj_path": "",
             "output_max_tokens": 1536,
-            "image_max_tokens": 0,
             "ctx": 2048,
             "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": 41,
             "temperature": 0.7,
             "top_p": 0.92,
-            "repeat_penalty": 1.2,
+            "min_p": 0.01,
             "top_k": 0,
+            "repeat_penalty": 1.1,
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py"
+            "chat_format": "qwen3",
+            "script": "qwen3vl_run.py",
+            "silent": false,
+            "debug": true
         },
 ```
 
 </details>
 
----
-
-8. Mistral-Nemo-Instruct-2407-Q8_0 (**not vision**)
-- https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF
-For example: `Mistral-Nemo-Instruct-2407-Q8_0.gguf`
-
 <details>
 
-<summary>json</summary>
+<summary>Mistral-Nemo-Instruct-2407-Q8(text)</summary>
 
-Write your paths. The `mmproj` line must be empty. In this mode images are ignored.
+- https://huggingface.co/bartowski/Mistral-Nemo-Instruct-2407-GGUF
+
+For example: `Mistral-Nemo-Instruct-2407-Q8_0.gguf`
 
 ```json
         "Mistral-Nemo-Instruct-2407-Q8(text)": {
             "model_path": "H:\\LLM2\\Mistral-Nemo-Instruct-2407-Q8_0.gguf",
-            "mmproj_path": "",
             "output_max_tokens": 1536,
-            "image_max_tokens": 0,
-            "ctx": 2048,
+            "ctx": 8192,                      
             "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
-            "temperature": 0.3,
+            "temperature": 0.3,       
             "top_p": 0.92,
-            "repeat_penalty": 1.1,
+            "min_p": 0.01,
             "top_k": 40,
+            "repeat_penalty": 1.1,
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "llava15",
+            "chat_format": "mistral-instruct",   
             "script": "qwen3vl_run.py",
-            "stop": ["<|eot_id|>", "ASSISTANT", "ASSISTANT_END"],
-            "merge_system_and_user": true
+            "silent": false,
+            "debug": true
         },
 ```
 
 </details>
 
----
-
-9. Qwen3-4b-Z-Engineer-V2 (**not vision**)
-- https://huggingface.co/BennyDaBall/qwen3-4b-Z-Image-Engineer
-For example: `Qwen3-4b-Z-Engineer-V2.gguf`
-
 <details>
 
-<summary>json</summary>
+<summary>Qwen3-4b-Z-Engineer-V2(text)</summary>
 
-Write your paths. The `mmproj` line must be empty. In this mode images are ignored.
+- https://huggingface.co/BennyDaBall/qwen3-4b-Z-Image-Engineer
+  
+For example: `Qwen3-4b-Z-Engineer-V2.gguf`
 
 ```json
         "Qwen3-4b-Z-Engineer-V2(text)": {
             "model_path": "H:\\LLM2\\Qwen3-4b-Z-Engineer-V2.gguf",
-            "mmproj_path": "",
-            "output_max_tokens": 1536,
-            "image_max_tokens": 0,
-            "ctx": 2048,
+            "output_max_tokens": 2048,
+            "ctx": 4096,                     
             "n_batch": 2048,
+            "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
-            "repeat_penalty": 1.2,
+            "min_p": 0.01,
             "top_k": 0,
+            "repeat_penalty": 1.1,          
+            "present_penalty": 0.0,
+            "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py"
-        }
+            "chat_format": "qwen3",
+            "script": "qwen3vl_run.py",        
+            "silent": false,
+            "debug": true
+        },
 ```
 
 </details>
@@ -878,6 +896,4 @@ Maybe it will be useful to someone.
 # Dependencies & Thanks:
 - https://github.com/JamePeng/llama-cpp-python
 - https://github.com/ggml-org/llama.cpp
-- https://github.com/SeanScripts/ComfyUI-Unload-Model
-- https://huggingface.co/Qwen/Qwen3-VL-8B-Instruct-GGUF/tree/main
-- https://huggingface.co/huihui-ai/Huihui-Qwen3-VL-8B-Instruct-abliterated/tree/main/GGUF
+- https://huggingface.co/Qwen
