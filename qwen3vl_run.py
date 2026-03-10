@@ -154,118 +154,114 @@ def _inference(config, is_subprocess = False):
                 if not chat_handler_type:
                     return {"status": "error", "message": "chat_handler is not set"}
 
-                mmproj_kwargs = {
+                handler_kwargs = {
                     "clip_model_path": mmproj_path,
                     "verbose": verbose,
                     "image_min_tokens": config.get("image_min_tokens", 1024),
                     "image_max_tokens": config.get("image_max_tokens", 4096),
                 }
 
-                optional_mmproj_params = [
-                    "use_gpu"
-                ]
+                for key, value in config.items():
+                    if key.startswith("extra_chat_handler_"):
+                        new_key = key[len("extra_chat_handler_"):]
+                        handler_kwargs[new_key] = value
 
-                for key in optional_mmproj_params:
-                    if key in config:
-                        mmproj_kwargs[key] = config[key]
-
-                extra_params = {}
+                extra_handler_kwargs = {}
 
                 if chat_handler_type == "qwen35":
                     try:
                         from llama_cpp.llama_chat_format import Qwen35ChatHandler
                     except ImportError:
                         return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3.5 requires version v0.3.30 or higher."}
-                    extra_params = {
+                    extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", False),
                         "add_vision_id": config.get("add_vision_id", len(images) != 1),
                     }
-                    chat_handler = Qwen35ChatHandler(**mmproj_kwargs, **extra_params)
+                    chat_handler = Qwen35ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "qwen3":
                     try:
                         from llama_cpp.llama_chat_format import Qwen3VLChatHandler
                     except ImportError:
                         return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher."}
-                    extra_params = {
+                    extra_handler_kwargs = {
                         "force_reasoning": config.get("force_reasoning", False),
                         "add_vision_id": config.get("add_vision_id", len(images) != 1),
                     }
-                    chat_handler = Qwen3VLChatHandler(**mmproj_kwargs, **extra_params)
+                    chat_handler = Qwen3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "qwen25":
                     from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-                    chat_handler = Qwen25VLChatHandler(**mmproj_kwargs)
+                    chat_handler = Qwen25VLChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "gemma3":
                     from llama_cpp.llama_chat_format import Gemma3ChatHandler
-                    chat_handler = Gemma3ChatHandler(**mmproj_kwargs)
+                    chat_handler = Gemma3ChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "llava15":
                     from llama_cpp.llama_chat_format import Llava15ChatHandler
-                    chat_handler = Llava15ChatHandler(**mmproj_kwargs)
+                    chat_handler = Llava15ChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "llava16":
                     from llama_cpp.llama_chat_format import Llava16ChatHandler
-                    chat_handler = Llava16ChatHandler(**mmproj_kwargs)
+                    chat_handler = Llava16ChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "bakllava":
                     from llama_cpp.llama_chat_format import BakLlavaChatHandler  # предполагается существование
-                    chat_handler = BakLlavaChatHandler(**mmproj_kwargs)
+                    chat_handler = BakLlavaChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "moondream":
                     from llama_cpp.llama_chat_format import MoondreamChatHandler
-                    chat_handler = MoondreamChatHandler(**mmproj_kwargs)
+                    chat_handler = MoondreamChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "minicpmv26":
                     from llama_cpp.llama_chat_format import MiniCPMv26ChatHandler
-                    chat_handler = MiniCPMv26ChatHandler(**mmproj_kwargs)
+                    chat_handler = MiniCPMv26ChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "minicpmv45":
                     from llama_cpp.llama_chat_format import MiniCPMv45ChatHandler
-                    extra_params = {
+                    extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", True),
                     }
-                    chat_handler = MiniCPMv45ChatHandler(**mmproj_kwargs, **extra_params)
+                    chat_handler = MiniCPMv45ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "glm41v":
                     from llama_cpp.llama_chat_format import GLM41VChatHandler
-                    chat_handler = GLM41VChatHandler(**mmproj_kwargs)
+                    chat_handler = GLM41VChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "glm46v":
                     from llama_cpp.llama_chat_format import GLM46VChatHandler
-                    extra_params = {
+                    extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", True),
                     }
-                    chat_handler = GLM46VChatHandler(**mmproj_kwargs, **extra_params)
+                    chat_handler = GLM46VChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "granite":
                     from llama_cpp.llama_chat_format import GraniteDoclingChatHandler
-                    extra_params = {
+                    extra_handler_kwargs = {
                         "controls": config.get("granite_controls", None),
                     }
-                    chat_handler = GraniteDoclingChatHandler(**mmproj_kwargs, **extra_params)
+                    chat_handler = GraniteDoclingChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "lfm2vl":
                     from llama_cpp.llama_chat_format import LFM2VLChatHandler
-                    # LFM2VLChatHandler уже использует image_min_tokens / image_max_tokens из mmproj_kwargs
-                    chat_handler = LFM2VLChatHandler(**mmproj_kwargs)
+                    chat_handler = LFM2VLChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "paddleocr":
                     from llama_cpp.llama_chat_format import PaddleOCRChatHandler
-                    chat_handler = PaddleOCRChatHandler(**mmproj_kwargs)
+                    chat_handler = PaddleOCRChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "obsidian":
                     from llama_cpp.llama_chat_format import ObsidianChatHandler
-                    chat_handler = ObsidianChatHandler(**mmproj_kwargs)
+                    chat_handler = ObsidianChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "nanollava":
                     from llama_cpp.llama_chat_format import NanoLlavaChatHandler
-                    chat_handler = NanoLlavaChatHandler(**mmproj_kwargs)
+                    chat_handler = NanoLlavaChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "llama3visionalpha":
                     from llama_cpp.llama_chat_format import Llama3VisionAlphaChatHandler
-                    chat_handler = Llama3VisionAlphaChatHandler(**mmproj_kwargs)
+                    chat_handler = Llama3VisionAlphaChatHandler(**handler_kwargs)
 
                 else:
                     return {"status": "error", "message": f"Unknown chat handler type: {chat_handler_type}"}
@@ -274,9 +270,10 @@ def _inference(config, is_subprocess = False):
 
             # --- Загрузка новой модели ---
 
-            t0 = time.perf_counter()
             # Выгружаем старую модель
-            unload_model()
+            unload_model(debug)
+
+            t1 = time.perf_counter()
 
             # Параметры Llama
             llm_kwargs = {
@@ -290,6 +287,11 @@ def _inference(config, is_subprocess = False):
                 "pool_size": config.get("pool_size", 4194304),
                 "n_threads": config.get("cpu_threads", os.cpu_count() or 8),
             }
+
+            for key, value in config.items():
+                if key.startswith("extra_llama_"):
+                    new_key = key[len("extra_llama_"):]
+                    llm_kwargs[new_key] = value
 
             if chat_handler is not None:
                 # Мультимодальный режим: используем кастомный хендлер
@@ -305,12 +307,18 @@ def _inference(config, is_subprocess = False):
 
             _cached_llm = Llama(**llm_kwargs)
             _cached_model_hash = current_hash
-            _debug_print(debug, "load_model", t0, file=sys.stderr)
+            _debug_print(debug, "load_model", t1, file=sys.stderr)
 
-        # --- Используем закешированную модель ---
-        llm = _cached_llm
+        else:
 
-        t1 = time.perf_counter()
+            # Используем закешированную модель
+            t2 = time.perf_counter()
+            #_cached_llm.reset()
+            _cached_llm._ctx.memory_clear(True)  
+            _cached_llm.n_tokens = 0            
+            _debug_print(debug, "clearing KV cache", t2, file=sys.stderr)
+
+        t3 = time.perf_counter()
 
         # --- Формируем сообщения ---
         if images and is_vision_model:
@@ -327,19 +335,19 @@ def _inference(config, is_subprocess = False):
                 {"role": "user", "content": content}
             ]
 
-            _debug_print(debug, f"create message (with {len(images)} image)", t1, file=sys.stderr)
-            
+            _debug_print(debug, f"create message (with {len(images)} image)", t3, file=sys.stderr)
+
         else:
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
-            _debug_print(debug, "create message", t1, file=sys.stderr)
+            _debug_print(debug, "create message", t3, file=sys.stderr)
 
         # --- Инференс ---
 
-        t0 = time.perf_counter()
-        completion_kwargs = {
+        t4 = time.perf_counter()
+        chat_kwargs = {
             "max_tokens": config.get("output_max_tokens", 2048),
             "temperature": config.get("temperature", 0.7),
             "seed": config.get("seed", 42),
@@ -351,23 +359,16 @@ def _inference(config, is_subprocess = False):
             "top_k": config.get("top_k", 0),
         }
 
-        optional_params = [
-            "stop", "logprobs", "top_logprobs", "logit_bias", "response_format",
-            "grammar", "mirostat_mode", "mirostat_tau", "mirostat_eta",
-            "xtc_threshold", "xtc_probability", "dry_multiplier", "dry_base",
-            "dry_allowed_length", "dry_penalty_last_n", "dry_seq_breakers",
-            "adaptive_target", "adaptive_decay", "top_n_sigma"
-        ]
+        for key, value in config.items():
+            if key.startswith("extra_chat_completion_"):
+                new_key = key[len("extra_chat_completion_"):]
+                chat_kwargs[new_key] = value
 
-        for key in optional_params:
-            if key in config:
-                completion_kwargs[key] = config[key]
-
-        result = llm.create_chat_completion(
+        result = _cached_llm.create_chat_completion(
             messages=messages,
-            **completion_kwargs
+            **chat_kwargs
         )
-        _debug_print(debug, "inference", t0, file=sys.stderr)
+        _debug_print(debug, "inference", t4, file=sys.stderr)
 
         output = result["choices"][0]["message"]["content"]
 
@@ -393,12 +394,21 @@ def run_inference_direct(config):
     """Функция для прямого вызова. Возвращает словарь с результатом."""
     return _inference(config)
 
-def unload_model():
-    """Выгружает модель из VRAM и очищает кеш."""
+def unload_model(debug = False):
+    """Выгружает модель из VRAM"""
     global _cached_llm, _cached_model_hash
     if _cached_llm is not None:
+        t_start = time.perf_counter()
+
+        #if hasattr(_cached_llm, '_ctx') and _cached_llm._ctx is not None:
+        #    try:
+        #        _cached_llm._ctx.close()  
+        #    except Exception:
+        #        pass  
+
         del _cached_llm
         _cached_llm = None
+        _debug_print(debug, "unload_model", t_start, file=sys.stderr)   
     _cached_model_hash = None
 
 # Режим подпроцесса

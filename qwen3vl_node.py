@@ -300,10 +300,8 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
 def unload_model(gccollect = False,debug = False):
     global _current_module
     if _current_module is not None:
-        t_start = time.perf_counter()        
-        _current_module.unload_model()
+        _current_module.unload_model(debug)
         _current_module = None
-        _debug_print(debug, "unload_model", t_start)
 
         if gccollect:
             t_start = time.perf_counter()
@@ -483,7 +481,8 @@ class SimpleQwen3VL_GGUF_Node:
 
             _debug_print(debug, "process_images", t1)
 
-            config["image_count"] = len(images_value) if images_value else 0
+            if len(images_value) == 0:
+                config["image_count"] = 0
 
             script_name, config = old_config_patch(script_name, config)
 
