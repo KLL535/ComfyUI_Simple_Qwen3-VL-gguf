@@ -225,10 +225,17 @@ Possible model configurations that can be passed to the `config_override` input.
 | force_gc_unload | bool | False | Enables garbage collection after deleting the LLM model. 💡 If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
 | chat_handler | string |  | Type of chat handler: "qwen35", "qwen3", "qwen25", "gemma3", "llava15", "llava16", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha". 💡 Specify for multimodal models. |
 | chat_format | string |  | Type of chat format for text model: "llama-2", "llama-3", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma", "qwen" 💡 Required to be specified for text models only. |
-| stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]). 💡 Important: Llama automatically adds stop tokens based on `chat_handler` or `chat_format`. Pass `stop` only if you want to override the default behavior. |
 | enable_thinking | bool | False | For "Qwen35, "minicpmv45", "glm46v" enables the thinking process in the response. |
 | add_vision_id | bool | auto | For "Qwen35", "Qwen3" adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
 | force_reasoning | bool | False | For "Qwen3" forces reasoning mode. |
+
+Extra options.
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| extra_chat_handler_* |  |  | Allows you to pass any arguments to the function `*ChatHandler` |
+| extra_llama_* |  |  | Allows you to pass any arguments to the function `Llama` |
+| extra_chat_completion_* |  |  | Allows you to pass any arguments to the function `create_chat_completion` |
+| extra_chat_completion_stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]). 💡 Important: Llama automatically adds stop tokens based on `chat_handler` or `chat_format`. Pass `stop` only if you want to override the default behavior. |
 
 The following settings are generated automatically. They DO NOT need to be write in the config.
 | Field | Type | Description |
