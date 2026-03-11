@@ -12,6 +12,7 @@ This version was created to meet my requirements:
 
 # Last update:
 **08.03.2026 - Nightly**
+- Adding a new mode `"raw_mode": true` which allows you to set custom `prompt templates`. The Joycaption model now works correctly (see new configs below).
 - Three execution modes have been added: `subprocess` — inference runs in a separate process (safe, isolated); `direct_clean` — in the main process with model unloading after each run; `keep_vram` — the model remains in VRAM for repeated use.
 - Added `config_override` - the ability to add/override any configuration parameters via a text input directly in the node
 - Integrated **json_repair** to automatically repair invalid JSON in `config_override` and `system_prompts_user.json`
@@ -228,6 +229,27 @@ Possible model configurations that can be passed to the `config_override` input.
 | enable_thinking | bool | False | For "Qwen35, "minicpmv45", "glm46v" enables the thinking process in the response. |
 | add_vision_id | bool | auto | For "Qwen35", "Qwen3" adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
 | force_reasoning | bool | False | For "Qwen3" forces reasoning mode. |
+| stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]). 💡 Important: Llama automatically adds stop tokens based on `chat_handler` or `chat_format`. Pass `stop` only if you want to override the default behavior. |
+| clearing_cache | bool | True | 💡 Allows you to avoid image freezing due to cache activity | 
+| system_preset_to_user_prompt | bool | False | 💡 Allows you to switch the substitution of the `master_preset` list from the `system prompt` to the `user prompt`, if the model understands the task better this way. | 
+| system_prompt_default | string |  | 💡 Allows you to set the default system prompt for the model. | 
+
+Custom prompt templates:
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| raw_mode | bool | False | Allows you to enable custom templates mode.  |
+| prompt_template | string | ... | Prompt format. See the model recommendations. |
+| stop | list of strings |  | Stop sequences that halt generation. In this mode it is necessary to set it. See the model recommendations. |
+
+<details>
+  
+<summary>prompt_template example</summary>
+
+```
+"prompt_template": "<|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 July 2024\n\n{system}{images}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n<|reserved_special_token_70|><|reserved_special_token_69|><|reserved_special_token_71|>{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+```
+
+</details>
 
 Extra options.
 | Field | Type | Default | Description |
@@ -235,7 +257,7 @@ Extra options.
 | extra_chat_handler_* |  |  | Allows you to pass any arguments to the function `*ChatHandler` |
 | extra_llama_* |  |  | Allows you to pass any arguments to the function `Llama` |
 | extra_chat_completion_* |  |  | Allows you to pass any arguments to the function `create_chat_completion` |
-| extra_chat_completion_stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]). 💡 Important: Llama automatically adds stop tokens based on `chat_handler` or `chat_format`. Pass `stop` only if you want to override the default behavior. |
+
 
 The following settings are generated automatically. They DO NOT need to be write in the config.
 | Field | Type | Description |
@@ -550,17 +572,17 @@ For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
-> 💡 **Warning:** The llava16 handler is unstable in `keep-vram` mode (freezes the image), do not use this mode for such models!
+> 💡 **Warning:** This model likes it when the task is written in `user_prompt`, so we use the option `"system_preset_to_user_prompt": true`. The system prompt is always the same `"system_prompt_default": "You are a helpful image captioner."`. 
 
 ```json
         "Joycaption-Beta": {
             "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
             "mmproj_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
-            "output_max_tokens": 1024,
-            "image_min_tokens": 576,
-            "image_max_tokens": 576,
-            "ctx": 8192,
-            "n_batch": 2048,
+            "output_max_tokens": 512,
+            "image_min_tokens": 10,
+            "image_max_tokens": 512,
+            "ctx": 2048,
+            "n_batch": 1024,
             "n_ubatch": 512,
             "gpu_layers": -1,
             "temperature": 0.6,
@@ -571,8 +593,11 @@ For example:
             "present_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "llava16",
+            "chat_handler": "llava15",
             "script": "qwen3vl_run.py",
+            "raw_mode": true,
+            "system_preset_to_user_prompt": true,
+            "system_prompt_default": "You are a helpful image captioner.",
             "silent": false,
             "debug": true
         },
@@ -630,8 +655,6 @@ We cram 5 layers out of 40 (`gpu_layers` = 35) into the CPU and get x2 speedup.
 For example:
 `Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
 
-> 💡 **Warning:** The llava16 handler is unstable in `keep-vram` mode (freezes the image), do not use this mode for such models!
-
 ```json
         "Ministral-3-14B": {
             "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
@@ -651,7 +674,7 @@ For example:
             "present_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
-            "chat_handler": "llava16", 
+            "chat_handler": "llava15", 
             "chat_format": "mistral-instruct",
             "script": "qwen3vl_run.py",
             "silent": false,
