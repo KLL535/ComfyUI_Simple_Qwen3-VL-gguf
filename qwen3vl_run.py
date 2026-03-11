@@ -66,8 +66,17 @@ def set_silent_logging(silent):
     llama_cpp.llama_log_set(_log_callback_obj, None)
     _log_callback_initialized = True
 
-def is_nonempty_string(s):
-    return isinstance(s, str) and s.strip() != ""
+def build_prompt(template: str, system: str, user: str):
+    # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
+    result = template.replace("{system}", system).replace("{user}", user)
+    
+    # 2. Разбиваем по {images}
+    if "{images}" in result:
+        parts = result.split("{images}", 1)  # Разделить только по первому вхождению
+        return parts[0], parts[1]
+    else:
+        # Если метки нет, весь текст идёт до картинок
+        return result, ""
 
 def pil_to_data_uri(image, quality=95):
     """Конвертирует PIL.Image в data URI (JPEG base64)."""
@@ -135,6 +144,7 @@ def _inference(config, is_subprocess = False):
         images = config.get("images") or config.get("images_path") or []
         if not isinstance(images, list):
             images = [images] if images else []
+        num_images=len(images)
 
         t0 = time.perf_counter()
         set_silent_logging(silent)
@@ -142,7 +152,7 @@ def _inference(config, is_subprocess = False):
         _debug_print(debug, "import llama_cpp", t0, file=sys.stderr)
 
         mmproj_path = config.get("mmproj_path", "").strip()
-        is_vision_model = is_nonempty_string(mmproj_path)
+        is_vision_model = bool(num_images > 0 and mmproj_path)
 
         if need_new_model:
 
@@ -175,7 +185,7 @@ def _inference(config, is_subprocess = False):
                         return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3.5 requires version v0.3.30 or higher."}
                     extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", False),
-                        "add_vision_id": config.get("add_vision_id", len(images) != 1),
+                        "add_vision_id": config.get("add_vision_id", num_images != 1),
                     }
                     chat_handler = Qwen35ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
@@ -186,7 +196,7 @@ def _inference(config, is_subprocess = False):
                         return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher."}
                     extra_handler_kwargs = {
                         "force_reasoning": config.get("force_reasoning", False),
-                        "add_vision_id": config.get("add_vision_id", len(images) != 1),
+                        "add_vision_id": config.get("add_vision_id", num_images != 1),
                     }
                     chat_handler = Qwen3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
@@ -310,44 +320,19 @@ def _inference(config, is_subprocess = False):
             _debug_print(debug, "load_model", t1, file=sys.stderr)
 
         else:
-
             # Используем закешированную модель
-            t2 = time.perf_counter()
-            #_cached_llm.reset()
-            _cached_llm._ctx.memory_clear(True)  
-            _cached_llm.n_tokens = 0            
-            _debug_print(debug, "clearing KV cache", t2, file=sys.stderr)
+            
+            if config.get("clearing_cache", True):
+                t2 = time.perf_counter()
+                _cached_llm._ctx.memory_clear(True)
+                _cached_llm.n_tokens = 0     
+                if _cached_llm.is_hybrid and _cached_llm._hybrid_cache_mgr is not None:
+                    _cached_llm._hybrid_cache_mgr.clear()
+                    _debug_print(debug, "clearing hybrid cache", t2, file=sys.stderr)
+                else:
+                    _debug_print(debug, "clearing cache", t2, file=sys.stderr)
 
-        t3 = time.perf_counter()
-
-        # --- Формируем сообщения ---
-        if images and is_vision_model:
-
-            content = [{"type": "text", "text": user_prompt}]
-
-            for img_item in images:
-                img_content = _build_image_content(img_item, quality=image_quality)
-                if img_content is not None:
-                    content.append(img_content)
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content}
-            ]
-
-            _debug_print(debug, f"create message (with {len(images)} image)", t3, file=sys.stderr)
-
-        else:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-            _debug_print(debug, "create message", t3, file=sys.stderr)
-
-        # --- Инференс ---
-
-        t4 = time.perf_counter()
-        chat_kwargs = {
+        completion_kwargs = {
             "max_tokens": config.get("output_max_tokens", 2048),
             "temperature": config.get("temperature", 0.7),
             "seed": config.get("seed", 42),
@@ -360,17 +345,125 @@ def _inference(config, is_subprocess = False):
         }
 
         for key, value in config.items():
-            if key.startswith("extra_chat_completion_"):
-                new_key = key[len("extra_chat_completion_"):]
-                chat_kwargs[new_key] = value
+            if key.startswith("extra_completion_"):
+                new_key = key[len("extra_completion_"):]
+                completion_kwargs[new_key] = value
 
-        result = _cached_llm.create_chat_completion(
-            messages=messages,
-            **chat_kwargs
-        )
-        _debug_print(debug, "inference", t4, file=sys.stderr)
+        if config.get("raw_mode", False):
 
-        output = result["choices"][0]["message"]["content"]
+            # Формируем сообщения для чата
+
+            t3 = time.perf_counter()
+
+            from jinja2 import Template
+
+            default_template = (
+                #"<|begin_of_text|>"
+                "<|start_header_id|>system<|end_header_id|>\n\n"
+                "Cutting Knowledge Date: December 2023\n"
+                "Today Date: 26 July 2024\n\n"
+                "{system}"
+                "{images}"
+                "<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
+                "<|reserved_special_token_70|><|reserved_special_token_69|><|reserved_special_token_71|>"
+                "{user}"
+                "<|eot_id|>"
+                "<|start_header_id|>assistant<|end_header_id|>"
+            )
+
+            # 1. Разбиваем шаблон на части
+            template_str = config.get("prompt_template", default_template)
+            text_before, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
+
+
+            # 2. Собираем content
+            content = [{"type": "text", "text": text_before}]
+            for img_item in images:
+                img_content = _build_image_content(img_item, quality=image_quality)
+                if img_content is not None:
+                    content.append(img_content)
+            content.append({"type": "text", "text": text_after})
+
+            messages = [{"role": "user", "content": content}]
+
+            _debug_print(debug, f"create raw prompt (with {num_images} image)", t3, file=sys.stderr)
+
+            t5 = time.perf_counter()
+
+            # 3. Минимальный шаблон 
+            clean_template = Template(
+                "{%- for msg in messages %}"
+                "{%- if msg.role == 'user' %}"
+                "{%- if msg.content is string %}{{ msg.content }}"
+                "{%- elif msg.content is iterable %}"
+                "{%- for part in msg.content %}"
+                "{%- if part.type == 'image_url' %}<__media__>{%- endif %}"
+                "{%- if part.type == 'text' %}{{ part.text }}{%- endif %}"
+                "{%- endfor %}"
+                "{%- endif %}"
+                "{%- endif %}"
+                "{%- endfor %}"
+            )
+
+            # 4. Подмена + вызов + возврат 
+            chat_handler = _cached_llm.chat_handler
+            original_template = chat_handler.chat_template
+            chat_handler.chat_template = clean_template
+
+            try:
+                result = _cached_llm.create_chat_completion(
+                    messages=messages,
+                    stop=config.get("stop", [ "<|eot_id|>" ]),
+                    **completion_kwargs
+                )
+                output = result["choices"][0]["message"]["content"]
+            finally:
+                chat_handler.chat_template = original_template
+
+            _debug_print(debug, "inference", t5, file=sys.stderr)
+
+        else:
+
+            # Формируем сообщения для чата
+            t3 = time.perf_counter()
+
+            if is_vision_model:
+
+                content = [{"type": "text", "text": user_prompt}]
+
+                for img_item in images:
+                    img_content = _build_image_content(img_item, quality=image_quality)
+                    if img_content is not None:
+                        content.append(img_content)
+
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": content}
+                ]
+
+            else:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ]
+
+            _debug_print(debug, f"create message (with {num_images} image)", t3, file=sys.stderr)
+
+            # --- Инференс ---
+
+            t5 = time.perf_counter()
+
+            custom_stop = config.get("stop", None)
+            if custom_stop:
+                completion_kwargs["stop"] = custom_stop
+
+            result = _cached_llm.create_chat_completion(
+                messages=messages,
+                **completion_kwargs
+            )
+            _debug_print(debug, "inference", t5, file=sys.stderr)
+
+            output = result["choices"][0]["message"]["content"]
 
         _debug_print(debug, "total", overall_start, file=sys.stderr)       
 

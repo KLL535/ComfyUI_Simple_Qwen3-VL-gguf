@@ -447,15 +447,6 @@ class SimpleQwen3VL_GGUF_Node:
                 except Exception as e:
                     raise ValueError(e)            
 
-            # Определяем system_prompt
-            system_prompt = ""
-            if system_prompt_override is not None:
-                system_prompt = system_prompt_override.strip()
-            else:
-                if system_preset != "None":
-                    system_prompts = load_cached_section('_system_prompts')
-                    system_prompt = system_prompts.get(system_preset, "").strip()
-
             # Получаем имя скрипта
             script_name = config.get("script", None)
             debug = config.get("debug", False)
@@ -483,6 +474,20 @@ class SimpleQwen3VL_GGUF_Node:
 
             if len(images_value) == 0:
                 config["image_count"] = 0
+
+            # Определяем system_prompt
+            system_prompt = config.get("system_prompt_default", "")
+
+            if system_preset != "None":
+                system_prompts = load_cached_section('_system_prompts')
+                system_prompt = system_prompts.get(system_preset, "").strip()
+
+            if config.get("system_preset_to_user_prompt", False):
+                user_prompt = (system_prompt + " " + user_prompt).strip()
+                system_prompt = ""
+
+            if system_prompt_override is not None:
+                system_prompt = system_prompt_override.strip()
 
             script_name, config = old_config_patch(script_name, config)
 
