@@ -375,7 +375,6 @@ def _inference(config, is_subprocess = False):
             template_str = config.get("prompt_template", default_template)
             text_before, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
 
-
             # 2. Собираем content
             content = [{"type": "text", "text": text_before}]
             for img_item in images:

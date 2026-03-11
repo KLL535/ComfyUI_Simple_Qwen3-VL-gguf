@@ -321,6 +321,14 @@ class SimpleQwen3VL_GGUF_Node:
             return cls._cached_config.copy()
 
         def _convert_to_json(text: str) -> str:
+            # Список плейсхолдеров, которые нужно игнорировать
+            placeholders = ['{system}', '{images}', '{user}']
+            temp_tokens = ['__PH_SYSTEM__', '__PH_IMAGES__', '__PH_USER__']
+            
+            # Замена плейсхолдеров
+            for ph, token in zip(placeholders, temp_tokens):
+                text = text.replace(ph, token)    
+            
             # Удаляем часть до первого '{' и после последнего '}', если они есть
             start_brace = text.find('{')
             end_brace = text.rfind('}')
@@ -331,8 +339,12 @@ class SimpleQwen3VL_GGUF_Node:
             json_str = json_str.strip()
             if not json_str.startswith('{'):
                 json_str = '{' + json_str + '}'
-
-            return json_str
+            
+            # Возврат плейсхолдеров обратно
+            for token, ph in zip(temp_tokens, placeholders):
+                json_str = json_str.replace(token, ph)
+            
+            return json_str.strip()
 
         def _flatten_dict(data: Any) -> Dict[str, Any]:
             result = {}
