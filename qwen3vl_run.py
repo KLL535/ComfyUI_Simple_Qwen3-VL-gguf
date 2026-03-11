@@ -105,13 +105,8 @@ def _build_image_content(image_item, quality=95):
         print(f"build_image: Error", file=sys.stderr)
         return None
 
-def _inference(config, is_subprocess = False):
+def _inference(config):
     """Внутренняя функция, выполняющая инференс с кешированием модели."""
-
-    original_stdout = None
-    if is_subprocess:
-        original_stdout = sys.stdout
-        sys.stdout = sys.stderr
 
     try:
         overall_start = time.perf_counter()
@@ -464,7 +459,7 @@ def _inference(config, is_subprocess = False):
 
             output = result["choices"][0]["message"]["content"]
 
-        _debug_print(debug, "total", overall_start, file=sys.stderr)       
+        _debug_print(debug, "total", overall_start, file=sys.stderr)   
 
         return {"status": "success", "output": output}
 
@@ -475,10 +470,6 @@ def _inference(config, is_subprocess = False):
             "message": str(e),
             "traceback": traceback.format_exc()
         }
-
-    finally:
-        if original_stdout is not None:
-            sys.stdout = original_stdout
 
 # Режим прямого вызова
 
@@ -534,9 +525,12 @@ def main():
             print(json.dumps({"status": "error", "message": f"Failed to load config: {e}"}, ensure_ascii=True), flush=True)
             sys.exit(1)
 
-        result = _inference(config, True)
+        original_stdout = sys.stdout
+        sys.stdout = sys.stderr
 
-        print(json.dumps(result, ensure_ascii=True), flush=True)
+        result = _inference(config)
+
+        print(json.dumps(result, ensure_ascii=True), flush=True, file=original_stdout)
 
         if result["status"] == "error":
             sys.exit(1)
