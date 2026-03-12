@@ -430,16 +430,26 @@ def _inference(config):
                     if img_content is not None:
                         content.append(img_content)
 
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": content}
-                ]
+                if system_prompt:
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": content}
+                    ]
+                else:
+                    messages = [
+                        {"role": "user", "content": content}
+                    ]
 
             else:
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ]
+                if system_prompt:
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ]
+                else:
+                    messages = [
+                        {"role": "user", "content": user_prompt}
+                    ]
 
             _debug_print(debug, f"create message (with {num_images} image)", t3, file=sys.stderr)
 
