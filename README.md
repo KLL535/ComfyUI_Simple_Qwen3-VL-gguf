@@ -238,16 +238,32 @@ Custom prompt templates:
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
 | raw_mode | bool | False | Allows you to enable custom templates mode.  |
-| prompt_template | string | default to joycaption | Prompt format. See the model recommendations. |
+| prompt_template | string | default to joycaption | Prompt format. See the model recommendations. The template must include placeholders `{system}`, `{images}`, `{user}` |
 | stop | list of strings | default to joycaption | Stop sequences that halt generation. In this mode it is necessary to set it. See the model recommendations. |
 
 <details>
   
-<summary>default joycaption prompt_template example</summary>
+<summary>default prompt_template example</summary>
+
+#### Joycaption: 
 
 ```
-"prompt_template": "<|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 July 2024\n\n{system}{images}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n<|reserved_special_token_70|><|reserved_special_token_69|><|reserved_special_token_71|>{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+"raw_mode": true,
+"prompt_template": "<|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{images}{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
+"stop": ["<|eot_id|>", "<|end_of_text|>"],
 ```
+
+> 💡 **Note:** There is no need to write the first token `<|begin_of_text|>`, it is inserted by llama automatically.
+
+#### Ministral:
+```
+"raw_mode": true,
+"prompt_template": "[INST]{system}\n\n{images}{user}[/INST]",
+"stop": ["</s>", "[INST]", "[/INST]"],
+```
+
+> 💡 **Note:** There is no need to write the first token `<s>`, it is inserted by llama automatically.
+
 
 </details>
 
@@ -675,8 +691,10 @@ For example:
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_handler": "llava15", 
-            "chat_format": "mistral-instruct",
             "script": "qwen3vl_run.py",
+            "raw_mode": true,
+            "prompt_template": "[INST]{system}\n\n{images}{user}[/INST]",
+            "stop": ["</s>", "[INST]", "[/INST]"],
             "silent": false,
             "debug": true
         },
