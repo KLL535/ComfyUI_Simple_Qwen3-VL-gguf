@@ -506,6 +506,34 @@ def unload_model(debug = False):
 
 # Режим подпроцесса
 
+original_stdout_fd = None
+
+def save_dup():
+    global original_stdout_fd
+    try:
+        original_stdout_fd = os.dup(1)
+    except OSError:
+        pass
+
+def swap_dup():
+    global original_stdout_fd
+    if original_stdout_fd is not None:
+        try:
+            os.dup2(2, 1)
+        except OSError as e:
+            print(f"Warning: Failed to redirect stdout: {e}", file=sys.stderr)
+            pass
+
+def restore_dup():
+    global original_stdout_fd
+    if original_stdout_fd is not None:
+        try:
+            os.dup2(original_stdout_fd, 1)
+            os.close(original_stdout_fd) 
+        except OSError:
+            pass
+        original_stdout_fd = None
+
 def main():
     try:
 
@@ -535,20 +563,26 @@ def main():
             print(json.dumps({"status": "error", "message": f"Failed to load config: {e}"}, ensure_ascii=True), flush=True)
             sys.exit(1)
 
-        original_stdout = sys.stdout
-        sys.stdout = sys.stderr
+        save_dup()
+
+        swap_dup()
 
         result = _inference(config)
 
-        print(json.dumps(result, ensure_ascii=True), flush=True, file=original_stdout)
+        restore_dup()
+
+        print(json.dumps(result, ensure_ascii=True), flush=True)
 
         if result["status"] == "error":
             sys.exit(1)
 
     except Exception as e:
 
+        restore_dup()
+
         print(json.dumps({"status": "error", "message": f"Critical error in main: {e}"}, ensure_ascii=True), flush=True)
         sys.exit(1)
+            
 
 if __name__ == "__main__":
     main()

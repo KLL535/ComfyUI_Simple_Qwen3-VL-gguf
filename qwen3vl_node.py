@@ -214,6 +214,25 @@ def extract_conditioning_from_result(output_data, mode):
         conditioning = output_data.get("embedding", None)
     return conditioning
 
+def extract_json_from_output(output: str) -> dict:
+    """Извлекает JSON из вывода, игнорируя логи до/после"""
+
+    if not output:
+        raise ValueError("Empty output")
+
+    start = output.find('{')
+    end = output.rfind('}')
+    
+    if start == -1 or end == -1:
+        raise ValueError(f"No JSON found in output:\n{output}")
+    
+    json_str = output[start:end+1]
+    
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON in output:\n{output}")
+
 def run_script_subprocess(script_name, config, timeout=300):
     node_dir = os.path.dirname(os.path.abspath(__file__))
     script_path = os.path.join(node_dir, script_name)
@@ -233,18 +252,23 @@ def run_script_subprocess(script_name, config, timeout=300):
             timeout=timeout,
             cwd=node_dir
         )
-        if result.returncode != 0 or not result.stdout.strip():
+        if result.returncode != 0:
             error_msg = f"Subprocess failed (code {result.returncode})\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
             return {"status": "error", "message": "Model inference failed. Check console for details.", "debug_info": error_msg}
         try:
-            output_data = json.loads(result.stdout)
+            output_data = extract_json_from_output(result.stdout)
             silent = config.get("silent", True)
             debug = config.get("debug", False)
             if debug or not silent: 
-                print(f"{result.stderr}")
+                if result.stderr:
+                    print(f"{result.stderr}")
             return output_data
-        except json.JSONDecodeError:
-            return {"status": "error", "message": f"Invalid JSON output from script: {result.stdout}"}
+        except Exception as e: 
+            return {
+                "status": "error",
+                "message": e,
+                "debug_info": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            }
     except subprocess.TimeoutExpired:
         return {"status": "error", "message": "Inference timed out (5 min)."}
     except Exception as e:
