@@ -355,12 +355,12 @@ def _inference(config):
             default_template = (
                 #"<|begin_of_text|>"
                 "<|start_header_id|>system<|end_header_id|>\n\n"
-                "Cutting Knowledge Date: December 2023\n"
-                "Today Date: 26 July 2024\n\n"
-                "{system}"
+                #"Cutting Knowledge Date: December 2023\n"
+                #"Today Date: 26 July 2024\n\n"
+                "{system}"  
+                "<|eot_id|>"
+                "<|start_header_id|>user<|end_header_id|>\n\n"
                 "{images}"
-                "<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
-                "<|reserved_special_token_70|><|reserved_special_token_69|><|reserved_special_token_71|>"
                 "{user}"
                 "<|eot_id|>"
                 "<|start_header_id|>assistant<|end_header_id|>"
@@ -407,7 +407,7 @@ def _inference(config):
             try:
                 result = _cached_llm.create_chat_completion(
                     messages=messages,
-                    stop=config.get("stop", [ "<|eot_id|>" ]),
+                    stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                     **completion_kwargs
                 )
                 output = result["choices"][0]["message"]["content"]
