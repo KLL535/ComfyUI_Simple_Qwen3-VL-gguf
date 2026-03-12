@@ -238,12 +238,12 @@ Custom prompt templates:
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
 | raw_mode | bool | False | Allows you to enable custom templates mode.  |
-| prompt_template | string | ... | Prompt format. See the model recommendations. |
-| stop | list of strings |  | Stop sequences that halt generation. In this mode it is necessary to set it. See the model recommendations. |
+| prompt_template | string | default to joycaption | Prompt format. See the model recommendations. |
+| stop | list of strings | default to joycaption | Stop sequences that halt generation. In this mode it is necessary to set it. See the model recommendations. |
 
 <details>
   
-<summary>prompt_template example</summary>
+<summary>default joycaption prompt_template example</summary>
 
 ```
 "prompt_template": "<|start_header_id|>system<|end_header_id|>\n\nCutting Knowledge Date: December 2023\nToday Date: 26 July 2024\n\n{system}{images}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n<|reserved_special_token_70|><|reserved_special_token_69|><|reserved_special_token_71|>{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
@@ -572,7 +572,7 @@ For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
-> 💡 **Warning:** This model likes it when the task is written in `user_prompt`, so we use the option `"system_preset_to_user_prompt": true`. The system prompt is always the same `"system_prompt_default": "You are a helpful image captioner."`. 
+> 💡 **Tip:** This model likes it when the task is written in `user_prompt`, so we use the option `"system_preset_to_user_prompt": true`. The system prompt is always the same `"system_prompt_default": "You are a helpful image captioner."` - set this text as the default value. The model requires a special prompt template. So, enable `"raw_mode": true`. This will set the new `prompt_template` and `stop` words to default for this model. However, you can override them if desired. See the configuration description: custom prompt template section. With these parameters, the model will stop sticking, communicating with itself (with the assistant) and will strictly follow the prompt.
 
 ```json
         "Joycaption-Beta": {
