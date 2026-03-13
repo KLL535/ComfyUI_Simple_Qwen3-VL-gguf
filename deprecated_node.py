@@ -1,5 +1,5 @@
 # deprecated_node.py
-from .qwen3vl_node import clear_memory_start,clear_temp_files,process_images,run_inference_pipeline,old_config_patch,CATEGORY_NAME
+from .qwen3vl_node import clear_memory,clear_temp_files,process_images,run_inference_pipeline,old_config_patch,CATEGORY_NAME
 
 class Qwen3VL_GGUF_Node:
     @classmethod
@@ -62,7 +62,7 @@ class Qwen3VL_GGUF_Node:
         try:
             # 1. Clearing memory in start
             if unload_all_models:
-                clear_memory_start()
+                clear_memory()
 
             # 2. Image processing
             input_images = [image, image2, image3]

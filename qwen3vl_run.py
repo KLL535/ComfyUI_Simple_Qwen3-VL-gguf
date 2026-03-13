@@ -151,6 +151,11 @@ def _inference(config):
 
         if need_new_model:
 
+            # --- Загрузка новой модели ---
+
+            # Выгружаем старую модель
+            unload_llama_model(debug)
+
             chat_handler = None
 
             if is_vision_model:
@@ -272,11 +277,6 @@ def _inference(config):
                     return {"status": "error", "message": f"Unknown chat handler type: {chat_handler_type}"}
 
                 _debug_print(debug, "create_chat_handler", t0, file=sys.stderr)
-
-            # --- Загрузка новой модели ---
-
-            # Выгружаем старую модель
-            unload_model(debug)
 
             t1 = time.perf_counter()
 
@@ -474,7 +474,6 @@ def _inference(config):
         return {"status": "success", "output": output}
 
     except Exception as e:
-        unload_model()
         return {
             "status": "error",
             "message": str(e),
@@ -487,21 +486,21 @@ def run_inference_direct(config):
     """Функция для прямого вызова. Возвращает словарь с результатом."""
     return _inference(config)
 
-def unload_model(debug = False):
+def unload_llama_model(debug = False):
     """Выгружает модель из VRAM"""
     global _cached_llm, _cached_model_hash
     if _cached_llm is not None:
         t_start = time.perf_counter()
 
-        #if hasattr(_cached_llm, '_ctx') and _cached_llm._ctx is not None:
-        #    try:
-        #        _cached_llm._ctx.close()  
-        #    except Exception:
-        #        pass  
+        try:
+            if hasattr(_cached_llm, '_ctx') and _cached_llm._ctx is not None:
+                _cached_llm._ctx.close()  
+        except Exception:
+            pass  
 
         del _cached_llm
         _cached_llm = None
-        _debug_print(debug, "unload_model", t_start, file=sys.stderr)   
+        _debug_print(debug, "unload_llama_model", t_start, file=sys.stderr)   
     _cached_model_hash = None
 
 # Режим подпроцесса

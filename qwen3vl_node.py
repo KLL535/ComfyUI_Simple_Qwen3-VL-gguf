@@ -13,6 +13,7 @@ import time
 from PIL import Image
 from typing import Optional, Dict, Any
 import textwrap
+import traceback
 
 try:
     from json_repair import repair_json
@@ -95,25 +96,25 @@ def load_cached_section(section_name: str) -> Dict:
     return cache.get(section_name, {}).copy()
 
 # ========== Вспомогательные функции ==========
-def clear_memory_start(gccollect = False, debug = False):
-    t_start = time.perf_counter()   
-    comfy.model_management.unload_all_models()
-    comfy.model_management.soft_empty_cache()
-    _debug_print(debug, "clear memory: unload_all_models", t_start)
-                
+def clear_memory(gccollect = False, debug = False):
     try:
-        if gccollect:
-            t_start = time.perf_counter()   
-            gc.collect()
-            _debug_print(debug, "clear memory: gc.collect", t_start)
+        t_start = time.perf_counter()   
+        comfy.model_management.unload_all_models()
+        comfy.model_management.soft_empty_cache()
+        _debug_print(debug, "clear memory: unload_all_models", t_start)
 
         t_start = time.perf_counter()   
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
         _debug_print(debug, "clear memory: cuda.empty_cache", t_start)
 
+        if gccollect:
+            t_start = time.perf_counter()   
+            gc.collect()
+            _debug_print(debug, "clear memory: gc.collect", t_start)
+
     except Exception as e:
-        print(f"[WARNING] during cache clearing: {e}", file=sys.stderr)
+        print(f"[ERROR] during cache clearing: {e}", file=sys.stderr)
 
 def clear_temp_files(temp_image_paths):
     for path in temp_image_paths:
@@ -296,8 +297,8 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
             if _current_module is not None and _current_module != module:
                 unload_model(gccollect, debug)
 
-            result = module.run_inference_direct(config)
             _current_module = module
+            result = module.run_inference_direct(config)
 
             if mode == "direct_clean":
                 unload_model(gccollect, debug)
@@ -308,23 +309,48 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
             return text, conditioning
         else:
             error_msg = f"[ERROR] {result.get('message', 'Unknown error')}"
-            debug_info = result.get("debug_info")
-            if debug_info:
+
+            print(error_msg, file=sys.stderr)
+
+            # Если есть debug_info (подпроцесс)
+            if "debug_info" in result:
+                debug_info = result["debug_info"]
                 if isinstance(debug_info, dict):
-                    print(f"Inference Error - STDOUT:\n{debug_info.get('stdout', '')}")
-                    print(f"Inference Error - STDERR:\n{debug_info.get('stderr', '')}")
+                    stdout = debug_info.get('stdout', '')
+                    stderr = debug_info.get('stderr', '')
+                    if stdout:
+                        print("Subprocess STDOUT:", file=sys.stderr)
+                        print(stdout, file=sys.stderr)
+                    if stderr:
+                        print("Subprocess STDERR:", file=sys.stderr)
+                        print(stderr, file=sys.stderr)
                 else:
-                    print(f"Inference Error: {debug_info}")
+                    print(f"Debug info: {debug_info}", file=sys.stderr)
+
+            if "traceback" in result:
+                print("Traceback:", file=sys.stderr)
+                print(result["traceback"], file=sys.stderr)
+
+            # Очистка памяти при ошибке
+            unload_model(False, debug)
+            clear_memory(True, debug)
+
             return error_msg, None
     except Exception as e:
         error_msg = f"[ERROR] Unexpected error in inference pipeline: {str(e)}"
-        print(f"Inference Pipeline Error: {e}")
+        print(error_msg, file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)  
+
+        unload_model(False, debug)
+        clear_memory(True, debug)
+
         return error_msg, None
 
 def unload_model(gccollect = False,debug = False):
     global _current_module
     if _current_module is not None:
-        _current_module.unload_model(debug)
+        if hasattr(_current_module, 'unload_llama_model'):
+            _current_module.unload_llama_model(debug)
         _current_module = None
 
         if gccollect:
@@ -493,7 +519,7 @@ class SimpleQwen3VL_GGUF_Node:
  
             # Очистка моделей
             if unload_all_models:
-                clear_memory_start(gccollect_start, debug = debug)
+                clear_memory(gccollect_start, debug = debug)
 
             # Обработка изображений
             t1 = time.perf_counter()        
