@@ -6,6 +6,7 @@ import os
 import base64
 import traceback
 import time
+import gc
 from PIL import Image
 
 from pathlib import Path
@@ -115,6 +116,7 @@ def _inference(config):
         silent = config.get("silent", False)
         chat_handler_type = config.get("chat_handler", "").lower()
         chat_format = config.get("chat_format", "").lower()
+        gccollect = config.get("force_gc_unload", False)
 
         global _cached_llm, _cached_model_hash
 
@@ -154,7 +156,7 @@ def _inference(config):
             # --- Загрузка новой модели ---
 
             # Выгружаем старую модель
-            unload_llama_model(debug)
+            unload_llama_model(gccollect, debug)
 
             chat_handler = None
 
@@ -486,21 +488,25 @@ def run_inference_direct(config):
     """Функция для прямого вызова. Возвращает словарь с результатом."""
     return _inference(config)
 
-def unload_llama_model(debug = False):
+def unload_llama_model(gccollect, debug = False):
     """Выгружает модель из VRAM"""
     global _cached_llm, _cached_model_hash
     if _cached_llm is not None:
         t_start = time.perf_counter()
-
         try:
             if hasattr(_cached_llm, '_ctx') and _cached_llm._ctx is not None:
                 _cached_llm._ctx.close()  
         except Exception:
             pass  
-
         del _cached_llm
         _cached_llm = None
         _debug_print(debug, "unload_llama_model", t_start, file=sys.stderr)   
+
+        if gccollect:
+            t_start = time.perf_counter()
+            gc.collect()
+            _debug_print(debug, "gc.collect", t_start)
+
     _cached_model_hash = None
 
 # Режим подпроцесса

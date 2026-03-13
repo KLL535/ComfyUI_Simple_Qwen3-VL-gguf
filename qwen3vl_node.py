@@ -350,13 +350,8 @@ def unload_model(gccollect = False,debug = False):
     global _current_module
     if _current_module is not None:
         if hasattr(_current_module, 'unload_llama_model'):
-            _current_module.unload_llama_model(debug)
+            _current_module.unload_llama_model(gccollect, debug)
         _current_module = None
-
-        if gccollect:
-            t_start = time.perf_counter()
-            gc.collect()
-            _debug_print(debug, "gc.collect", t_start)
 
 # ========== Основная нода ==========
 class SimpleQwen3VL_GGUF_Node:
