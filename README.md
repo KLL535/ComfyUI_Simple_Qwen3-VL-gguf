@@ -32,7 +32,7 @@ Version 0.3.30 or latest supports qwen3.5.
 
 <details>
 
-<summary>A. Build llama-cpp-python from source code</summary>
+<summary>Build llama-cpp-python from source code</summary>
 
 1. Clone the repositories using Git:
 - https://github.com/JamePeng/llama-cpp-python
@@ -90,10 +90,28 @@ Do not delete the source folder after installation — the editable install reli
 
 </details>
 
+<details>
+
+<summary>Simple bat file for fast build</summary>
+
+```bat
+cd llama-cpp-python\vendor\llama.cpp\
+git pull
+cd ..\..\
+git pull
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
+set CMAKE_GENERATOR=Ninja
+set MAX_JOBS=16
+set CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DCMAKE_BUILD_TYPE=Release
+H:\ComfyUI128\python_embeded\python.exe -m pip install . --no-cache-dir
+pause
+``` 
+
+</details>
 
 <details>
 
-<summary>B. OR download WHL packages for your configuration</summary>
+<summary>OR download WHL packages for your configuration</summary>
 
 - https://github.com/JamePeng/llama-cpp-python/releases
   
@@ -107,6 +125,49 @@ python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
 </details>
+
+<details>
+
+<summary>Launch a model with a huge context with TurboQuants</summary>
+
+1. The standard library llama.cpp doesn't yet support TurboQuants, so for now we'll use this fork for llama.cpp (put fork in directory `llama-cpp-python\vendor\llama.cpp`):
+https://github.com/spiritbuun/llama-cpp-turboquant-cuda
+
+2. Check branch: `feature/turboquant-kv-cache`
+   
+3. Then comes the standard compilation (There may be errors, as the project is completely new).
+
+4. In `Comfy-UI`, you will need to enable this mode as follows (no new special models are required, the mechanism works with older models) options, by connecting a textbox to the config_override input with the following text:
+```
+"verbose": true,
+"ctx": 262144,
+"extra_llama_type_k": 41,
+"extra_llama_type_v": 41
+```
+Where:
+262144 - max context to model
+41 - ggml type, the following options are available in the fork:
+```
+GGML_TYPE_TURBO3_0 = 41, // TurboQuant 3-bit KV cache: 2-bit PolarQuant + 1-bit QJL
+GGML_TYPE_TURBO4_0 = 42, // TurboQuant 4-bit KV cache: 3-bit PolarQuant + 1-bit QJL
+GGML_TYPE_TURBO2_0 = 43, // TurboQuant 2-bit KV cache: 2-bit PolarQuant, no QJL
+in file llama-cpp-python\vendor\llama.cpp\ggml\include\ggml.h
+```
+5. Result verbose:
+```
+llama_kv_cache: size = 1792.00 MiB (262144 cells,   8 layers,  1/1 seqs), K (turbo3):  896.00 MiB, V (turbo3):  896.00 MiB
+```
+Context compression up to ~4x
+
+6. Asymmetric mode (if you notice a drop in quality, because k-quant are more sensitive)
+```
+"extra_llama_type_k": 8, //Q8 (Not to be confused with quantization of model weights, this is quantization of attention)
+"extra_llama_type_v": 41 //turbo3
+```
+
+</details>
+
+
 
 ### CUDA Support
 
