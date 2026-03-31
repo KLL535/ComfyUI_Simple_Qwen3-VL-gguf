@@ -11,7 +11,8 @@ This version was created to meet my requirements:
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
 # Last update:
-**08.03.2026 - Nightly**
+**08.03.2026 - V3.5|Nightly**
+- TurboQuants feature (for now requires a fork of llama.cpp)
 - Adding a new mode `"raw_mode": true` which allows you to set custom `prompt templates`. The Joycaption model now works correctly (see new configs below).
 - Three execution modes have been added: `subprocess` — inference runs in a separate process (safe, isolated); `direct_clean` — in the main process with model unloading after each run; `keep_vram` — the model remains in VRAM for repeated use.
 - Added `config_override` - the ability to add/override any configuration parameters via a text input directly in the node
