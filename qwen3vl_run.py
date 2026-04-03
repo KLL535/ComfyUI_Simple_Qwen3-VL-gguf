@@ -350,15 +350,8 @@ def _inference(config):
 
             # Формируем сообщения для чата
 
-            t3 = time.perf_counter()
-
-            from jinja2 import Template
-
             default_template = (
-                #"<|begin_of_text|>"
                 "<|start_header_id|>system<|end_header_id|>\n\n"
-                #"Cutting Knowledge Date: December 2023\n"
-                #"Today Date: 26 July 2024\n\n"
                 "{system}"  
                 "<|eot_id|>"
                 "<|start_header_id|>user<|end_header_id|>\n\n"
@@ -372,51 +365,71 @@ def _inference(config):
             template_str = config.get("prompt_template", default_template)
             text_before, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
 
-            # 2. Собираем content
-            content = [{"type": "text", "text": text_before}]
-            for img_item in images:
-                img_content = _build_image_content(img_item, quality=image_quality)
-                if img_content is not None:
-                    content.append(img_content)
-            content.append({"type": "text", "text": text_after})
+            chat_handler = getattr(_cached_llm, "chat_handler", None)        
+            if chat_handler is not None:
 
-            messages = [{"role": "user", "content": content}]
+                t3 = time.perf_counter()
 
-            _debug_print(debug, f"create raw prompt (with {num_images} image)", t3, file=sys.stderr)
+                # 2. Собираем content
+                content = [{"type": "text", "text": text_before}]
+                for img_item in images:
+                    img_content = _build_image_content(img_item, quality=image_quality)
+                    if img_content is not None:
+                        content.append(img_content)
+                content.append({"type": "text", "text": text_after})
 
-            t5 = time.perf_counter()
+                messages = [{"role": "user", "content": content}]
 
-            # 3. Минимальный шаблон 
-            clean_template = Template(
-                "{%- for msg in messages %}"
-                "{%- if msg.role == 'user' %}"
-                "{%- if msg.content is string %}{{ msg.content }}"
-                "{%- elif msg.content is iterable %}"
-                "{%- for part in msg.content %}"
-                "{%- if part.type == 'image_url' %}<__media__>{%- endif %}"
-                "{%- if part.type == 'text' %}{{ part.text }}{%- endif %}"
-                "{%- endfor %}"
-                "{%- endif %}"
-                "{%- endif %}"
-                "{%- endfor %}"
-            )
+                from jinja2 import Template
 
-            # 4. Подмена + вызов + возврат 
-            chat_handler = _cached_llm.chat_handler
-            original_template = chat_handler.chat_template
-            chat_handler.chat_template = clean_template
+                # 3. Минимальный шаблон 
+                clean_template = Template(
+                    "{%- for msg in messages %}"
+                    "{%- if msg.role == 'user' %}"
+                    "{%- if msg.content is string %}{{ msg.content }}"
+                    "{%- elif msg.content is iterable %}"
+                    "{%- for part in msg.content %}"
+                    "{%- if part.type == 'image_url' %}<__media__>{%- endif %}"
+                    "{%- if part.type == 'text' %}{{ part.text }}{%- endif %}"
+                    "{%- endfor %}"
+                    "{%- endif %}"
+                    "{%- endif %}"
+                    "{%- endfor %}"
+                )
 
-            try:
+                # 4. Подмена + вызов + возврат 
+                original_template = chat_handler.chat_template
+                chat_handler.chat_template = clean_template
+
+                _debug_print(debug, f"create raw prompt (with {num_images} image)", t3, file=sys.stderr)
+
+                t5 = time.perf_counter()
+
                 result = _cached_llm.create_chat_completion(
                     messages=messages,
                     stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                     **completion_kwargs
                 )
                 output = result["choices"][0]["message"]["content"]
-            finally:
+
                 chat_handler.chat_template = original_template
 
-            _debug_print(debug, "inference", t5, file=sys.stderr)
+                _debug_print(debug, "inference (raw)", t5, file=sys.stderr)
+
+            else:
+
+                # Текстовый режим
+
+                t5 = time.perf_counter()
+
+                result = _cached_llm.create_completion(
+                    prompt=text_before + text_after,
+                    stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
+                    **completion_kwargs
+                )
+                output = result["choices"][0]["text"]
+
+                _debug_print(debug, "inference (raw text)", t5, file=sys.stderr)
 
         else:
 
@@ -472,6 +485,9 @@ def _inference(config):
             output = result["choices"][0]["message"]["content"]
 
         _debug_print(debug, "total", overall_start, file=sys.stderr)   
+
+        if not config.get("raw_output", False):
+            output = output.strip()
 
         return {"status": "success", "output": output}
 
