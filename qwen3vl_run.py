@@ -20,20 +20,21 @@ from debug_print import _debug_print
 _cached_llm = None
 _cached_model_hash = None
 
-_log_callback_initialized = False
-_log_callback_obj = None
-def silent_log_callback(level, text, user_data):
-    pass
+#_log_callback_initialized = False
+#_log_callback_obj = None
+#def silent_log_callback(level, text, user_data):
+#    pass
 def set_silent_logging(silent):
-    global _log_callback_initialized, _log_callback_obj
-    if not silent:
-        return
-    if _log_callback_initialized:
-        return
-    import llama_cpp
-    _log_callback_obj = llama_cpp.llama_log_callback(silent_log_callback)
-    llama_cpp.llama_log_set(_log_callback_obj, None)
-    _log_callback_initialized = True
+    pass
+    #global _log_callback_initialized, _log_callback_obj
+    #if not silent:
+    #    return
+    #if _log_callback_initialized:
+    #    return
+    #import llama_cpp
+    #_log_callback_obj = llama_cpp.llama_log_callback(silent_log_callback)
+    #llama_cpp.llama_log_set(_log_callback_obj, None)
+    #_log_callback_initialized = True
 
 def build_prompt(template: str, system: str, user: str):
     # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
