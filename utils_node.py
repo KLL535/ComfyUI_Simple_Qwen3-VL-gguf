@@ -190,10 +190,22 @@ class SimpleRemoveThinkNode:
     RETURN_NAMES = ("cleaned_text",)
     FUNCTION = "process"
     CATEGORY = CATEGORY_NAME
-    DESCRIPTION = "Remove <think>...</think> section in text"
+    DESCRIPTION = "Remove <think>...</think> or <|channel>...<channel|> section in text"
 
     def process(self, text):
+
+        # 1. Удаляем think-блоки
         cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
         cleaned = cleaned.split('</think>')[-1]
-        cleaned = '\n'.join([line for line in cleaned.split('\n') if line.strip()])
+        
+        # 2. Удаляем channel-блоки
+        cleaned = re.sub(r'<\|channel>.*?<channel\|>', '', cleaned, flags=re.DOTALL)
+        cleaned = cleaned.split('<channel|>')[-1]
+
+        # 3. Схлопываем множественные пустые строки в одну
+        cleaned = re.sub(r'\n\s*\n+', '\n\n', cleaned)
+        
+        # 4. Удаляем пустые строки в начале и конце
+        cleaned = cleaned.strip()
+
         return (cleaned,)
