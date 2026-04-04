@@ -16,38 +16,6 @@ if current_dir not in sys.path:
 
 from debug_print import _debug_print
 
-CHAT_FORMAT_MAP = {
-    # ----- Модели на базе Qwen -----
-    "qwen25": "qwen",
-    "qwen3": "qwen",
-    "qwen35": "qwen",
-
-    # ----- Модели на базе LLaVA / Vicuna -----
-    "llava15": "vicuna",
-    "llava16": "vicuna",
-    "bakllava": "vicuna",
-
-    # ----- Модели на базе ChatML -----
-    "minicpmv26": "chatml",
-    "minicpmv45": "chatml",
-    "glm41v": "chatml",
-    "glm46v": "chatml",
-    "obsidian": "chatml",
-    "nanollava": "chatml",
-    "lfm2vl": "chatml",
-
-    # ----- Модели на базе Llama-3 -----
-    "llama3visionalpha": "llama-3",
-
-    # ----- Gemma -----
-    "gemma3": "gemma",           
-
-    # ----- Неоднозначные / без явного соответствия -----
-    "moondream": "vicuna",       # предположительно
-    "granite": "chatml",         # предположительно
-    "paddleocr": "chatml",       # предположительно
-}
-
 # Глобальный кеш для модели (чтобы сохранять между прямыми вызовами)
 _cached_llm = None
 _cached_model_hash = None
@@ -117,6 +85,8 @@ def _inference(config):
         chat_handler_type = config.get("chat_handler", "").lower()
         chat_format = config.get("chat_format", "").lower()
         gccollect = config.get("force_gc_unload", False)
+        image_min_tokens = config.get("image_min_tokens")
+        image_max_tokens = config.get("image_max_tokens")
 
         global _cached_llm, _cached_model_hash
 
@@ -169,9 +139,13 @@ def _inference(config):
                 handler_kwargs = {
                     "clip_model_path": mmproj_path,
                     "verbose": verbose,
-                    "image_min_tokens": config.get("image_min_tokens", 1024),
-                    "image_max_tokens": config.get("image_max_tokens", 4096),
                 }
+
+                if image_min_tokens is not None:
+                    handler_kwargs["image_min_tokens"] = image_min_tokens
+
+                if image_max_tokens is not None:
+                    handler_kwargs["image_max_tokens"] = image_max_tokens
 
                 for key, value in config.items():
                     if key.startswith("extra_chat_handler_"):
@@ -180,7 +154,17 @@ def _inference(config):
 
                 extra_handler_kwargs = {}
 
-                if chat_handler_type == "qwen35":
+                if chat_handler_type == "gemma4":
+                    try:
+                        from llama_cpp.llama_chat_format import Gemma4ChatHandler
+                    except ImportError:
+                        return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Gemma4 requires version v0.3.35 or higher."}
+                    extra_handler_kwargs = {
+                        "enable_thinking": config.get("enable_thinking", False),
+                    }
+                    chat_handler = Gemma4ChatHandler(**handler_kwargs, **extra_handler_kwargs)
+
+                elif chat_handler_type == "qwen35":
                     try:
                         from llama_cpp.llama_chat_format import Qwen35ChatHandler
                     except ImportError:
@@ -301,16 +285,21 @@ def _inference(config):
                     llm_kwargs[new_key] = value
 
             if chat_handler is not None:
-                # Мультимодальный режим: используем кастомный хендлер
+                # Мультимодальный режим: используем chat_handler
                 llm_kwargs["chat_handler"] = chat_handler
-                llm_kwargs["image_min_tokens"] = config.get("image_min_tokens", 1024)
-                llm_kwargs["image_max_tokens"] = config.get("image_max_tokens", 4096)
+
+                if image_min_tokens is not None:
+                    llm_kwargs["image_min_tokens"] = image_min_tokens
+
+                if image_max_tokens is not None:
+                    llm_kwargs["image_max_tokens"] = image_max_tokens
             else:
-                # Текстовый режим: добавляем chat_format
-                if not chat_format:
-                    chat_format = CHAT_FORMAT_MAP.get(chat_handler_type)
-                    if chat_format:
-                        llm_kwargs["chat_format"] = chat_format
+                # Текстовый режим: добавляем chat_format, если он задан
+                if chat_format:
+                    llm_kwargs["chat_format"] = chat_format 
+
+                elif config.get("chat_format_from_gguf", False):
+                    llm_kwargs["chat_format"] = "chat_template.default"
 
             _cached_llm = Llama(**llm_kwargs)
             _cached_model_hash = current_hash
