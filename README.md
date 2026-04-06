@@ -103,7 +103,7 @@ Do not delete the source folder after installation — the editable install reli
 cd llama-cpp-python\vendor\llama.cpp\
 git pull
 cd ..\..\
-git pull
+git pull --rebase
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
 set CMAKE_GENERATOR=Ninja
 set MAX_JOBS=16
