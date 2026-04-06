@@ -93,6 +93,10 @@ Do not delete the source folder after installation — the editable install reli
 
 ⏱️ Build time: Without Ninja, compilation may take 30–60 minutes depending on your hardware.
 
+⏱️ Build time: With Ninja, compilation may take 1–2 minutes depending on your hardware.
+
+> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfu-ui.
+
 </details>
 
 <details>
@@ -110,7 +114,10 @@ set MAX_JOBS=16
 set CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DCMAKE_BUILD_TYPE=Release
 H:\ComfyUI128\python_embeded\python.exe -m pip install . --no-cache-dir
 pause
-``` 
+```
+
+> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfu-ui.
+
 
 </details>
 
@@ -128,6 +135,8 @@ python -m pip install json_repair,colorama
 
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
+
+> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfu-ui.
 
 </details>
 
