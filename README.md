@@ -11,7 +11,7 @@ This version was created to meet my requirements:
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
 # Last update:
-**04.04.2026 - Nightly**
+**04.04.2026 - V3.6|Nightly**
 - Add Gemma4 support.
 - Fix `raw_mode` in text mode.
   
