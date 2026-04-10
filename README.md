@@ -558,20 +558,20 @@ Option appeared `enable_thinking": false`, but he doesn't turn off thinking :).
             "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
             "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
             "output_max_tokens": 2048,
-            "ctx": 8192, //Depends on the required task and the amount of free memory
+            "ctx": 8192, 
             "n_batch": 2048,
             "n_ubatch": 2048,
             "gpu_layers": -1,
-            "temperature": 1.0, //From the recommendations on the model page
-            "top_p": 0.95, //From the recommendations on the model page
+            "temperature": 1.0, 
+            "top_p": 0.95, 
             "min_p": 0.01,
             "repeat_penalty": 1.0,
-            "top_k": 64, //From the recommendations on the model page
+            "top_k": 64, 
             "script": "qwen3vl_run.py",
             "debug": true,
             "verbose": false,
             "enable_thinking": false,
-            "chat_handler": "gemma4" //💡 New chat handler 💡
+            "chat_handler": "gemma4" 
          },
 ```
 
@@ -594,7 +594,7 @@ You can write custom `prompt template` and then thinking will turn off.
             "chat_handler": "gemma4", 
             "script": "qwen3vl_run.py",
             "debug": true,
-            "raw_mode": true, //💡 redefine the chat template to custom one 💡
+            "raw_mode": true, 
             "prompt_template": "<|turn>system\n{system}<turn|>\n<|turn>user\n{images}\n{user}<turn|>\n<|turn>model\n",
             "stop": ["<turn|>", "<eos>", "<|end_of_turn|>"]
          },
