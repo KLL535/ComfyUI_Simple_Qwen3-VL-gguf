@@ -271,14 +271,21 @@ def _inference(config):
             llm_kwargs = {
                 "model_path": model_path,
                 "n_ctx": config.get("ctx", 8192),
-                "n_gpu_layers": config.get("gpu_layers", -1),
                 "n_batch": config.get("n_batch", 2048),
                 "n_ubatch": config.get("n_ubatch", 512),
                 "swa_full": config.get("swa_full", False),
                 "verbose": verbose,
                 "pool_size": config.get("pool_size", 4194304),
                 "n_threads": config.get("cpu_threads", os.cpu_count() or 8),
+
+                "n_gpu_layers": config.get("gpu_layers", -1),
+                "split_mode": config.get("split_mode", 1),
+                "main_gpu": config.get("main_gpu", 0)
             }
+
+            tensor_split = config.get("tensor_split")
+            if tensor_split:
+                llm_kwargs["tensor_split"] = tensor_split
 
             for key, value in config.items():
                 if key.startswith("extra_llama_"):
