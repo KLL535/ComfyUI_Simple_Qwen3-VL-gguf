@@ -48,31 +48,56 @@ def build_prompt(template: str, system: str, user: str):
         # Если метки нет, весь текст идёт до картинок
         return result, ""
 
-def pil_to_data_uri(image, quality=95):
-    """Конвертирует PIL.Image в data URI (JPEG base64)."""
-    buffer = io.BytesIO()
-    image.save(buffer, format="JPEG", quality=quality, optimize=True)
-    base64_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-    #import hashlib
-    #image_hash = hashlib.sha256(base64_str.encode('utf-8')).hexdigest()
-    #print(f"build_image: base64_str: {image_hash}", file=sys.stderr)
-
-    return f"data:image/jpeg;base64,{base64_str}"
-
 def _build_image_content(image_item, quality=95):
-    """Преобразует один элемент (путь или PIL) в словарь для content."""
+
+    # Сценарий 1: image -> в base64
     if isinstance(image_item, Image.Image):
-        return {"type": "image_url", "image_url": {"url": pil_to_data_uri(image_item, quality)}}
-    elif isinstance(image_item, str) and Path(image_item).exists():
-        file_url = Path(image_item).resolve().as_uri()
-        #print(f"build_image: file uri: {file_url}", file=sys.stderr)
+        buffer = io.BytesIO()
+        image_item.save(buffer, format="JPEG", quality=quality, optimize=True)
+        base64_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        file_url = f"data:image/jpeg;base64,{base64_str}"
         return {"type": "image_url", "image_url": {"url": file_url}}
+    
+    # Сценарий 2: путь к файлу -> передача пути напрямую
     elif isinstance(image_item, str):
-        print(f"build_image: Image file not found: {image_item}", file=sys.stderr)
-        return None
+        if Path(image_item).exists():
+            file_url = Path(image_item).resolve().as_uri()
+            return {"type": "image_url", "image_url": {"url": file_url}}
+        else:
+            print(f"build_image: Image file not found: {image_item}", file=sys.stderr)
+            return None
+    
     else:
-        print(f"build_image: Error", file=sys.stderr)
+        print(f"build_image: Unsupported type: {type(image_item)}", file=sys.stderr)
+        return None
+
+def _build_audio_content(audio_item):
+
+    # Сценарий 1: байты WAV -> в base64
+    if isinstance(audio_item, bytes):
+        b64_data = base64.b64encode(audio_item).decode("utf-8")
+        return {
+            "type": "input_audio",
+            "input_audio": {"data": b64_data, "format": "wav"}
+        }
+
+    # Сценарий 2: путь к файлу -> в base64
+    elif isinstance(audio_item, str):
+        path = Path(audio_item)
+        if path.exists():
+            with open(path, "rb") as f:
+                wav_bytes = f.read()
+            b64_data = base64.b64encode(wav_bytes).decode("utf-8")
+            return {
+                "type": "input_audio",
+                "input_audio": {"data": b64_data, "format": "wav"}
+            }
+        else:
+            print(f"build_audio: Audio file not found: {audio_item}", file=sys.stderr)
+            return None
+
+    else:
+        print(f"build_audio: Unsupported type: {type(audio_item)}", file=sys.stderr)
         return None
 
 def _inference(config):
@@ -114,13 +139,29 @@ def _inference(config):
             images = [images] if images else []
         num_images=len(images)
 
+        audios = config.get("audios") or config.get("audios_path") or []
+        if not isinstance(audios, list):
+            audios = [audios] if audios else []
+        num_audios=len(audios)
+
+        num_content = num_images + num_audios
+
+        content_text = ""
+        if num_content:
+            if num_images and num_audios:
+                content_text = f"(with {num_images} image and {num_audios} audio)"
+            elif num_images:
+                content_text = f"(with {num_images} images)"
+            elif num_audios:
+                content_text = f"(with {num_audios} audio)"
+
         t0 = time.perf_counter()
         set_silent_logging(silent)
         from llama_cpp import Llama
         _debug_print(debug, "import llama_cpp", t0, file=sys.stderr)
 
         mmproj_path = config.get("mmproj_path", "").strip()
-        is_vision_model = bool(num_images > 0 and mmproj_path)
+        is_vision_model = bool(num_content > 0 and mmproj_path)
 
         if need_new_model:
 
@@ -373,6 +414,12 @@ def _inference(config):
                     img_content = _build_image_content(img_item, quality=image_quality)
                     if img_content is not None:
                         content.append(img_content)
+
+                #for aud_item in audios:
+                #    aud_content = _build_audio_content(aud_item)
+                #    if aud_content is not None:
+                #        content.append(aud_content)
+
                 content.append({"type": "text", "text": text_after})
 
                 messages = [{"role": "user", "content": content}]
@@ -398,7 +445,7 @@ def _inference(config):
                 original_template = chat_handler.chat_template
                 chat_handler.chat_template = clean_template
 
-                _debug_print(debug, f"create raw prompt (with {num_images} image)", t3, file=sys.stderr)
+                _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
 
                 t5 = time.perf_counter()
 
@@ -442,6 +489,11 @@ def _inference(config):
                     if img_content is not None:
                         content.append(img_content)
 
+                for aud_item in audios:
+                    aud_content = _build_audio_content(aud_item)
+                    if aud_content is not None:
+                        content.append(aud_content)
+
                 if system_prompt:
                     messages = [
                         {"role": "system", "content": system_prompt},
@@ -463,7 +515,7 @@ def _inference(config):
                         {"role": "user", "content": user_prompt}
                     ]
 
-            _debug_print(debug, f"create message (with {num_images} image)", t3, file=sys.stderr)
+            _debug_print(debug, f"create message {content_text}", t3, file=sys.stderr)
 
             # --- Инференс ---
 

@@ -116,8 +116,8 @@ def clear_memory(gccollect = False, debug = False):
     except Exception as e:
         print(f"[ERROR] during cache clearing: {e}", file=sys.stderr)
 
-def clear_temp_files(temp_image_paths):
-    for path in temp_image_paths:
+def clear_temp_files(temp_paths):
+    for path in temp_paths:
         if isinstance(path, str) and os.path.exists(path):
             try:
                 os.unlink(path)
@@ -151,7 +151,8 @@ def process_images(image_inputs, file_mode=True, file_format='JPEG', jpeg_qualit
                 # Обработка одного изображения
                 total_images += 1
                 if total_images > max_images:
-                    raise ValueError(f"Total number of images exceeds {max_images}. Please reduce input.")
+                    print(f"[WARNING] Number of image exceeds {max_images}. Please reduce input/batch size.", file=sys.stderr)
+                    continue
                 # Далее как раньше: конвертация в PIL и сохранение
                 pil_img = tensor_to_pil(img_tensor)  # вынесем в отдельную функцию
                 if file_mode:
@@ -170,7 +171,8 @@ def process_images(image_inputs, file_mode=True, file_format='JPEG', jpeg_qualit
                 continue
             total_images += 1
             if total_images > max_images:
-                raise ValueError(f"Total number of images exceeds {max_images}. Please reduce input.")
+                print(f"[WARNING] Number of image exceeds {max_images}. Please reduce input/batch size.", file=sys.stderr)
+                continue
             pil_img = tensor_to_pil(img_tensor)
             if file_mode:
                 temp_path = save_pil_temp(pil_img, file_format, jpeg_quality)
@@ -179,6 +181,82 @@ def process_images(image_inputs, file_mode=True, file_format='JPEG', jpeg_qualit
                 results.append(pil_img)
         else:
             print(f"Warning: Unexpected tensor dimension {img_batch.ndim} for input {idx+1}, skipping")
+    return results
+
+def process_audios(audio_inputs, file_mode=True, target_sr=None, max_audios=3):
+    import numpy as np
+    import wave
+    import io
+
+    if target_sr is not None:
+        try:
+            import torchaudio
+        except ImportError:
+            target_sr = None
+            print("[WARNING] torchaudio not installed. Resampling disabled.", file=sys.stderr)
+
+    results = []
+    total = 0
+
+    for aud in audio_inputs:
+        if aud is None:
+            continue
+
+        # Распаковка
+        waveform = aud['waveform'] # тензор формы (B, C, T)
+        sr_in = aud.get('sample_rate', 16000)
+
+        # Ресемплинг (если нужен) – применяем ко всему батчу сразу
+        if target_sr is not None and sr_in != target_sr:
+            waveform = torchaudio.functional.resample(waveform, orig_freq=sr_in, new_freq=target_sr)
+            print(f"[DEBUG] Audio resample: {sr_in} -> {target_sr}", file=sys.stderr)
+            sr_in = target_sr
+        else:
+            print(f"[DEBUG] Audio sample rate: {sr_in}", file=sys.stderr)
+
+        # Переносим на CPU и в numpy
+        if hasattr(waveform, 'cpu'):
+            waveform = waveform.cpu()
+        aud_np = waveform.numpy()  # форма (B, C, T)
+
+        # Итерируем по батчу
+        for b in range(aud_np.shape[0]):
+            if total >= max_audios:
+                print(f"[WARNING] Number of audio exceeds {max_audios}. Please reduce input/batch size.", file=sys.stderr)
+                continue
+
+            # Берём один элемент батча: (C, T)
+            audio_channel_sample = aud_np[b]  # форма (C, T)
+
+            # Если стерео (C=2) – смешиваем в моно (усредняем по каналам)
+            if audio_channel_sample.shape[0] == 2:
+                audio_mono = np.mean(audio_channel_sample, axis=0)  # (T,)
+            else:
+                audio_mono = audio_channel_sample[0]  # берём первый канал, если C=1
+
+            # Float [-1,1] -> int16 PCM
+            aud_int16 = np.clip(audio_mono * 32767.0, -32768, 32767).astype(np.int16)
+
+            # Запись
+            if file_mode:
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
+                    with wave.open(f.name, 'wb') as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(sr_in)
+                        wf.writeframes(aud_int16.tobytes())
+                    results.append(f.name)
+            else:
+                buf = io.BytesIO()
+                with wave.open(buf, 'wb') as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)
+                    wf.setframerate(sr_in)
+                    wf.writeframes(aud_int16.tobytes())
+                results.append(buf.getvalue())
+
+            total += 1
+
     return results
 
 def tensor_to_pil(img_tensor):
@@ -460,6 +538,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "image": ("IMAGE",),
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
+                "audio": ("AUDIO",),
                 "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
                 "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
             }
@@ -480,6 +559,7 @@ class SimpleQwen3VL_GGUF_Node:
             image=None,
             image2=None,
             image3=None,
+            audio=None,
             system_prompt_override=None,
             config_override=None):
 
@@ -516,21 +596,34 @@ class SimpleQwen3VL_GGUF_Node:
             if unload_all_models:
                 clear_memory(gccollect_start, debug = debug)
 
-            # Обработка изображений
-            t1 = time.perf_counter()        
-            input_images = [image, image2, image3]
-            if mode == "subprocess":
-                temp_image_paths = process_images(input_images)
-                images_value = temp_image_paths
-            else:
-                pil_images = process_images(input_images, file_mode=False)
-                images_value = pil_images
-                temp_image_paths = []
 
-            _debug_print(debug, "process_images", t1)
+            # Обработка изображений и аудио
+            file_mode = (mode == "subprocess")
+            temp_image_paths = []
+            images_value = []
+            temp_audio_paths = []
+            audio_value = []
 
-            if len(images_value) == 0:
-                config["image_count"] = 0
+            # Изображения
+            input_images = [img for img in (image, image2, image3) if img is not None]
+            if input_images:
+                t1_image = time.perf_counter()
+                max_images = config.get("max_images",10)
+                images_value = process_images(input_images, file_mode=file_mode, max_images=max_images)
+                temp_image_paths = images_value if file_mode else []
+                _debug_print(debug, "process_images", t1_image)
+
+            # Аудио
+            if audio is not None:
+                t1_audio = time.perf_counter()
+                target_sr = config.get("audio_sample_rate") #None - disable resample
+                max_audios = config.get("max_audios",3)
+                audio_value = process_audios([audio], file_mode=file_mode, target_sr=target_sr, max_audios=max_audios)
+                temp_audio_paths = audio_value if file_mode else []
+                _debug_print(debug, "process_audios", t1_audio)
+
+            if (len(images_value) + len(audio_value)) == 0:
+                config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша
 
             # Определяем system_prompt
             system_prompt = config.get("system_prompt_default", "")
@@ -557,6 +650,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "user_prompt": user_prompt,
                 "system_prompt": system_prompt,
                 "images": images_value,
+                "audios": audio_value,
                 "seed": seed,
                 "config_hash": config_hash
             }
@@ -573,7 +667,13 @@ class SimpleQwen3VL_GGUF_Node:
 
             if temp_image_paths:
                 t_start = time.perf_counter()
-                clear_temp_files(temp_image_paths)
+
+                if temp_image_paths:
+                    clear_temp_files(temp_image_paths)
+
+                if temp_audio_paths:
+                    clear_temp_files(temp_audio_paths)
+
                 _debug_print(debug, "clear_temp_files", t_start)
 
             # Расчёт скорости генерации

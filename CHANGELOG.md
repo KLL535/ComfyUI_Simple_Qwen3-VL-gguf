@@ -1,4 +1,5 @@
 # nightly
+- Add audio input
 - Add `split_mode` settings
 # V3.6
 - Add Gemma4 support.
