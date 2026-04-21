@@ -12,6 +12,7 @@ This version was created to meet my requirements:
 
 # Last update:
 **11.04.2026 - Nightly**
+- Add audio input
 - Add `split_mode` settings for multi GPU
 
 **04.04.2026 - V3.6**
@@ -243,7 +244,8 @@ A universal version. The model and its parameters mast be passed to the `config_
 <summary>Parameters</summary>
 
 ### Parameters:
-- `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3 images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM.
+- `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3+ images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM. Batch is supported.
+- `audio`: *AUDIO* - analyzed audio from `Load Audio` etc. Batch is supported. See Example. The model must support this (eg gemma4) and llama.cpp **must** be newest.
 - `model preset`: *LIST* - allows you to select a model from templates from `system_prompts_user.json`. 
 - `system preset`: *LIST* - allows you to select a system prompt from templates
 - `system prompt override`: *STRING*, default: "" - If you supply text to this input, this text will be a system prompt, and **system_preset will be ignored**.
@@ -295,10 +297,6 @@ Possible model configurations that can be passed to the `config_override` input.
 | image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
 | merge_system_and_user | bool | False | If True, combines system and user prompts into a single user message.Used for some llava-type models. |
 | gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
-| cuda_device https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/24 | int/str | None | System level. Sets `CUDA_VISIBLE_DEVICES` environment variable before initialization. Restricts GPU visibility for the entire Python process. Accepts single index (0) or comma-separated list ("0,1"). Remaps logical GPU indices for llama-cpp (e.g., cuda_device=2 makes physical GPU2 appear as logical 0, so main_gpu must be 0). Must be set before any CUDA library loads; runtime changes are ignored. Use for strict GPU isolation in multi-GPU or shared environments. to the specified device(s). 💡 It may not work correctly in `direct_clear` and `keep_vram` modes, since comfi-ui is already running llama.cpp with its own settings. |
-| main_gpu | int | 0 | Library level. Index of the primary GPU to use when split_mode=0 (NONE). Ignored in LAYER/ROW modes except for KV-cache placement. Works with CUDA_VISIBLE_DEVICES filtering: if CUDA_VISIBLE_DEVICES=1, then main_gpu=0 refers to physical GPU1. |
-| split_mode | int | 1 | GPU splitting mode: 0=NONE (No splitting. The model is loaded onto a single main_gpu), 1=LAYER (distribute layers across GPUs. This is the most common mode. Different layers of the neural network are assigned to different GPUs. For example, layers 1-16 go to GPU0, and 17-32 go to GPU1.), 2=ROW (tensor parallelism, this splits the actual weight matrices across GPUs. It can be faster for certain operations but usually requires higher bandwidth between GPUs). Use 0 for single-GPU setups to avoid distribution overhead. |
-| tensor_split | list | None | List of floats specifying the fraction of the model to offload to each GPU (e.g., [0.7, 0.3] for 70%/30% split). Only effective when split_mode=1 (LAYER). Length must match number of visible GPUs. If not set, llama-cpp auto-balances based on VRAM. |
 | script | string |  | Name of the Python script to execute ("qwen3vl_run.py"). This field must be specified in the config. |
 | verbose | bool | False | Enables verbose logging from llama.cpp |
 | silent | bool | False | 💡 Unstable function. Disable. |
@@ -316,6 +314,17 @@ Possible model configurations that can be passed to the `config_override` input.
 | system_preset_to_user_prompt | bool | False | 💡 Allows you to switch the substitution of the `master_preset` list from the `system prompt` to the `user prompt`, if the model understands the task better this way. | 
 | system_prompt_default | string |  | 💡 Allows you to set the default system prompt for the model. | 
 | raw_output | bool | False | If True disables output.strip() | 
+| max_images | int | 10 | You can set a limit on the number of incoming images (in batch mode, you can transfer many images) | 
+| max_audios | int | 3 | You can set a limit on the number of incoming audio (in batch mode, you can transfer many audio) | 
+| audio_sample_rate | int | | You can set a new sampling frequency and then the audio will be resampled. | 
+
+Multi-GPU settings https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/24:
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| cuda_device | int/str | None | System level. Sets `CUDA_VISIBLE_DEVICES` environment variable before initialization. Restricts GPU visibility for the entire Python process. Accepts single index (0) or comma-separated list ("0,1"). Remaps logical GPU indices for llama-cpp (e.g., cuda_device=2 makes physical GPU2 appear as logical 0, so main_gpu must be 0). Must be set before any CUDA library loads; runtime changes are ignored. Use for strict GPU isolation in multi-GPU or shared environments. to the specified device(s). 💡 It may not work correctly in `direct_clear` and `keep_vram` modes, since comfi-ui is already running llama.cpp with its own settings. |
+| main_gpu | int | 0 | Library level. Index of the primary GPU to use when split_mode=0 (NONE). Ignored in LAYER/ROW modes except for KV-cache placement. Works with CUDA_VISIBLE_DEVICES filtering: if CUDA_VISIBLE_DEVICES=1, then main_gpu=0 refers to physical GPU1. |
+| split_mode | int | 1 | GPU splitting mode: 0=NONE (No splitting. The model is loaded onto a single main_gpu), 1=LAYER (distribute layers across GPUs. This is the most common mode. Different layers of the neural network are assigned to different GPUs. For example, layers 1-16 go to GPU0, and 17-32 go to GPU1.), 2=ROW (tensor parallelism, this splits the actual weight matrices across GPUs. It can be faster for certain operations but usually requires higher bandwidth between GPUs). Use 0 for single-GPU setups to avoid distribution overhead. |
+| tensor_split | list | None | List of floats specifying the fraction of the model to offload to each GPU (e.g., [0.7, 0.3] for 70%/30% split). Only effective when split_mode=1 (LAYER). Length must match number of visible GPUs. If not set, llama-cpp auto-balances based on VRAM. |
 
 Custom prompt templates:
 | Field | Type | Default | Description |
