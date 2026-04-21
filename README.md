@@ -11,7 +11,7 @@ This version was created to meet my requirements:
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
 # Last update:
-**11.04.2026 - Nightly**
+**21.04.2026 - Nightly**
 - Add audio input
 - Add `split_mode` settings for multi GPU
 
