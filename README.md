@@ -620,6 +620,50 @@ You can write custom `prompt template` and then thinking will turn off.
 
 <details>
 
+<summary>Cydonia-24B</summary>
+
+- https://huggingface.co/mradermacher/Cydonia-24B-v4.3-absolute-heresy-GGUF
+
+There is no visual encoder (mmproj) here, but you can take it from the base model (Mistral-Small), for example from here:
+
+- https://huggingface.co/ggml-org/Mistral-Small-3.1-24B-Instruct-2503-GGUF/tree/main
+
+> 💡 **Warning:** This is diffefent `mmproj` projector! If the projector didn't freeze during fine-tune, it may have degraded (the vector space "floated"). In this case, there is a 95% chance that the projector is not damaged.
+
+For example:
+`Cydonia-24B-v4.3-absolute-heresy.IQ4_XS.gguf` + `mmproj-Mistral-Small-3.1-24B-Instruct-2503-f16.gguf`
+
+> 💡 **Warning:** I couldn't find a compatible chat handler, so I'm using a custom one. 
+
+```json
+        "Cydonia-24B": {
+            "model_path": "H:\\LLM2\\Cydonia_24b\\Cydonia-24B-v4.3-absolute-heresy.IQ4_XS.gguf",
+            "mmproj_path": "H:\\LLM2\\Cydonia_24b\\mmproj-Mistral-Small-3.1-24B-Instruct-2503-f16.gguf",
+            "output_max_tokens": 2048,
+            "ctx": 8192, 
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "gpu_layers": -1,
+            "temperature": 0.7, 
+            "top_p": 0.9,
+            "min_p": 0.02,
+            "repeat_penalty": 1.1,
+            "top_k": 40, 
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "verbose": false,
+            "chat_handler": "llava15",
+            "raw_mode": true,
+            "prompt_template": "[SYSTEM_PROMPT]{system}[/SYSTEM_PROMPT][INST]{images}{user}[/INST]",
+            "stop": ["</s>", "[INST]", "[SYSTEM_PROMPT]"]
+        },
+```
+
+</details>
+
+
+<details>
+
 <summary>Qwen3.5-9B</summary>
 
 - https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF
