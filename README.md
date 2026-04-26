@@ -35,9 +35,33 @@ Qwen3 support hasn't been added to the standard library, `llama-cpp-python`, whi
 The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
 
-Check the version number of llama-cpp-python you're using.
-Version 0.3.17 or latest from **JamePeng** supports qwen3-VL.
-Version 0.3.30 or latest supports qwen3.5.
+Check the version number of llama-cpp-python from **JamePeng** you're using:
+- Version 0.3.17 or latest supports qwen3-VL.
+- Version 0.3.30 or latest supports qwen3.5.
+- Version 0.3.35 or latest supports gemma4.
+
+### Variant 1 - Download WHL
+
+<details>
+
+<summary> Download WHL packages for your configuration</summary>
+
+- https://github.com/JamePeng/llama-cpp-python/releases
+  
+For example:
+```
+cd *path_to_comfyui*\python_embeded
+
+python -m pip install json_repair,colorama
+
+python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
+```
+
+> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfy-UI.
+
+</details>
+
+### Variant 2 - Build from source code (I recommend this variant to learn)
 
 <details>
 
@@ -144,7 +168,7 @@ Do not delete the source folder after installation — the editable install reli
 
 <details>
 
-<summary>Simple bat file for fast build</summary>
+<summary>Simple bat file for fast update</summary>
 
 ```bat
 cd llama-cpp-python\vendor\llama.cpp\
@@ -164,24 +188,11 @@ pause
 
 </details>
 
-<details>
+### llama.cpp forks:
 
-<summary>OR download WHL packages for your configuration</summary>
+You can try installing various forks that implement new functionality that has not yet been added to the main library.
 
-- https://github.com/JamePeng/llama-cpp-python/releases
-  
 For example:
-```
-cd *path_to_comfyui*\python_embeded
-
-python -m pip install json_repair,colorama
-
-python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
-```
-
-> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfu-ui.
-
-</details>
 
 <details>
 
@@ -223,8 +234,6 @@ Context compression up to ~4x
 ```
 
 </details>
-
-
 
 ### CUDA Support
 
