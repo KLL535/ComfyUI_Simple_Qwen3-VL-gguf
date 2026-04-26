@@ -41,6 +41,45 @@ Version 0.3.30 or latest supports qwen3.5.
 
 <details>
 
+<summary>Installing software before compilation</summary>
+
+1. Check that you have **CUDA Toolkit** installed.
+For example: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0`
+- Try installing: https://developer.nvidia.com/cuda-downloads
+- Check that the **PATH** in Environment Variables includes the **CUDA Toolkit** bin folder (For example: `C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v13.0\bin`).
+- After installing CUDA Toolkit, restart your computer.
+
+2. Check that the **NVIDIA Driver** and CUDA Toolkit versions match (the driver can and most often should be newer than the CUDA Toolkit version):
+Run command in CMD `nvidia-smi`.
+
+3. Check that you have **Visual C++ Redistributable** installed. 
+- Try installing: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist?view=msvc-170
+- Install both versions (x86 and x64).
+
+4. Check that you have **Visual Studio 2022** installed. 
+- Install Visual Studio 2022.  
+- Install the following packages (they will not be installed by default):
+  
+☑ Desktop development with C++ (in Workloads tab).
+
+☑ MSVC v143 - VS 2022 C++ x64/x86 build tools (in Individual components tab).
+
+☑ Windows 10/11 SDK (in Individual components tab).
+
+☑ CMake tools for Visual Studio (in Individual components tab).
+
+- The environment variable for MSVC is not added to the **PATH** by default.
+Run this command every time in your terminal before compiling:
+`call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
+
+5. If you use **python_embeded** for Comfy-UI, may need to add missing libs folders: `python_embeded\include`, `python_embeded\libs` (Not Lib\site-packages), `python_embeded\DLLs`:
+- From here https://github.com/astral-sh/python-build-standalone/releases download Python **appropriate** version (for example `cpython-3.13.11+20251217-x86_64-pc-windows-msvc-install_only.tar.gz`)
+- unzip and copy the necessary folders to `python_embeded`.
+   
+</details>
+
+<details>
+
 <summary>Build llama-cpp-python from source code</summary>
 
 1. Clone the repositories using Git:
@@ -190,8 +229,8 @@ Context compression up to ~4x
 ### CUDA Support
 
 This project requires CUDA runtime libraries. They can be sourced from:
-- The **CUDA Toolkit**: https://developer.nvidia.com/cuda-downloads *(recommended for compiling from source)*
-- OR an existing **PyTorch** installation *(sufficient for running pre-built extensions)*
+- The **CUDA Toolkit**: https://developer.nvidia.com/cuda-downloads *(recommended)*
+- OR an existing **PyTorch** installation 
 
 > 💡 **Tip:** If you use ComfyUI, you likely already have PyTorch. In that case, you probably **don't need to install the CUDA Toolkit separately** — the necessary libraries will be found automatically.
 
@@ -621,6 +660,8 @@ You can write custom `prompt template` and then thinking will turn off.
 <details>
 
 <summary>Cydonia-24B</summary>
+
+An interesting fine-tuned model based on mistral.
 
 - https://huggingface.co/mradermacher/Cydonia-24B-v4.3-absolute-heresy-GGUF
 
@@ -1053,7 +1094,7 @@ If an error occurs, try it:
 - increase `pool_size`
 - decrease `ctx`
 
-### 3. Issue: Build problem & failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll 
+### 3. Issue: Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll 
 
 1. Check that the files `ggml.dll, ggml-base.dll, ggml-cpu.dll, ggml-cuda.dll, llama.dll, mtmd.dll` exist at the specified path.
 
@@ -1076,25 +1117,6 @@ Download: https://github.com/lucasg/Dependencies/releases
 Unzip and run **DependenciesGui.exe**.
 Drag the `ggml.dll` (**and other dll**) file into program. 
 Look any red or yellow warnings? 
-
-6. If library not compile, check that you have **Visual Studio 2022** installed? 
-- Install Visual Studio 2022.  
-- Install packages (they will not be installed by default):
-  
-☑ Desktop development with C++ (in Workloads tab).
-
-☑ MSVC v143 - VS 2022 C++ x64/x86 build tools (in Individual components tab).
-
-☑ Windows 10/11 SDK (in Individual components tab).
-
-☑ CMake tools for Visual Studio (in Individual components tab).
-
-- Create **PATH** in Environment Variable to MSVC (they will not be created by default).
-CMD comand to automatically set the paths to MSVC:
-`call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"`
-Run this command every time before compiling.
-
-7. If you use **python_embeded** for Comfy-UI, may need to add missing libs folders: `python_embeded\include`, `python_embeded\libs` (Not Lib\site-packages), `python_embeded\DLLs`: From here https://github.com/astral-sh/python-build-standalone/releases download Python **appropriate** version (for example `cpython-3.13.11+20251217-x86_64-pc-windows-msvc-install_only.tar.gz`), unzip and copy the necessary folders to `python_embeded`.
 
 #### Update: #### 
 **Runtime library detection for GGML CUDA support**
