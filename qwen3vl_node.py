@@ -128,7 +128,6 @@ def process_images(image_inputs, file_mode=True, file_format='JPEG', jpeg_qualit
     """
     image_inputs: список из трёх элементов (image, image2, image3), каждый может быть тензором (B,H,W,C) или None.
     Возвращает список путей к временным файлам (если file_mode=True) или список PIL.Image.
-    Если общее количество изображений превышает max_images, выбрасывает ValueError.
     """
     results = []
     total_images = 0
@@ -259,6 +258,37 @@ def process_audios(audio_inputs, file_mode=True, target_sr=None, max_audios=3):
 
     return results
 
+def process_videos(video_inputs):
+    """
+    Стадия 1: Просто вытягивает пути к видеофайлам.
+    """
+    results = []
+    
+    for vid in video_inputs:
+        if vid is None:
+            continue
+            
+        video_path = None
+            
+        # Работаем только с новым стандартом VideoFromFile
+        if 'VideoFromFile' in str(type(vid)):
+            # Пытаемся достать приватный атрибут __file
+            if hasattr(vid, '_VideoFromFile__file'):
+                video_path = str(vid._VideoFromFile__file)
+            elif hasattr(vid, 'path'):
+                video_path = str(vid.path)
+                
+            if video_path and os.path.exists(video_path):
+                results.append(video_path)
+            else:
+                print(f"[ERROR] Found VideoFromFile, but file path is invalid: {video_path}", file=sys.stderr)
+        else:
+            # Предупреждение для старых версий ComfyUI (выдающих тензоры кадров)
+            print("[WARNING] This node requires new ComfyUI 'VideoFromFile' object! "
+                  "Tensors (VHS Load Video) are not supported in this version.", file=sys.stderr)
+                  
+    return results # Список строк-путей
+
 def tensor_to_pil(img_tensor):
     """Конвертирует тензор (H,W,C) в PIL Image."""
     if img_tensor.shape[-1] == 4:
@@ -278,20 +308,16 @@ def save_pil_temp(pil_img, file_format, jpeg_quality):
             pil_img.save(f, format='PNG', optimize=True)
         return f.name
 
-def extract_conditioning_from_result(output_data, mode):
-    conditioning = None
-    if mode == "subprocess":
-        cond_path = output_data.get("embedding_file", None)
-        if cond_path and os.path.exists(cond_path):
-            try:
-                with open(cond_path, 'rb') as f:
-                    conditioning = pickle.load(f)
-                os.unlink(cond_path)
-            except Exception as e:
-                print(f"Warning: Failed to load conditioning: {e}")
-    else:
-        conditioning = output_data.get("embedding", None)
-    return conditioning
+def extract_embedding_from_file(emb_path):
+    embedding = None
+    if emb_path and os.path.exists(emb_path):
+        try:
+            with open(emb_path, 'rb') as f:
+                embedding = pickle.load(f)
+            os.unlink(emb_path)
+        except Exception as e:
+            print(f"[WARNING] Failed to load embedding: {e}")
+    return embedding
 
 def extract_json_from_output(output: str) -> dict:
     """Извлекает JSON из вывода, игнорируя логи до/после"""
@@ -364,6 +390,7 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
         return "[ERROR] Script name is not defined", None
     try:
 
+        embedding = None
         if mode == "subprocess":
             unload_model(gccollect, debug)
             result = run_script_subprocess(script_name, config, timeout=300)
@@ -376,14 +403,41 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
                 unload_model(gccollect, debug)
 
             _current_module = module
-            result = module.run_inference_direct(config)
+            result, embedding = module.run_inference_direct(config)
 
             if mode == "direct_clean":
                 unload_model(gccollect, debug)
 
         if result.get("status") == "success":
             text = result.get("output", "")
-            conditioning = extract_conditioning_from_result(result, mode)
+
+            if mode == "subprocess":
+                embedding_file = result.get("embedding_file")
+                if embedding_file is not None:
+                    embedding = extract_embedding_from_file(embedding_file)
+            
+            conditioning = None
+            if embedding is not None:
+
+                convert_emb_to_cond = config.get("convert_emb_to_cond")
+                if convert_emb_to_cond is not None:
+                    hidden_states = torch.from_numpy(embedding).unsqueeze(0)
+                    #  Формируем conditioning
+                    seq_len = hidden_states.shape[1]
+                    attention_mask = torch.ones((1, seq_len), dtype=torch.long)
+                    
+                    conditioning = [
+                        [
+                            hidden_states,
+                            {
+                                "pooled_output": None,
+                                "attention_mask": attention_mask
+                            }
+                        ]
+                    ]
+                else:
+                    conditioning = embedding
+
             return text, conditioning
         else:
             error_msg = f"[ERROR] {result.get('message', 'Unknown error')}"
@@ -539,6 +593,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
                 "audio": ("AUDIO",),
+                "video": ("VIDEO",),
                 "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
                 "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
             }
@@ -560,11 +615,12 @@ class SimpleQwen3VL_GGUF_Node:
             image2=None,
             image3=None,
             audio=None,
+            video=None,
             system_prompt_override=None,
             config_override=None):
 
         t0 = time.perf_counter()
-        temp_image_paths = []
+        temp_paths = []
         debug = None
         text = None
         try:
@@ -599,30 +655,37 @@ class SimpleQwen3VL_GGUF_Node:
 
             # Обработка изображений и аудио
             file_mode = (mode == "subprocess")
-            temp_image_paths = []
             images_value = []
-            temp_audio_paths = []
             audio_value = []
+            video_value = []
 
             # Изображения
             input_images = [img for img in (image, image2, image3) if img is not None]
             if input_images:
-                t1_image = time.perf_counter()
+                t_process_images = time.perf_counter()
                 max_images = config.get("max_images",10)
                 images_value = process_images(input_images, file_mode=file_mode, max_images=max_images)
-                temp_image_paths = images_value if file_mode else []
-                _debug_print(debug, "process_images", t1_image)
+                if file_mode:
+                    temp_paths += images_value
+                _debug_print(debug, "process_images", t_process_images)
 
             # Аудио
             if audio is not None:
-                t1_audio = time.perf_counter()
+                t_process_audios = time.perf_counter()
                 target_sr = config.get("audio_sample_rate") #None - disable resample
                 max_audios = config.get("max_audios",3)
                 audio_value = process_audios([audio], file_mode=file_mode, target_sr=target_sr, max_audios=max_audios)
-                temp_audio_paths = audio_value if file_mode else []
-                _debug_print(debug, "process_audios", t1_audio)
+                if file_mode:
+                    temp_paths += audio_value
+                _debug_print(debug, "process_audios", t_process_audios)
 
-            if (len(images_value) + len(audio_value)) == 0:
+            # Видео 
+            if video is not None:
+                t_process_videos = time.perf_counter()
+                video_value = process_videos([video])
+                _debug_print(debug, "process_videos", t_process_videos)
+
+            if (len(images_value) + len(audio_value) + len(video_value)) == 0:
                 config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша
 
             # Определяем system_prompt
@@ -651,6 +714,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "system_prompt": system_prompt,
                 "images": images_value,
                 "audios": audio_value,
+                "videos": video_value,
                 "seed": seed,
                 "config_hash": config_hash
             }
@@ -665,16 +729,10 @@ class SimpleQwen3VL_GGUF_Node:
 
         finally:
 
-            if temp_image_paths:
-                t_start = time.perf_counter()
-
-                if temp_image_paths:
-                    clear_temp_files(temp_image_paths)
-
-                if temp_audio_paths:
-                    clear_temp_files(temp_audio_paths)
-
-                _debug_print(debug, "clear_temp_files", t_start)
+            if temp_paths:
+                t_clear_temp_files = time.perf_counter()
+                clear_temp_files(temp_paths)
+                _debug_print(debug, "clear_temp_files", t_clear_temp_files)
 
             # Расчёт скорости генерации
             try:

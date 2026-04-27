@@ -1,4 +1,6 @@
 # nightly
+- Add encoder options
+- Add video input (as reduced set of frames)
 - Add audio input
 - Add `split_mode` settings
 # V3.6
