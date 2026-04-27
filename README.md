@@ -11,8 +11,10 @@ This version was created to meet my requirements:
 5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
 
 # Last update:
-**21.04.2026 - Nightly**
-- Add audio input
+**27.04.2026 - Nightly**
+- Add options for running encoder (to obtain embeddings or conditioning)
+- Add video input (while llama.cpp doesn't have native support yet, you can pass a reduced set of frames, see example)
+- Add audio input (see example)
 - Add `split_mode` settings for multi GPU
 
 **04.04.2026 - V3.6**
@@ -364,6 +366,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | raw_output | bool | False | If True disables output.strip() | 
 | max_images | int | 10 | You can set a limit on the number of incoming images (in batch mode, you can transfer many images) | 
 | max_audios | int | 3 | You can set a limit on the number of incoming audio (in batch mode, you can transfer many audio) | 
+| max_frames | int | 24 | Allows you to limit the frame size for video, which will result in frame scaling. Transferring many frames will require significantly increasing the context window, which may run out of memory. On the other hand, scaling frames may result in the loss of important motion information. The player may see a slideshow instead of a video, which will be helpfully reported. | 
 | audio_sample_rate | int | | You can set a new sampling frequency and then the audio will be resampled. | 
 
 Multi-GPU settings https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/24:
@@ -373,6 +376,16 @@ Multi-GPU settings https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues
 | main_gpu | int | 0 | Library level. Index of the primary GPU to use when split_mode=0 (NONE). Ignored in LAYER/ROW modes except for KV-cache placement. Works with CUDA_VISIBLE_DEVICES filtering: if CUDA_VISIBLE_DEVICES=1, then main_gpu=0 refers to physical GPU1. |
 | split_mode | int | 1 | GPU splitting mode: 0=NONE (No splitting. The model is loaded onto a single main_gpu), 1=LAYER (distribute layers across GPUs. This is the most common mode. Different layers of the neural network are assigned to different GPUs. For example, layers 1-16 go to GPU0, and 17-32 go to GPU1.), 2=ROW (tensor parallelism, this splits the actual weight matrices across GPUs. It can be faster for certain operations but usually requires higher bandwidth between GPUs). Use 0 for single-GPU setups to avoid distribution overhead. |
 | tensor_split | list | None | List of floats specifying the fraction of the model to offload to each GPU (e.g., [0.7, 0.3] for 70%/30% split). Only effective when split_mode=1 (LAYER). Length must match number of visible GPUs. If not set, llama-cpp auto-balances based on VRAM. |
+
+Encoder options:
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| extract_embedding | bool | false | true - allows you to get embeddings. |
+| tokenizer_path | str | "" | Allows you to override the tokenizer, in case the built-in gguf does not work correctly. You need to specify the path to the folder. May slow down performance as it requires calling transformers. |
+| prompt_template | str | {user} | Some models require a prompt template to work correctly. |
+| convert_emb_to_cond | bool | false | true - The output will be conditioning, understandable comfy, false - embeddings. |
+| embedding_scale | float | None | Allows you to multiply all weights by a given constant. |
+| pooling_type | bool | 0 | Determines the format of the output vectors: -1 (LLAMA_POOLING_TYPE_UNSPECIFIED) — The type is not specified. The system will attempt to determine it automatically (if the metadata is embedded in the GGUF file). 0 (LLAMA_POOLING_TYPE_NONE) — Pooling is disabled. The model returns an array of vectors for each token (the same two-dimensional list [N × Hidden_Dim]). 1 (LLAMA_POOLING_TYPE_MEAN) — The arithmetic mean. The library will automatically add the token vectors and divide by their number. The output will be a single combined vector. 2 (LLAMA_POOLING_TYPE_CLS) — Only the CLS token. Will take the vector of the very first token in the sequence. 3 (LLAMA_POOLING_TYPE_LAST) — Only the last token. Takes the token vector where the sentence ends. 4 (LLAMA_POOLING_TYPE_RANK) — Specific pooling for reranking models (used to attach the classification head to the graph). |
 
 Custom prompt templates:
 | Field | Type | Default | Description |
@@ -1044,6 +1057,63 @@ For example: `Qwen3-4b-Z-Engineer-V2.gguf`
             "chat_format": "qwen3",
             "script": "qwen3vl_run.py",        
             "silent": false,
+            "debug": true
+        },
+```
+
+</details>
+
+<details>
+
+<summary>BGE-M3-Q4_K_M (encoder)</summary>
+
+A fast encoder that allows you to obtain text embeddings that can then be used for searching in vector databases.
+
+- https://huggingface.co/groonga/bge-m3-Q4_K_M-GGUF
+  
+For example: `bge-m3-q4_k_m.gguf`
+
+```json
+        "BGE-M3-Q4_K_M (encoder)": {
+            "model_path": "H:\\LLM2\\bge\\bge-m3-q4_k_m.gguf",
+            "extract_embedding": true,
+            "pooling_type": 1,
+            "ctx": 2048,
+            "n_batch": 2048,
+            "gpu_layers": -1,
+            "script": "qwen3vl_run.py",
+            "debug": true
+        },
+```
+
+</details>
+
+<details>
+
+<summary>Z-Qwen_3_4b-Q8_0 (encoder)</summary>
+
+- https://huggingface.co/Qwen/Qwen3-4B-GGUF
+  
+For example: `Qwen_3_4b-Q8_0.gguf`
+
+> 💡 **Warning:** An important limitation. llama.cpp doesn't allow you to retrieve the -2 hidden layer needed for this model. It always outputs the last layer. Therefore, the vectors don't match those generated by comfy-ui or HF.
+
+> 💡 **Warning:** This encoder has a corrupted built-in tokenizer that doesn't handle system tokens correctly. So, I added the ability to override the tokenizer. You can download it here
+https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer. 
+
+```json
+        "Z-Qwen_3_4b-Q8_0 (encoder)": {
+            "model_path": "H:\\webui_forge_cu121_torch231\\webui\\models\\text_encoder\\Qwen_3_4b-Q8_0.gguf",
+            "tokenizer_path": "H:\\LLM2\\Z-Image-Turbo-HF\\tokenizer",
+            "prompt_template": "<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
+            "extract_embedding": true,
+            "convert_emb_to_cond": true,
+            "pooling_type": 0,
+            "embedding_scale": 100,
+            "ctx": 2048,
+            "n_batch": 2048,
+            "gpu_layers": -1,
+            "script": "qwen3vl_run.py",
             "debug": true
         },
 ```
