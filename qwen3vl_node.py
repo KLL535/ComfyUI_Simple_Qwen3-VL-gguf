@@ -27,7 +27,7 @@ from pathlib import Path
 current_dir = str(Path(__file__).parent)
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
-from debug_print import _debug_print,_debug_result
+from debug_print import _debug_print
 import qwen3vl_run
 
 _current_module = None
@@ -619,7 +619,7 @@ class SimpleQwen3VL_GGUF_Node:
             system_prompt_override=None,
             config_override=None):
 
-        t0 = time.perf_counter()
+        t_total0 = time.perf_counter()
         temp_paths = []
         debug = None
         text = None
@@ -646,7 +646,7 @@ class SimpleQwen3VL_GGUF_Node:
             gccollect_start = config.get("force_gc_start", False)
             gccollect = config.get("force_gc_unload", False)
 
-            _debug_print(debug, "config read", t0, f"| mode {mode}")
+            _debug_print(debug, "config read", t_total0, f"| mode {mode}")
  
             # Очистка моделей
             if unload_all_models:
@@ -730,15 +730,11 @@ class SimpleQwen3VL_GGUF_Node:
         finally:
 
             if temp_paths:
-                t_clear_temp_files = time.perf_counter()
+                t_clear_temp_files0 = time.perf_counter()
                 clear_temp_files(temp_paths)
-                _debug_print(debug, "clear_temp_files", t_clear_temp_files)
+                _debug_print(debug, "clear_temp_files", t_clear_temp_files0)
 
-            # Расчёт скорости генерации
-            try:
-                _debug_result(debug, f"total time", t0, text)
-            except:
-                pass  
+            _debug_print(debug, f"total time", t_total0)
 
 
 def old_config_patch(script_name, config):

@@ -1,8 +1,11 @@
 # nightly
-- Add encoder options
-- Add video input (as reduced set of frames)
-- Add audio input
-- Add `split_mode` settings
+- Added support for n_cpu_moe (requires llama_cpp_python patch)
+- Standard parameter names are now supported
+- Added debug calculate token/sec
+- Added encoder options
+- Added video input (as reduced set of frames)
+- Added audio input
+- Added `split_mode` settings
 # V3.6
 - Add Gemma4 support.
 - Fix raw_mode in text mode.

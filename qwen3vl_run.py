@@ -162,11 +162,24 @@ def _build_video_content(video_path, max_frames=24, quality=75):
     
     return video_content_items
 
+def _debug_calc_speed(result, exec_time):
+    if exec_time == 0: 
+        return 0, 0
+    usage = result['usage']
+    #prompt_tokens = usage['prompt_tokens']
+    completion_tokens = usage['completion_tokens']
+    #total_tokens = usage['total_tokens']
+    speed = completion_tokens / exec_time
+
+    return completion_tokens, speed
+
 def _inference(config):
     """Внутренняя функция, выполняющая инференс с кешированием модели."""
 
     try:
-        overall_start = time.perf_counter()
+
+        #print(config, file=sys.stderr)
+
         debug = config.get("debug", False)
         verbose = config.get("verbose", False)
         silent = config.get("silent", False)
@@ -381,22 +394,25 @@ def _inference(config):
                 # Параметры Llama
                 llm_kwargs = {
                     "model_path": model_path,
-                    "n_ctx": config.get("ctx", 8192),
+                    "n_ctx": config.get("n_ctx", config.get("ctx", 8192)), #n_ctx or ctx - old name
                     "n_batch": config.get("n_batch", 2048),
                     "n_ubatch": config.get("n_ubatch", 512),
                     "swa_full": config.get("swa_full", False),
                     "verbose": verbose,
                     "pool_size": config.get("pool_size", 4194304),
-                    "n_threads": config.get("cpu_threads", os.cpu_count() or 8),
-
-                    "n_gpu_layers": config.get("gpu_layers", -1),
+                    "n_threads": config.get("n_threads", config.get("cpu_threads", 8)), #n_threads or cpu_threads - old name
+                    "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)), #n_gpu_layers or gpu_layers - old name
                     "split_mode": config.get("split_mode", 1),
-                    "main_gpu": config.get("main_gpu", 0)
+                    "main_gpu": config.get("main_gpu", 0),
+                    "ctx_checkpoints": config.get("ctx_checkpoints", 0),                
                 }
 
-                tensor_split = config.get("tensor_split")
-                if tensor_split:
-                    llm_kwargs["tensor_split"] = tensor_split
+                if (tensor_split := config.get("tensor_split")) is not None: llm_kwargs["tensor_split"] = tensor_split
+                if (type_k := config.get("type_k")) is not None: llm_kwargs["type_k"] = type_k
+                if (type_v := config.get("type_v")) is not None: llm_kwargs["type_v"] = type_v
+                if (n_cpu_moe := config.get("n_cpu_moe")) is not None: llm_kwargs["n_cpu_moe"] = n_cpu_moe
+                if (use_mmap := config.get("use_mmap")) is not None: llm_kwargs["use_mmap"] = use_mmap
+                if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
 
                 for key, value in config.items():
                     if key.startswith("extra_llama_"):
@@ -426,11 +442,11 @@ def _inference(config):
 
                 llm_kwargs = {
                     "model_path": model_path,
-                    "n_ctx": config.get("ctx", 4096),
+                    "n_ctx": config.get("n_ctx", config.get("ctx", 4096)),
                     "n_batch": config.get("n_batch", 512),
                     "n_ubatch": config.get("n_ubatch", 512),
                     "verbose": verbose,
-                    "n_gpu_layers": config.get("gpu_layers", -1),
+                    "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)),
                     "pooling_type": config.get("pooling_type", LLAMA_POOLING_TYPE_NONE)
                 }
 
@@ -462,12 +478,12 @@ def _inference(config):
         if not extract_embedding:
 
             completion_kwargs = {
-                "max_tokens": config.get("output_max_tokens", 2048),
+                "max_tokens": config.get("max_tokens", config.get("output_max_tokens", 2048)),
                 "temperature": config.get("temperature", 0.7),
                 "seed": config.get("seed", 42),
                 "repeat_penalty": config.get("repeat_penalty", 1.1),
                 "frequency_penalty": config.get("frequency_penalty", 0.0),
-                "present_penalty": config.get("present_penalty", 0.0),   
+                "present_penalty": config.get("present_penalty", config.get("presence_penalty", 0.0)),   
                 "top_p": config.get("top_p", 0.92),
                 "min_p": config.get("min_p", 0.05),
                 "top_k": config.get("top_k", 0),
@@ -547,35 +563,40 @@ def _inference(config):
 
                     _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
 
-                    t5 = time.perf_counter()
-
+                    t_inference0 = time.perf_counter()
                     result = _cached_llm.create_chat_completion(
                         messages=messages,
                         stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                         **completion_kwargs
                     )
-                    output = result["choices"][0]["message"]["content"]
+                    t_inference1 = time.perf_counter()
 
+                    if debug:
+                        completion_tokens, speed = _debug_calc_speed(result, t_inference1 - t_inference0)
+                        _debug_print(debug, "inference (raw)", t_inference0, text=f"{speed:.2f} tok/sec {completion_tokens} tokens", file=sys.stderr)
+
+                    output = result["choices"][0]["message"]["content"]
                     chat_handler.chat_template = original_template
 
-                    _debug_print(debug, "inference (raw)", t5, file=sys.stderr)
-
-                else:
+                else: #chat_handler = None
 
                     # Текстовый режим
 
-                    t5 = time.perf_counter()
-
+                    t_inference0 = time.perf_counter()
                     result = _cached_llm.create_completion(
                         prompt=text_before + text_after,
                         stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                         **completion_kwargs
                     )
+                    t_inference1 = time.perf_counter()
+
+                    if debug:
+                        completion_tokens, speed = _debug_calc_speed(result, t_inference1 - t_inference0)
+                        _debug_print(debug, "inference (raw text)", t_inference0, text=f"{speed:.2f} tok/sec {completion_tokens} tokens", file=sys.stderr)
+
                     output = result["choices"][0]["text"]
 
-                    _debug_print(debug, "inference (raw text)", t5, file=sys.stderr)
-
-            else:
+            else: #raw_mode = false
 
                 # Формируем сообщения для чата
                 t3 = time.perf_counter()
@@ -624,24 +645,28 @@ def _inference(config):
 
                 # --- Инференс ---
 
-                t5 = time.perf_counter()
-
                 custom_stop = config.get("stop", None)
                 if custom_stop:
                     completion_kwargs["stop"] = custom_stop
 
+                t_inference0 = time.perf_counter()
                 result = _cached_llm.create_chat_completion(
                     messages=messages,
                     **completion_kwargs
                 )
-                _debug_print(debug, "inference", t5, file=sys.stderr)
+                t_inference1 = time.perf_counter()
+
+                if debug:
+                    completion_tokens, speed = _debug_calc_speed(result, t_inference1 - t_inference0)
+                    _debug_print(debug, "inference", t_inference0, text=f"{speed:.2f} tok/sec {completion_tokens} tokens", file=sys.stderr)
 
                 output = result["choices"][0]["message"]["content"]
 
             if not config.get("raw_output", False):
                 output = output.strip()
 
-        else:
+        else: #extract_embedding = true
+
             tokenizer_path = config.get("tokenizer_path")
 
             if tokenizer_path is not None:
@@ -654,6 +679,8 @@ def _inference(config):
                     def custom_tokenize(text: bytes, add_bos: bool = False, special: bool = False) -> list[int]:
                         prompt_str = text.decode("utf-8")
                         tokens = tokenizer.encode(prompt_str, add_special_tokens=False)
+                        for key in tokens:
+                            print(f"key={key}", file=sys.stderr)
                         return tokens
 
                     _cached_llm.tokenize = custom_tokenize
@@ -669,9 +696,10 @@ def _inference(config):
                 template_str = config.get("prompt_template", "{user}")
                 prompt, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
 
-                #print(f"[DEBUG] prompt: {prompt}", file=sys.stderr)
+                #prompt = f"<|im_start|>user\nA red apple<|im_end|>\n<|im_start|>assistant\n"
+                #[151644,872,198,32,2518,23268,151645,198,151644,77091,198]
 
-                response = _cached_llm.create_embedding(prompt)
+                response = _cached_llm.create_embedding(prompt, normalize = -1)
 
                 emb = response['data'][0]['embedding']
 
@@ -687,8 +715,6 @@ def _inference(config):
             except Exception as e:
                 print(f"[WARNING] Embedding extraction failed: {e}", file=sys.stderr)
             _debug_print(debug, "get embedding", t_emb, file=sys.stderr)
-
-        _debug_print(debug, "total", overall_start, file=sys.stderr)   
 
         return {"status": "success", "output": output}, emb_np
 

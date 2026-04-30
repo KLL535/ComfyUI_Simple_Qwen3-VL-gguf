@@ -17,22 +17,11 @@ except ImportError:
     class Style:
         BRIGHT = DIM = NORMAL = RESET_ALL = ''
 
-def _debug_print(debug, stage, start_time, message = "", file = sys.stdout):
+def _debug_print(debug, stage, start_time, message = "", text = "", file = sys.stdout):
     if not debug:
         return
 
     elapsed = time.perf_counter() - start_time
-    print(f"{Fore.MAGENTA}[DEBUG]{Style.RESET_ALL} {stage}: {Fore.YELLOW}{elapsed:.3f}s{Style.RESET_ALL} {message}", file=file)
+    print(f"{Fore.MAGENTA}[DEBUG]{Style.RESET_ALL} {stage} {Style.BRIGHT}{Fore.GREEN}{text}{Style.RESET_ALL}: {Fore.YELLOW}{elapsed:.3f}s{Style.RESET_ALL} {message}", file=file)
 
 
-def _debug_result(debug, stage, start_time, text, file = sys.stdout):
-    if not debug:
-        return
-
-    speed_info = ""
-    if text:
-        elapsed = time.perf_counter() - start_time
-        words = len(text.strip().split())
-        if elapsed > 0:
-            speed_info = f"| {words} word ({Fore.GREEN}{words / elapsed:.1f} word/sec{Style.RESET_ALL})"
-    _debug_print(debug, stage, start_time, speed_info, file=file)
