@@ -1187,9 +1187,9 @@ To make the model fit:
 - n_gpu_layers = 24 → put 24 layers on GPU, rest on CPU. In some cases, this can speed things up by up to 2x.
 - n_gpu_layers = 0 → all layers on CPU (slower)
 
-Please note that in addition to the model weights, you also need to fit the mmpoj projector into memory.
+Please note that in addition to the model weights, you also need to fit the mmproj projector into memory.
 
-Please note that in addition to the model and projector weights, you also need to fit the KV cache into memory. Increasing the context quadratically increases the KV cache size.
+Please note that in addition to the model and projector weights, you also need to fit the KV cache into memory. Increasing the context increases the KV cache size.
 
 If the memory is full before this node starts use `unload_all_models = true`.
 
