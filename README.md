@@ -1176,6 +1176,8 @@ VRAM reached its maximum and then shared memory started to fill up.
 | NGL | 29 tok/sec  | 
 | Memory overflow ❌ | 10.8 tok/sec | 
 
+> 💡 **Tip:** Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter. I downloaded the model suggested by LM_Studio purely for testing `n_cpu_moe`.
+
 To make the model fit:
 1. Use stronger quantization Q8->Q6->Q4->Q3...
 2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
