@@ -1,21 +1,24 @@
 # ComfyUI_Simple_Qwen3-VL-gguf
-Simple gguf LLM Qwen3-VL, Qwen3.5, Gemma4 and others model loader for Comfy-UI.
+Simple gguf LLM Qwen3-VL, Qwen3.5, Qwen3.6, Gemma4 and others model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models).
-2. The model must support the Qwen3-VL, Qwen3.5 multimodal model.
-3. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
-> 💡 **Update:** The latest update added a new `keep_vram` mode, which allows you to keep the model from being unloaded from memory.
-4. No auto-loaded models stored in some unknown location. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk. For me, this is the most comfortable method.
-5. The node needs to run fast. ~10 seconds is acceptable for me. So, for now, only the gguf model can provide this.
+2. The model must support the Qwen3-VL, Qwen3.5, Qwen3.6, Gemma4 multimodal model.
+3. The node should be easily adaptable to work with any new released model.
+4. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
+In the latest update added a new `keep_vram` mode, which allows you to keep the model from being unloaded from memory. Convenient for small models and batch modes.
+5. No auto-loaded models. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk to config. 
 
 # Last update:
 **27.04.2026 - Nightly**
-- Add options for running encoder (to obtain embeddings or conditioning)
-- Add video input (while llama.cpp doesn't have native support yet, you can pass a reduced set of frames, see example)
-- Add audio input (see example)
-- Add `split_mode` settings for multi GPU
+- Added support for `n_cpu_moe` (requires llama_cpp_python patch)
+- Standard parameter names are now supported
+- Added debug calculate `token/sec`
+- Added options for running encoder (to obtain `embeddings` or `conditioning`)
+- Added video input (while llama.cpp doesn't have native support yet, you can pass a reduced set of frames, see example)
+- Added audio input (see example)
+- Added `split_mode` settings for multi GPU
 
 **04.04.2026 - V3.6**
 - Add Gemma4 support.
@@ -150,9 +153,8 @@ cd *path_to_src*\llama-cpp-python
 
 ```
 *path_to_comfyui*\python -m pip install json_repair,colorama
-
 set CMAKE_ARGS="-DGGML_CUDA=on"
-*path_to_comfyui*\python_embeded\python -m pip install .
+*path_to_comfyui*\python_embeded\python -m pip install . 
 ```
 ✅ The command above is for embedded Python (typical for ComfyUI). Adjust the Python path if you're using a system or virtual environment.
 ⚠️ Note about -e flag:
@@ -181,7 +183,7 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
 set CMAKE_GENERATOR=Ninja
 set MAX_JOBS=16
 set CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DCMAKE_BUILD_TYPE=Release
-H:\ComfyUI128\python_embeded\python.exe -m pip install . --no-cache-dir
+H:\ComfyUI128\python_embeded\python.exe -m pip install . --no-cache-dir --no-build-isolation
 pause
 ```
 
@@ -210,9 +212,9 @@ https://github.com/spiritbuun/llama-cpp-turboquant-cuda
 4. In `Comfy-UI`, you will need to enable this mode as follows (no new special models are required, the mechanism works with older models) options, by connecting a textbox to the config_override input with the following text:
 ```
 "verbose": true,
-"ctx": 262144,
-"extra_llama_type_k": 41,
-"extra_llama_type_v": 41
+"n_ctx": 262144,
+"type_k": 41,
+"type_v": 41
 ```
 Where:
 262144 - max context to model
@@ -231,8 +233,8 @@ Context compression up to ~4x
 
 6. Asymmetric mode (if you notice a drop in quality, because k-quant are more sensitive)
 ```
-"extra_llama_type_k": 8, //Q8 (Not to be confused with quantization of model weights, this is quantization of attention)
-"extra_llama_type_v": 41 //turbo3
+"type_k": 8, //Q8 (Not to be confused with quantization of model weights, this is quantization of attention)
+"type_v": 41 //turbo3
 ```
 
 </details>
@@ -287,7 +289,7 @@ Deprecated version:
 # Simple Qwen-VL Vision Language Model (universal version)
 A universal version. The model and its parameters mast be passed to the `config_override` input or described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
 
-<img width="540" height="536" alt="image" src="https://github.com/user-attachments/assets/727f1fc7-84eb-414f-9a7d-95cacdcc8e35" />
+<img width="546" height="609" alt="image" src="https://github.com/user-attachments/assets/4e06cb5f-4901-4dc3-900d-1324e21806e0" />
 
 <details>
 
@@ -295,7 +297,8 @@ A universal version. The model and its parameters mast be passed to the `config_
 
 ### Parameters:
 - `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3+ images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM. Batch is supported.
-- `audio`: *AUDIO* - analyzed audio from `Load Audio` etc. Batch is supported. See Example. The model must support this (eg gemma4) and llama.cpp **must** be newest.
+- `audio`: *AUDIO* - analyzed audio from `Load Audio`. See Example. 💡 The model must support this (eg gemma4) and llama.cpp **must** be newest. See `audio_sample_rate` parameter. Batch is supported.
+- `video`: *VIDEO* - analyzed video from `Load Video`. It is transmitted as reduced set of frames (see `max_frames` parameter). See Example. 💡 Requires increased context (n_ctx) 💡 Need the new version of comfy-ui, which transfers video as a file. I haven't implemented support for the older version comfy-ui, which transfers video as tensors.
 - `model preset`: *LIST* - allows you to select a model from templates from `system_prompts_user.json`. 
 - `system preset`: *LIST* - allows you to select a system prompt from templates
 - `system prompt override`: *STRING*, default: "" - If you supply text to this input, this text will be a system prompt, and **system_preset will be ignored**.
@@ -328,25 +331,30 @@ Possible model configurations that can be passed to the `config_override` input.
 |--------|--------|--------|--------|
 | model_path | string |  | Path to the GGUF model file. Relative paths are supported. The path is specified relative to `ComfyUI\custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf` |
 | mmproj_path | string |  | Path to the multimodal projector file (required for vision models) |
-| ctx | int | 8192 | Context size (n_ctx), maximum tokens the model can process. 💡 Increasing this parameter increases memory consumption, but if there are many pictures and the answer is big, then the answer can be truncated or error if the input data does not fit into the context. Rule: `image_max_tokens + input_text_max_tokens + output_max_tokens <= ctx` |
-| n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = ctx` can speed up processing |
+| n_ctx or ctx | int | 8192 | Context size, maximum tokens the model can process. 💡 Increasing this parameter increases memory consumption, but if there are many pictures and the answer is big, then the answer can be truncated or error if the input data does not fit into the context. Rule: `image_max_tokens + input_text_max_tokens + max_tokens <= n_ctx` |
+| n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = n_ctx` can speed up processing |
 | n_ubatch | int | 512 | 	Micro-batch size for advanced memory management |
 | image_min_tokens | int | 1024 | Minimum number of tokens to allocate for image embeddings |
 | image_max_tokens | int | 4096 | Maximum number of tokens to allocate for image embeddings |
-| output_max_tokens | int | 2048 | Maximum number of tokens to generate. A smaller number saves time, but may result in a truncated response. Thinking models require many output tokens |
+| max_tokens or output_max_tokens | int | 2048 | Maximum number of tokens to generate. A smaller number saves time, but may result in a truncated response. Thinking models require many output tokens |
 | temperature | float | 0.7 | Sampling temperature; Lower values (e.g., 0.1) make output more deterministic and focused; higher values (e.g., 1.5) increase randomness and creativity |
 | top_p | float | 0.92 | Nucleus sampling probability (0.0–1.0). The model considers only the tokens whose cumulative probability reaches top_p. Lower values make output more focused |
 | min_p | float | 0.05 | Minimum probability for a token to be considered in sampling. Tokens with probability below min_p are ignored |
 | top_k | int | 0 | Top-k sampling. limits to the k most likely tokens. 0 disables top-k |
 | repeat_penalty | float | 1.1 | Penalty for repeating tokens (≥1.0). Values >1 discourage repetition |
 | frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce the likelihood of frequently used tokens |
-| present_penalty | float | 0.0 | Penalty based on token presence. Positive values reduce the likelihood of tokens that have already appeared |
+| presence_penalty or present_penalty | float | 0.0 | Penalty based on token presence. Positive values reduce the likelihood of tokens that have already appeared |
 | swa_full | bool | False | Enable full Stochastic Weight Averaging (SWA). 💡 Enabling this setting may cause higher memory consumption. |
+| use_mmap | bool |  | Enable mmap. 💡 Observation. For Windows, it's better to turn it off. |
+| use_mlock | bool |  | Enable mlock. |
+| n_cpu_moe | bool |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. Python_llama_cpp needs to be patched. |
 | pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
-| cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
+| n_threads or cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
 | image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
+| frame_quality | int | 75 | JPEG quality (1–100) when encoding video frames to data URIs. Higher values give better quality but larger size. |
+| ctx_checkpoints | int | 0 | Max number of context checkpoints to create per slot |
 | merge_system_and_user | bool | False | If True, combines system and user prompts into a single user message.Used for some llava-type models. |
-| gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
+| n_gpu_layers or gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
 | script | string |  | Name of the Python script to execute ("qwen3vl_run.py"). This field must be specified in the config. |
 | verbose | bool | False | Enables verbose logging from llama.cpp |
 | silent | bool | False | 💡 Unstable function. Disable. |
@@ -434,7 +442,9 @@ The following settings are generated automatically. They DO NOT need to be write
 | system_prompt | string | System prompt that sets the behavior and context for the model. - add automatically in node |
 | user_prompt | string | User input query or instruction. - add automatically in node |
 | seed | int | Random seed for reproducible generation. - add automatically in node |
-| images or images_path | list | List of images (PIL Images or file paths) – add automatically in node |
+| images or images_path | list | List of images (PIL images or file paths) – add automatically in node |
+| audios or audios_path | list | List of images (WAV bytes or file paths) – add automatically in node |
+| videos or videos_path | list | List of images (only file paths) – add automatically in node |
 | config_hash | string | Hash of the configuration for model caching – generated automatically in node |
 
 </details>
@@ -456,19 +466,19 @@ You can pass `config_override` as a JSON dictionary or without formatting.
 ```
 "model_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\Qwen3.5-9B-Q4_K_M.gguf",
 "mmproj_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\mmproj-BF16.gguf",
-"output_max_tokens": 2048,
+"max_tokens": 2048,
 "image_min_tokens": 1024,
 "image_max_tokens": 2048,
-"ctx": 8192,
+"n_ctx": 8192,
 "n_batch": 2048,
 "n_ubatch": 512,
-"gpu_layers": -1,
+"n_gpu_layers": -1,
 "temperature": 0.7,
 "top_p": 0.8,
 "min_p": 0.05,
 "top_k": 20,
 "repeat_penalty": 1.0,
-"present_penalty": 1.5,
+"presence_penalty": 1.5,
 "pool_size": 4194304,
 "chat_handler": "qwen35",
 "enable_thinking": true,
@@ -501,19 +511,19 @@ You can save your favorite configs to a JSON file and they will be available for
         "Qwen3.5-9B-Q4_K_M": {
             "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
-            "output_max_tokens": 2048,
+            "max_tokens": 2048,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
-            "ctx": 8192,
+            "n_ctx": 8192,
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.8,
             "min_p": 0.05,
             "top_k": 20,
             "repeat_penalty": 1.0,
-            "present_penalty": 1.5,
+            "presence_penalty": 1.5,
             "pool_size": 4194304,
             "chat_handler": "qwen35",
             "enable_thinking": true,
@@ -524,13 +534,13 @@ You can save your favorite configs to a JSON file and they will be available for
         "Qwen3-VL-8B": {
             "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
-            "output_max_tokens": 2048,
+            "max_tokens": 2048,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
-            "ctx": 8192,
+            "n_ctx": 8192,
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
             "min_p": 0.01,
@@ -618,6 +628,96 @@ Allows select a user prompt from templates:
 
 <details>
 
+<summary>Qwen3.6-35B-A3B-Q4_K_M</summary>
+
+- https://lmstudio.ai/models/qwen/qwen3.6-35b-a3b
+
+For example:
+`Qwen3.6-35B-A3B-Q4_K_M.gguf` + `mmproj-Qwen3.6-35B-A3B-BF16.gguf`
+
+Not fit in 16 Gb VRAM.
+Settings for `n_cpu_moe` offloading:
+
+> 💡 **Warning:** `n_cpu_moe` in llama_cpp_python is not supported yet. A patch is required.
+If `n_cpu_moe` doesn't work, use NGL offloading. Set `n_gpu_layers = 22`, `n_cpu_moe: 0`. 
+
+> 💡 **Tip:** `use_mmap = false` - The setting shows the best speed
+> 
+> 💡 **Tip:** `split_mode = 0` - The setting shows the best speed in one GPU
+
+```json
+        "Qwen3.6-35B-A3B-Q4_K_M": {
+            "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\Qwen3.6-35B-A3B-Q4_K_M.gguf",
+            "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\mmproj-Qwen3.6-35B-A3B-BF16.gguf",
+            "max_tokens": 2048,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
+            "n_ctx": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "n_cpu_moe": 20,
+            "use_mmap": false,
+            "split_mode": 0
+            "temperature": 0.8,
+            "top_p": 0.95,
+            "min_p": 0.05,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "top_k": 40,
+            "chat_handler": "qwen35",
+            "enable_thinking": true,
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "verbose": false
+        },
+```
+
+</details>
+
+<details>
+
+<summary>Qwen3.6-27B</summary>
+
+- https://huggingface.co/unsloth/Qwen3.6-27B-GGUF
+
+For example:
+`Qwen3.6-27B-UD-IQ3_XXS.gguf` + `mmproj-BF16.gguf`
+
+Fit in 16 Gb VRAM:
+
+```json
+        "Qwen3.6-27B-UD-IQ3_XXS": {
+            "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-27B-GGUF\\Qwen3.6-27B-UD-IQ3_XXS.gguf",
+            "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-27B-GGUF\\mmproj-BF16.gguf",
+            "max_tokens": 2048,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
+            "n_ctx": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "use_mmap": false,
+            "split_mode": 0,
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "min_p": 0.05,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "top_k": 40,
+            "chat_handler": "qwen35",
+            "enable_thinking": true,
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "verbose": false
+        },
+```
+
+</details>
+
+<details>
+
 <summary>Gemma4</summary>
 
 - https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF
@@ -633,11 +733,11 @@ Option appeared `enable_thinking": false`, but he doesn't turn off thinking :).
         "Gemma4-E4B-IQ4_XS": {
             "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
             "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
-            "output_max_tokens": 2048,
-            "ctx": 8192, 
+            "max_tokens": 2048,
+            "n_ctx": 8192, 
             "n_batch": 2048,
             "n_ubatch": 2048,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 1.0, 
             "top_p": 0.95, 
             "min_p": 0.01,
@@ -657,11 +757,11 @@ You can write custom `prompt template` and then thinking will turn off.
         "Gemma4-E4B-IQ4_XS-custom_template": {
             "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
             "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
-            "output_max_tokens": 2048,
-            "ctx": 8192, 
+            "max_tokens": 2048,
+            "n_ctx": 8192, 
             "n_batch": 2048,
             "n_ubatch": 2048,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 1.0, 
             "top_p": 0.95, 
             "min_p": 0.01,
@@ -702,11 +802,11 @@ For example:
         "Cydonia-24B": {
             "model_path": "H:\\LLM2\\Cydonia_24b\\Cydonia-24B-v4.3-absolute-heresy.IQ4_XS.gguf",
             "mmproj_path": "H:\\LLM2\\Cydonia_24b\\mmproj-Mistral-Small-3.1-24B-Instruct-2503-f16.gguf",
-            "output_max_tokens": 2048,
-            "ctx": 8192, 
+            "max_tokens": 2048,
+            "n_ctx": 8192, 
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7, 
             "top_p": 0.9,
             "min_p": 0.02,
@@ -745,18 +845,18 @@ Other parameters should be selected based on recommendations, based on the task,
         "Qwen3.5-9B-Q4_K_M": {
             "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
-            "output_max_tokens": 2048,
+            "max_tokens": 2048,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
-            "ctx": 8192,
+            "n_ctx": 8192,
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.8,
             "min_p": 0.05,
             "repeat_penalty": 1.0,
-            "present_penalty": 1.5,
+            "presence_penalty": 1.5,
             "top_k": 20,
             "pool_size": 4194304,
             "chat_handler": "qwen35",
@@ -783,13 +883,13 @@ For example:
         "Qwen3-VL-8B": {
             "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
             "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
-            "output_max_tokens": 2048,
+            "max_tokens": 2048,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
-            "ctx": 8192,
+            "n_ctx": 8192,
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
             "min_p": 0.01,
@@ -817,19 +917,19 @@ For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
         "Gemma3-12B-Q4": {
             "model_path": "H:\\LLM2\\gemma3_12b\\gemma-3-12b-it-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\gemma3_12b\\mmproj-BF16.gguf",
-            "output_max_tokens": 2048,
+            "max_tokens": 2048,
             "image_min_tokens": 256,
             "image_max_tokens": 256,
-            "ctx": 8192,
+            "n_ctx": 8192,
             "n_batch": 4096,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.95,
             "min_p": 0.01,
             "top_k": 0,
             "repeat_penalty": 1.0,
-            "present_penalty": 0.0,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_handler": "gemma3",
@@ -856,19 +956,19 @@ For example:
         "Joycaption-Beta": {
             "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
             "mmproj_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
-            "output_max_tokens": 512,
+            "max_tokens": 512,
             "image_min_tokens": 10,
             "image_max_tokens": 512,
-            "ctx": 2048,
+            "n_ctx": 2048,
             "n_batch": 1024,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.6,
             "top_p": 0.9,
             "min_p": 0.01,
             "top_k": 40,
             "repeat_penalty": 1.2,
-            "present_penalty": 0.0,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_handler": "llava15",
@@ -876,47 +976,6 @@ For example:
             "raw_mode": true,
             "system_preset_to_user_prompt": true,
             "system_prompt_default": "You are a helpful image captioner.",
-            "silent": false,
-            "debug": true
-        },
-```
-
-</details>
-
-<details>
-
-<summary>Qwen3-VL-30B</summary>
-
-- https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main
-
-For example:
-`Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf` + `mmproj-BF16.gguf`
-
-Pushing into 16Gb memory (image 1M):
-The model fills up the memory and runs for a long time 60 sec.
-We cram 5 layers out of 40 (`gpu_layers` = 35) into the CPU and get x2 speedup.
-
-```json
-        "Qwen3-VL-30B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-30B-A3B-Instruct-Q4_K_S.gguf",
-            "mmproj_path": "H:\\LLM2\\mmproj-BF16.gguf",
-            "output_max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 1024,
-            "ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "gpu_layers": 35,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 0,
-            "repeat_penalty": 1.2,
-            "present_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py",
             "silent": false,
             "debug": true
         },
@@ -937,19 +996,19 @@ For example:
         "Ministral-3-14B": {
             "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
-            "output_max_tokens": 2048,
+            "max_tokens": 2048,
             "image_min_tokens": 1024,
             "image_max_tokens": 1024,
-            "ctx": 8192,
+            "n_ctx": 8192,
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.3,
             "top_p": 0.92,
             "min_p": 0.01,
             "top_k": 40,
             "repeat_penalty": 1.1,
-            "present_penalty": 0.0,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_handler": "llava15", 
@@ -957,39 +1016,6 @@ For example:
             "raw_mode": true,
             "prompt_template": "[INST]{system}\n\n{images}{user}[/INST]",
             "stop": ["</s>", "[INST]", "[/INST]"],
-            "silent": false,
-            "debug": true
-        },
-```
-
-</details>
-
-<details>
-
-<summary>Qwen3-30B-A3B-Instruct-2507-Q4_K_S(text)</summary>
-
-- https://huggingface.co/unsloth/Qwen3-30B-A3B-Instruct-2507-GGUF/tree/main
-
-For example: `Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf`
-
-```json
-        "Qwen3-30B-Q4-2507(text)": {
-            "model_path": "H:\\LLM2\\Qwen3-30B-A3B-Instruct-2507-Q4_K_S.gguf",
-            "output_max_tokens": 1536,
-            "ctx": 2048,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "gpu_layers": 41,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 0,
-            "repeat_penalty": 1.1,
-            "present_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_format": "qwen3",
-            "script": "qwen3vl_run.py",
             "silent": false,
             "debug": true
         },
@@ -1008,17 +1034,17 @@ For example: `Mistral-Nemo-Instruct-2407-Q8_0.gguf`
 ```json
         "Mistral-Nemo-Instruct-2407-Q8(text)": {
             "model_path": "H:\\LLM2\\Mistral-Nemo-Instruct-2407-Q8_0.gguf",
-            "output_max_tokens": 1536,
-            "ctx": 8192,                      
+            "max_tokens": 1536,
+            "n_ctx": 8192,                      
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.3,       
             "top_p": 0.92,
             "min_p": 0.01,
             "top_k": 40,
             "repeat_penalty": 1.1,
-            "present_penalty": 0.0,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_format": "mistral-instruct",   
@@ -1041,17 +1067,17 @@ For example: `Qwen3-4b-Z-Engineer-V2.gguf`
 ```json
         "Qwen3-4b-Z-Engineer-V2(text)": {
             "model_path": "H:\\LLM2\\Qwen3-4b-Z-Engineer-V2.gguf",
-            "output_max_tokens": 2048,
-            "ctx": 4096,                     
+            "max_tokens": 2048,
+            "n_ctx": 4096,                     
             "n_batch": 2048,
             "n_ubatch": 512,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "temperature": 0.7,
             "top_p": 0.92,
             "min_p": 0.01,
             "top_k": 0,
             "repeat_penalty": 1.1,          
-            "present_penalty": 0.0,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0.0,
             "pool_size": 4194304,
             "chat_format": "qwen3",
@@ -1078,9 +1104,9 @@ For example: `bge-m3-q4_k_m.gguf`
             "model_path": "H:\\LLM2\\bge\\bge-m3-q4_k_m.gguf",
             "extract_embedding": true,
             "pooling_type": 1,
-            "ctx": 2048,
+            "n_ctx": 2048,
             "n_batch": 2048,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "script": "qwen3vl_run.py",
             "debug": true
         },
@@ -1110,9 +1136,9 @@ https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer.
             "convert_emb_to_cond": true,
             "pooling_type": 0,
             "embedding_scale": 100,
-            "ctx": 2048,
+            "n_ctx": 2048,
             "n_batch": 2048,
-            "gpu_layers": -1,
+            "n_gpu_layers": -1,
             "script": "qwen3vl_run.py",
             "debug": true
         },
@@ -1122,58 +1148,70 @@ https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer.
 
 ---
 
-# Speed test and memory full issue:
+# Speed test and memory overflow problem:
 LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
-Therefore, VRAM overflows are bad.
-**Check in task manager if VRAM is getting full (which is causing slowdown)**.
+But if the model is MoE, you can unload some of the experts into RAM so that they can be processed by the CPU. This way you can run large models.
 
-Memory overflow (speed down):
+In any case, make sure your VRAM doesn't overflow. If you allow your VRAM to overflow, some layers will be loaded into slower RAM, which will inevitably lead to a 5-7x performance degradation or crash!
 
-<img width="284" height="188" alt="image" src="https://github.com/user-attachments/assets/a9aca700-6e16-4c56-8a78-bcb36183bcff" />
+Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns.
 
-Model fits (good speed):
+Model fits (good speed) ✅
 
-<img width="223" height="181" alt="image" src="https://github.com/user-attachments/assets/fe1b21c5-e35e-4945-9c7a-4f820bda7776" />
+<img width="439" height="438" alt="image" src="https://github.com/user-attachments/assets/d463c17c-f591-436b-b524-f9cce2aad993" />
+
+The bottom graph (shared memory) should be empty!
+
+> 💡 **Warning:** If you do `use_mmap = false` then you can see the shared memory filling up even when there is no VRAM overflow - this is not scary.
+
+Memory overflow (speed down ) ❌
+
+<img width="450" height="434" alt="image" src="https://github.com/user-attachments/assets/f44905f2-b6b5-4e6b-b1eb-c922f643972c" />
+
+VRAM reached its maximum and then shared memory started to fill up.
+
+| Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | 
+|--------|--------|
+| n_cpu_moe | 55-60 tok/sec | 
+| NGL | 29 tok/sec  | 
+| Memory overflow ❌ | 10.8 tok/sec | 
 
 To make the model fit:
-1. Use stronger quantization Q8->Q6->Q4...
-2. Reduce `ctx`, but not too much, otherwise the response may be cut off.
-3. Use CPU offload (`gpu_layers` > 0, The lower the number, the more layers will be unloaded onto the CPU; the number of layers depends on the model, start decreasing from 40) - It may be slow if the processor is weak.
+1. Use stronger quantization Q8->Q6->Q4->Q3...
+2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
+3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
+4. Use MoE model with expert unloading (`n_cpu_moe` > 0). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
+5. If nothing else is possible use NGL offload (`n_gpu_layers` > 0). Some layers will be stored in RAM and processed by the CPU.
+- n_gpu_layers = -1 → try to put ALL layers on GPU (if VRAM allows)
+- n_gpu_layers = 24 → put 24 layers on GPU, rest on CPU. In some cases, this can speed things up by up to 2x.
+- n_gpu_layers = 0 → all layers on CPU (slower)
 
-The memory size (and speed) depends on model size, quantization method, the size of the input prompt, the output response, and the image size.
-Therefore, it is difficult to estimate the speed, but for me, with a prompt of 377 English words and a response of 225 English words and a 1024x1024 image on an RTX5080 card, with 8B Q8 model, the node executes in 13 seconds.
+Please note that in addition to the model weights, you also need to fit the mmpoj projector into memory.
 
-If the memory is full before this node starts working and there isn't enough memory, I used this project before node:
-- https://github.com/SeanScripts/ComfyUI-Unload-Model
-But sometimes the model would still load between this node and my node. So I just stole the code from there and pasted it into my node with the flag `unload_all_models`.
+Please note that in addition to the model and projector weights, you also need to fit the KV cache into memory. Increasing the context quadratically increases the KV cache size.
+
+If the memory is full before this node starts use `unload_all_models = true`.
 
 ---
 
 ## Troubleshooting:
 
+Try enabling debug output:
+```
+"verbose": true
+```
+
 <details>
 
 <summary>troubleshooting</summary>
 
-### 1. Issue: Llava15ChatHandler.init() got an unexpected keyword argument 'image_max_tokens'
-
-You have an old library `llama-cpp-python` installed, it does not support Qwen3
-Check that the library are latest versions. Run:
-```
-cd *path_to_comfyui*\python_embeded
-python -c "from llama_cpp.llama_chat_format import Qwen3VLChatHandler; print('✅ Qwen3VLChatHandler loaded')"
-✅ Qwen3VLChatHandler loaded
-```
-
----
-
-### 2. Issue: ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16):
+### 1. Issue: ggml_new_object: not enough space in the context's memory pool (needed 330192, available 16):
 
 If an error occurs, try it:
 - increase `pool_size`
-- decrease `ctx`
+- decrease `n_ctx`
 
-### 3. Issue: Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll 
+### 2. Issue: Failed to load shared library 'D:\ComfyUI\python_embeded\Lib\site-packages\llama_cpp\lib\ggml.dll 
 
 1. Check that the files `ggml.dll, ggml-base.dll, ggml-cpu.dll, ggml-cuda.dll, llama.dll, mtmd.dll` exist at the specified path.
 
@@ -1207,7 +1245,7 @@ Look any red or yellow warnings?
 The build scripts now automatically search for these libraries in PyTorch's directory if they are not found in the standard CUDA paths.
 https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/15
 
-### 4. Issue: If automatic GPU detection fails
+### 3. Issue: If automatic GPU detection fails
 
 If automatic GPU detection fails, you may need to manually specify your GPU architecture.
 Find your Compute Capability (for example 8.6 for RTX 3050). Replace 86 with your value.
@@ -1233,7 +1271,7 @@ https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/15
 
 Maybe it will be useful to someone.
 
-[!] Tested only on Windows. Tested only on RTX5080/RTX2060. Tested only on Python 3.13
+[!] Tested only on Windows. Tested only on RTX5080/RTX2060. Tested on Python 3.13
 
 # Dependencies & Thanks:
 - https://github.com/JamePeng/llama-cpp-python
