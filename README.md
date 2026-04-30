@@ -641,9 +641,9 @@ Settings for `n_cpu_moe` offloading:
 > 💡 **Warning:** `n_cpu_moe` in llama_cpp_python is not supported yet. A patch is required.
 If `n_cpu_moe` doesn't work, use NGL offloading. Set `n_gpu_layers = 22`, `n_cpu_moe: 0`. 
 
-> 💡 **Tip:** `use_mmap = false` - The setting shows the best speed
+> 💡 **Tip:** `use_mmap = false` - Provides better speed, but the model may take longer to load, it needs to be tested.
 > 
-> 💡 **Tip:** `split_mode = 0` - The setting shows the best speed in one GPU
+> 💡 **Tip:** `split_mode = 0` - Provides better speed on a single GPU, eliminating performance drops after launch.
 
 ```json
         "Qwen3.6-35B-A3B-Q4_K_M": {
@@ -698,7 +698,6 @@ Fit in 16 Gb VRAM:
             "n_batch": 2048,
             "n_ubatch": 512,
             "n_gpu_layers": -1,
-            "use_mmap": false,
             "split_mode": 0,
             "temperature": 0.7,
             "top_p": 0.95,
