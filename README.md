@@ -636,6 +636,11 @@ Allows select a user prompt from templates:
 For example:
 `Qwen3.6-35B-A3B-Q4_K_M.gguf` + `mmproj-Qwen3.6-35B-A3B-BF16.gguf`
 
+- https://huggingface.co/mudler/Qwen3.6-35B-A3B-APEX-GGUF
+
+For example:
+`Qwen3.6-35B-A3B-APEX-I-Quality.gguf` + `mmproj.gguf`
+
 Not fit in 16 Gb VRAM.
 Settings for `n_cpu_moe` offloading:
 
