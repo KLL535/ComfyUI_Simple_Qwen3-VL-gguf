@@ -12,7 +12,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 # Last update:
 **27.04.2026 - Nightly**
-- Added support for `n_cpu_moe` (requires llama_cpp_python patch)
+- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update)
 - Standard parameter names are now supported
 - Added debug calculate `token/sec`
 - Added options for running encoder (to obtain `embeddings` or `conditioning`)
@@ -347,7 +347,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | swa_full | bool | False | Enable full Stochastic Weight Averaging (SWA). 💡 Enabling this setting may cause higher memory consumption. |
 | use_mmap | bool |  | Enable mmap. 💡 Observation. For Windows, it's better to turn it off. |
 | use_mlock | bool |  | Enable mlock. |
-| n_cpu_moe | int |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. Python_llama_cpp needs to be patched. |
+| n_cpu_moe | int |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. |
 | cpu_moe | bool |  | For MoE models unloads all experts into RAM. Allows to save VRAM memory |
 | pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
 | n_threads or cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
@@ -639,11 +639,8 @@ For example:
 Not fit in 16 Gb VRAM.
 Settings for `n_cpu_moe` offloading:
 
-> 💡 **Warning:** `n_cpu_moe` in llama_cpp_python is not supported yet. A patch is required.
-If `n_cpu_moe` doesn't work, use NGL offloading. Set `n_gpu_layers = 22`, `n_cpu_moe: 0`. 
-
 > 💡 **Tip:** `use_mmap = false` - Provides better speed, but the model may take longer to load, it needs to be tested.
-> 
+
 > 💡 **Tip:** `split_mode = 0` - Provides better speed on a single GPU, eliminating performance drops after launch.
 
 ```json
@@ -1182,10 +1179,10 @@ To make the model fit:
 1. Use stronger quantization Q8->Q6->Q4->Q3...
 2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
 3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
-4. Use MoE model with expert unloading (`n_cpu_moe` > 0). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
-- n_cpu_moe = 20 (You need to choose the best number) → all available VRAM is full, but higher speed.
+4. Use MoE model with expert unloading (n_cpu_moe > 0 or cpu_moe = true). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
+- n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU. All available VRAM is full, but higher speed.
 - cpu_moe = true → lower speed, but minimal VRAM consumption.
-6. If nothing else is possible use NGL offload (`n_gpu_layers` > 0). Some layers will be stored in RAM and processed by the CPU.
+5. If nothing else is possible use NGL offload (n_gpu_layers > 0). Some layers will be stored in RAM and processed by the CPU.
 - n_gpu_layers = -1 → try to put ALL layers on GPU (if VRAM allows)
 - n_gpu_layers = 22 (You need to choose the best number) → put 22 layers on GPU, rest on CPU. 
 - n_gpu_layers = 0 → all layers on CPU (slower)
