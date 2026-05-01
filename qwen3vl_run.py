@@ -402,7 +402,7 @@ def _inference(config):
                     "pool_size": config.get("pool_size", 4194304),
                     "n_threads": config.get("n_threads", config.get("cpu_threads", 8)), #n_threads or cpu_threads - old name
                     "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)), #n_gpu_layers or gpu_layers - old name
-                    "split_mode": config.get("split_mode", 1),
+                    "split_mode": config.get("split_mode", 0),
                     "main_gpu": config.get("main_gpu", 0),
                     "ctx_checkpoints": config.get("ctx_checkpoints", 0),                
                 }
@@ -411,6 +411,7 @@ def _inference(config):
                 if (type_k := config.get("type_k")) is not None: llm_kwargs["type_k"] = type_k
                 if (type_v := config.get("type_v")) is not None: llm_kwargs["type_v"] = type_v
                 if (n_cpu_moe := config.get("n_cpu_moe")) is not None: llm_kwargs["n_cpu_moe"] = n_cpu_moe
+                if (cpu_moe := config.get("cpu_moe")) is not None: llm_kwargs["cpu_moe"] = cpu_moe
                 if (use_mmap := config.get("use_mmap")) is not None: llm_kwargs["use_mmap"] = use_mmap
                 if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
 
