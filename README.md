@@ -664,7 +664,7 @@ Settings for `n_cpu_moe` offloading:
         "Qwen3.6-35B-A3B-Q4_K_M": {
             "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\Qwen3.6-35B-A3B-Q4_K_M.gguf",
             "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\mmproj-Qwen3.6-35B-A3B-BF16.gguf",
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
             "n_ctx": 8192,
@@ -693,7 +693,7 @@ Settings for `n_cpu_moe` offloading:
         "Qwen3.6-35B-A3B-UD-IQ4_XS": {
             "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
             "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
             "n_ctx": 8192,
@@ -722,7 +722,7 @@ Settings for `n_cpu_moe` offloading:
         "Qwen3.6-35B-A3B-APEX-I-Quality": {
             "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\Qwen3.6-35B-A3B-APEX-I-Quality.gguf",
             "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\mmproj.gguf",
-            "max_tokens": 2048,
+            "max_tokens": 4096,
             "image_min_tokens": 1024,
             "image_max_tokens": 2048,
             "n_ctx": 8192,
