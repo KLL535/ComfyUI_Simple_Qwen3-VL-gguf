@@ -629,7 +629,7 @@ Allows select a user prompt from templates:
 
 <details>
 
-<summary>Qwen3.6-35B-A3B-Q4_K_M</summary>
+<summary>Qwen3.6-35B-A3B</summary>
 
 - https://lmstudio.ai/models/qwen/qwen3.6-35b-a3b
 
@@ -1268,8 +1268,9 @@ Please note that in addition to the model and projector weights, you also need t
 
 If the memory is full before this node starts use `unload_all_models = true`.
 
-Also, keep in mind that LM Studio does a "warm-up" immediately after loading a model. That is, it runs a fake prompt, which allows for stable speed later.
-In this case always performs a "cold start" after loading the model. This may reduces the speed.
+Also, keep in mind that LM Studio does a "warm-up" immediately after loading a model. That is, it runs a fake prompt, which allows for stable speed later. 
+
+In this node always performs a "cold start". This may reduces the speed.
 
 ---
 
