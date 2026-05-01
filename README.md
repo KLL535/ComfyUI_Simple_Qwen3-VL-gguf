@@ -636,12 +636,25 @@ Allows select a user prompt from templates:
 For example:
 `Qwen3.6-35B-A3B-Q4_K_M.gguf` + `mmproj-Qwen3.6-35B-A3B-BF16.gguf`
 
+> 💡 **Tip:** Q4_K_M is already quite an old quantization. Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter.
+
 - https://huggingface.co/mudler/Qwen3.6-35B-A3B-APEX-GGUF
 
 For example:
 `Qwen3.6-35B-A3B-APEX-I-Quality.gguf` + `mmproj.gguf`
 
-Not fit in 16 Gb VRAM.
+- https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF
+
+For example:
+`Qwen3.6-35B-A3B-UD-IQ4_XS.gguf` + `mmproj-BF16.gguf`
+
+> 💡 **Tip:** If there is a BF16 version for mmproj, choose it, it is better than F16.
+
+
+
+Example for `Qwen3.6-35B-A3B-Q4_K_M`
+
+This model not fit in my 16 Gb VRAM.
 Settings for `n_cpu_moe` offloading:
 
 > 💡 **Tip:** `use_mmap = false` - Provides better speed, but the model may take longer to load, it needs to be tested.
