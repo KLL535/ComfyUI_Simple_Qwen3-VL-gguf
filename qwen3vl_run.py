@@ -680,8 +680,8 @@ def _inference(config):
                     def custom_tokenize(text: bytes, add_bos: bool = False, special: bool = False) -> list[int]:
                         prompt_str = text.decode("utf-8")
                         tokens = tokenizer.encode(prompt_str, add_special_tokens=False)
-                        for key in tokens:
-                            print(f"key={key}", file=sys.stderr)
+                        #for key in tokens:
+                        #    print(f"key={key}", file=sys.stderr)
                         return tokens
 
                     _cached_llm.tokenize = custom_tokenize
