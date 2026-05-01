@@ -1224,11 +1224,11 @@ https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer.
 LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
 But if the model is MoE, you can unload some of the experts into RAM so that they can be processed by the CPU. This way you can run large models.
 
-In any case, make sure your VRAM doesn't overflow. If you allow your VRAM to overflow, some layers will be loaded into slower RAM, which will inevitably lead to a 5-7x performance degradation or crash!
+In any case, make sure your VRAM doesn't overflow. If you allow your VRAM to overflow, some layers will be loaded into slower RAM, the GPU will be forced to read from RAM, which will inevitably lead to a 5-7x performance degradation!
 
-Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns.
+Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution in middle graph. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns.
 
-Model fits (good speed) ✅
+Model fits (good speed) ✅:
 
 <img width="439" height="438" alt="image" src="https://github.com/user-attachments/assets/d463c17c-f591-436b-b524-f9cce2aad993" />
 
@@ -1236,11 +1236,11 @@ The bottom graph (shared memory) should be empty!
 
 > 💡 **Warning:** If you do `use_mmap = false` then you can see the shared memory filling up even when there is no VRAM overflow - this is not scary.
 
-Memory overflow (speed down ) ❌
+Memory overflow (speed down ) ❌:
 
 <img width="450" height="434" alt="image" src="https://github.com/user-attachments/assets/f44905f2-b6b5-4e6b-b1eb-c922f643972c" />
 
-VRAM reached its maximum and then shared memory started to fill up.
+VRAM reached its maximum and then shared memory started to fill up → performance degradation.
 
 | Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | 
 |--------|--------|
@@ -1255,8 +1255,8 @@ To make the model fit:
 2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
 3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
 4. Use MoE model with expert unloading (n_cpu_moe > 0 or cpu_moe = true). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
-- n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU, rest on GPU. All available VRAM is full, but higher speed.
-- cpu_moe = true → All experts on CPU - minimal VRAM consumption.
+- n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU, rest on GPU → All available VRAM is full, higher speed.
+- cpu_moe = true → All experts on CPU → minimal VRAM consumption.
 5. If nothing else is possible use NGL offload (n_gpu_layers > 0). Some layers will be stored in RAM and processed by the CPU.
 - n_gpu_layers = -1 → try to put ALL layers on GPU (if VRAM allows)
 - n_gpu_layers = 22 (You need to choose the best number) → put 22 layers on GPU, rest on CPU. 
