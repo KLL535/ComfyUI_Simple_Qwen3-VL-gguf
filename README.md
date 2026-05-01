@@ -347,7 +347,8 @@ Possible model configurations that can be passed to the `config_override` input.
 | swa_full | bool | False | Enable full Stochastic Weight Averaging (SWA). 💡 Enabling this setting may cause higher memory consumption. |
 | use_mmap | bool |  | Enable mmap. 💡 Observation. For Windows, it's better to turn it off. |
 | use_mlock | bool |  | Enable mlock. |
-| n_cpu_moe | bool |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. Python_llama_cpp needs to be patched. |
+| n_cpu_moe | int |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. Python_llama_cpp needs to be patched. |
+| cpu_moe | bool |  | For MoE models unloads all experts into RAM. Allows to save VRAM memory |
 | pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
 | n_threads or cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
 | image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
@@ -1182,9 +1183,11 @@ To make the model fit:
 2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
 3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
 4. Use MoE model with expert unloading (`n_cpu_moe` > 0). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
-5. If nothing else is possible use NGL offload (`n_gpu_layers` > 0). Some layers will be stored in RAM and processed by the CPU.
+- n_cpu_moe = 20 (You need to choose the best number) → all available VRAM is full, but higher speed.
+- cpu_moe = true → lower speed, but minimal VRAM consumption.
+6. If nothing else is possible use NGL offload (`n_gpu_layers` > 0). Some layers will be stored in RAM and processed by the CPU.
 - n_gpu_layers = -1 → try to put ALL layers on GPU (if VRAM allows)
-- n_gpu_layers = 24 → put 24 layers on GPU, rest on CPU. In some cases, this can speed things up by up to 2x.
+- n_gpu_layers = 22 (You need to choose the best number) → put 22 layers on GPU, rest on CPU. 
 - n_gpu_layers = 0 → all layers on CPU (slower)
 
 Please note that in addition to the model weights, you also need to fit the mmproj projector into memory.
