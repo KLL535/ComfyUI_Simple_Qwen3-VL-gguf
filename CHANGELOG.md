@@ -1,5 +1,5 @@
 # nightly
-- Added support for n_cpu_moe (requires llama_cpp_python patch)
+- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update)
 - Standard parameter names are now supported
 - Added debug calculate token/sec
 - Added encoder options
