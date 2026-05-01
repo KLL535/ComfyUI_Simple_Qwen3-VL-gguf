@@ -674,7 +674,7 @@ Settings for `n_cpu_moe` offloading:
             "n_threads": 8,
             "n_cpu_moe": 20,
             "use_mmap": false,
-            "split_mode": 0
+            "split_mode": 0,
             "temperature": 0.8,
             "top_p": 0.95,
             "min_p": 0.05,
@@ -1227,6 +1227,7 @@ But if the model is MoE, you can unload some of the experts into RAM so that the
 In any case, make sure your VRAM doesn't overflow. If you allow your VRAM to overflow, some layers will be loaded into slower RAM, the GPU will be forced to read from RAM, which will inevitably lead to a 5-7x performance degradation!
 
 Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution in middle graph. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns.
+GPU drivers often reserve a small amount of video memory for system needs, so 100% graphics usage is unacceptable.
 
 Model fits (good speed) ✅:
 
@@ -1234,7 +1235,7 @@ Model fits (good speed) ✅:
 
 The bottom graph (shared memory) should be empty!
 
-> 💡 **Warning:** If you do `use_mmap = false` then you can see the shared memory filling up even when there is no VRAM overflow - this is not scary.
+> 💡 **Nuance:** When using `use_mmap=false` the operating system may use RAM for file caching, which Task Manager may display as "used" shared memory, but this does not always mean that VRAM is full.
 
 Memory overflow (speed down ) ❌:
 
@@ -1270,7 +1271,7 @@ If the memory is full before this node starts use `unload_all_models = true`.
 
 Also, keep in mind that LM Studio does a "warm-up" immediately after loading a model. That is, it runs a fake prompt, which allows for stable speed later. 
 
-In this node always performs a "cold start". This may reduces the speed.
+This node always performs a "cold start". This may reduces the speed.
 
 ---
 
