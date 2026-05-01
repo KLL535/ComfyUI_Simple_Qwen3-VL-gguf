@@ -651,10 +651,9 @@ For example:
 > 💡 **Tip:** If there is a BF16 version for mmproj, choose it, it is better than F16.
 
 
+Examples:
 
-Example for `Qwen3.6-35B-A3B-Q4_K_M`
-
-This model not fit in my 16 Gb VRAM.
+This model not fit in 16 Gb VRAM.
 Settings for `n_cpu_moe` offloading:
 
 > 💡 **Tip:** `use_mmap = false` - Provides better speed, but the model may take longer to load, it needs to be tested.
@@ -676,6 +675,64 @@ Settings for `n_cpu_moe` offloading:
             "n_cpu_moe": 20,
             "use_mmap": false,
             "split_mode": 0
+            "temperature": 0.8,
+            "top_p": 0.95,
+            "min_p": 0.05,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "top_k": 40,
+            "chat_handler": "qwen35",
+            "enable_thinking": true,
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "verbose": false
+        },
+```
+
+```json
+        "Qwen3.6-35B-A3B-UD-IQ4_XS": {
+            "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
+            "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\mmproj-BF16.gguf",
+            "max_tokens": 2048,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
+            "n_ctx": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "n_cpu_moe": 16,
+            "use_mmap": false,
+            "split_mode": 0,
+            "temperature": 0.8,
+            "top_p": 0.95,
+            "min_p": 0.05,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "top_k": 40,
+            "chat_handler": "qwen35",
+            "enable_thinking": true,
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "verbose": false
+        },
+```
+
+```json
+        "Qwen3.6-35B-A3B-APEX-I-Quality": {
+            "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\Qwen3.6-35B-A3B-APEX-I-Quality.gguf",
+            "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\mmproj.gguf",
+            "max_tokens": 2048,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
+            "n_ctx": 8192,
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "n_cpu_moe": 20,
+            "use_mmap": false,
+            "split_mode": 0,
             "temperature": 0.8,
             "top_p": 0.95,
             "min_p": 0.05,
@@ -1187,18 +1244,18 @@ VRAM reached its maximum and then shared memory started to fill up.
 
 | Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | 
 |--------|--------|
-| n_cpu_moe | 55-60 tok/sec | 
+| n_cpu_moe | 50-60 tok/sec | 
 | NGL | 29 tok/sec  | 
 | Memory overflow ❌ | 10.8 tok/sec | 
 
 > 💡 **Tip:** Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter. I downloaded the model suggested by LM_Studio purely for testing `n_cpu_moe`.
 
 To make the model fit:
-1. Use stronger quantization Q8->Q6->Q4->Q3...
+1. Use stronger quantization Q8->Q6->Q4->Q3... (But the stronger the quantization, the more the quality of the model may suffer; below Q4 it may already be unacceptable.)
 2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
 3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
 4. Use MoE model with expert unloading (n_cpu_moe > 0 or cpu_moe = true). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
-- n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU. All available VRAM is full, but higher speed.
+- n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU, rest on GPU. All available VRAM is full, but higher speed.
 - cpu_moe = true → lower speed, but minimal VRAM consumption.
 5. If nothing else is possible use NGL offload (n_gpu_layers > 0). Some layers will be stored in RAM and processed by the CPU.
 - n_gpu_layers = -1 → try to put ALL layers on GPU (if VRAM allows)
@@ -1210,6 +1267,9 @@ Please note that in addition to the model weights, you also need to fit the mmpr
 Please note that in addition to the model and projector weights, you also need to fit the KV cache into memory. Increasing the context increases the KV cache size.
 
 If the memory is full before this node starts use `unload_all_models = true`.
+
+Also, keep in mind that LM Studio does a "warm-up" immediately after loading a model. That is, it runs a fake prompt, which allows for stable speed later.
+In this case always performs a "cold start" after loading the model. This may reduces the speed.
 
 ---
 
