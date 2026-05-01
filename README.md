@@ -1256,7 +1256,7 @@ To make the model fit:
 3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
 4. Use MoE model with expert unloading (n_cpu_moe > 0 or cpu_moe = true). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
 - n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU, rest on GPU. All available VRAM is full, but higher speed.
-- cpu_moe = true → lower speed, but minimal VRAM consumption.
+- cpu_moe = true → All experts on CPU - minimal VRAM consumption.
 5. If nothing else is possible use NGL offload (n_gpu_layers > 0). Some layers will be stored in RAM and processed by the CPU.
 - n_gpu_layers = -1 → try to put ALL layers on GPU (if VRAM allows)
 - n_gpu_layers = 22 (You need to choose the best number) → put 22 layers on GPU, rest on CPU. 
