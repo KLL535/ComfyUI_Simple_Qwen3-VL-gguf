@@ -1227,7 +1227,7 @@ But if the model is MoE, you can unload some of the experts into RAM so that the
 In any case, make sure your VRAM doesn't overflow. If you allow your VRAM to overflow, some layers will be loaded into slower RAM, the GPU will be forced to read from RAM, which will inevitably lead to a 5-7x performance degradation!
 
 Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution in middle graph. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns.
-GPU drivers often reserve a small amount of video memory for system needs, so 100% graphics usage is unacceptable.
+GPU drivers often reserve a small amount of VRAM for system needs, so 100% VRAM usage will not be possible.
 
 Model fits (good speed) ✅:
 
