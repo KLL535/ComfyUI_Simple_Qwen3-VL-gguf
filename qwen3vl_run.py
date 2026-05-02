@@ -190,6 +190,7 @@ def _inference(config):
         image_max_tokens = config.get("image_max_tokens")
         extract_embedding = config.get("extract_embedding", False)
         max_frames = config.get("max_frames",24)
+        raw_mode = config.get("raw_mode", False)
 
         global _cached_llm, _cached_model_hash
 
@@ -414,6 +415,8 @@ def _inference(config):
                 if (cpu_moe := config.get("cpu_moe")) is not None: llm_kwargs["cpu_moe"] = cpu_moe
                 if (use_mmap := config.get("use_mmap")) is not None: llm_kwargs["use_mmap"] = use_mmap
                 if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
+                if (n_keep := config.get("n_keep")) is not None: llm_kwargs["n_keep"] = n_keep
+                if (flash_attn := config.get("flash_attn")) is not None: llm_kwargs["flash_attn"] = flash_attn
 
                 for key, value in config.items():
                     if key.startswith("extra_llama_"):
@@ -429,15 +432,50 @@ def _inference(config):
 
                     if image_max_tokens is not None:
                         llm_kwargs["image_max_tokens"] = image_max_tokens
+
                 else:
                     # Текстовый режим: добавляем chat_format, если он задан
-                    if chat_format:
-                        llm_kwargs["chat_format"] = chat_format 
-
-                    elif config.get("chat_format_from_gguf", False):
+                    if config.get("chat_format_from_gguf", False):
                         llm_kwargs["chat_format"] = "chat_template.default"
 
+                    elif chat_format:
+                        llm_kwargs["chat_format"] = chat_format 
+
                 _cached_llm = Llama(**llm_kwargs)
+
+                if chat_handler is not None:
+
+                    if config.get("chat_format_from_gguf", False):
+
+                        from jinja2 import Template
+
+                        gguf_original_template_string = _cached_llm.metadata.get('tokenizer.chat_template', None)
+                        gguf_original_template = Template(gguf_original_template_string)
+
+                        # Подмена, но это не работает
+                        chat_handler.chat_template = gguf_original_template
+
+                    elif raw_mode:
+
+                        from jinja2 import Template
+
+                        # Минимальный шаблон 
+                        simple_template = Template(
+                            "{%- for msg in messages %}"
+                            "{%- if msg.role == 'user' %}"
+                            "{%- if msg.content is string %}{{ msg.content }}"
+                            "{%- elif msg.content is iterable %}"
+                            "{%- for part in msg.content %}"
+                            "{%- if part.type == 'image_url' %}<__media__>{%- endif %}"
+                            "{%- if part.type == 'text' %}{{ part.text }}{%- endif %}"
+                            "{%- endfor %}"
+                            "{%- endif %}"
+                            "{%- endif %}"
+                            "{%- endfor %}"
+                        )
+
+                        # Подмена, это работает
+                        chat_handler.chat_template = simple_template
 
             else:
 
@@ -484,7 +522,7 @@ def _inference(config):
                 "seed": config.get("seed", 42),
                 "repeat_penalty": config.get("repeat_penalty", 1.1),
                 "frequency_penalty": config.get("frequency_penalty", 0.0),
-                "present_penalty": config.get("present_penalty", config.get("presence_penalty", 0.0)),   
+                "present_penalty": config.get("presence_penalty", config.get("present_penalty", 0.0)),   
                 "top_p": config.get("top_p", 0.92),
                 "min_p": config.get("min_p", 0.05),
                 "top_k": config.get("top_k", 0),
@@ -495,7 +533,7 @@ def _inference(config):
                     new_key = key[len("extra_completion_"):]
                     completion_kwargs[new_key] = value
 
-            if config.get("raw_mode", False):
+            if raw_mode:
 
                 # Формируем сообщения для чата
 
@@ -541,26 +579,6 @@ def _inference(config):
 
                     messages = [{"role": "user", "content": content}]
 
-                    from jinja2 import Template
-
-                    # 3. Минимальный шаблон 
-                    clean_template = Template(
-                        "{%- for msg in messages %}"
-                        "{%- if msg.role == 'user' %}"
-                        "{%- if msg.content is string %}{{ msg.content }}"
-                        "{%- elif msg.content is iterable %}"
-                        "{%- for part in msg.content %}"
-                        "{%- if part.type == 'image_url' %}<__media__>{%- endif %}"
-                        "{%- if part.type == 'text' %}{{ part.text }}{%- endif %}"
-                        "{%- endfor %}"
-                        "{%- endif %}"
-                        "{%- endif %}"
-                        "{%- endfor %}"
-                    )
-
-                    # 4. Подмена + вызов + возврат 
-                    original_template = chat_handler.chat_template
-                    chat_handler.chat_template = clean_template
 
                     _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
 
@@ -577,7 +595,6 @@ def _inference(config):
                         _debug_print(debug, "inference (raw)", t_inference0, text=f"{speed:.2f} tok/sec {completion_tokens} tokens", file=sys.stderr)
 
                     output = result["choices"][0]["message"]["content"]
-                    chat_handler.chat_template = original_template
 
                 else: #chat_handler = None
 

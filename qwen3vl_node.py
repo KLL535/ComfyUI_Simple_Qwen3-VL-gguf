@@ -630,13 +630,13 @@ class SimpleQwen3VL_GGUF_Node:
                 model_presets = load_cached_section('_model_presets')
                 if model_preset not in model_presets:
                     raise ValueError(f"Model preset '{model_preset}' not found")
-                config = model_presets[model_preset].copy()
+                config = old_names_patch(model_presets[model_preset])
 
             # Применяем config_override
             if config_override and config_override.strip():
                 try:
                     override_dict = self._config_override_repair(config_override)
-                    config.update(override_dict)
+                    config.update(old_names_patch(override_dict))
                 except Exception as e:
                     raise ValueError(e)            
 
@@ -738,7 +738,7 @@ class SimpleQwen3VL_GGUF_Node:
 
 
 def old_config_patch(script_name, config):
-    # поддержка старых конфигов
+    # Поддержка старых конфигов. Для обратной совместимости.
 
     # если не задан скрипт - определяем модель по имени файла
     if script_name is None:
@@ -764,3 +764,29 @@ def old_config_patch(script_name, config):
             config["chat_handler"] = "llava16"
 
     return script_name, config
+
+
+def old_names_patch(config: Dict[str, Any]) -> Dict[str, Any]:
+    # Заменяет устаревшие ключи конфигурации на канонические. Для обратной совместимости.
+
+    OLD_TO_NEW = {
+        "ctx": "n_ctx",
+        "cpu_threads": "n_threads",
+        "gpu_layers": "n_gpu_layers",
+        "output_max_tokens": "max_tokens",
+        "present_penalty": "presence_penalty",
+    }
+
+    result = config.copy()
+
+    for old_key, new_key in OLD_TO_NEW.items():
+        if old_key in result:
+            if new_key in result:
+                # Если присутствуют оба ключа, отдаём приоритет каноническому
+                print(f"[WARNING] Conflict: both '{old_key}' and '{new_key}' found.", file=sys.stderr)
+                del result[old_key]
+            else:
+                # Старое есть, нового нет → переименовываем
+                result[new_key] = result.pop(old_key)
+
+    return result
