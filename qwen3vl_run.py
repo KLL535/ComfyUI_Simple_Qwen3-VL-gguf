@@ -245,6 +245,9 @@ def _inference(config):
         mmproj_path = config.get("mmproj_path", "").strip()
         is_vision_model = bool(num_content > 0 and mmproj_path and extract_embedding == False)
 
+        if config.get("force_mmproj"):
+            is_vision_model = True
+
         if need_new_model:
 
             # --- Загрузка новой модели ---
