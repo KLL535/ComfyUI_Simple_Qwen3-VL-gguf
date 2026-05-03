@@ -11,8 +11,10 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 5. No auto-loaded models. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk to config. 
 
 # Last update:
-**27.04.2026 - Nightly**
-- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update)
+**03.05.2026 - Nightly**
+**03.05.2026 - V3.7**
+- Added `force_mmproj` settings.
+- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update to 0.3.37)
 - Standard parameter names are now supported
 - Added debug calculate `token/sec`
 - Added options for running encoder (to obtain `embeddings` or `conditioning`)
@@ -331,6 +333,7 @@ Possible model configurations that can be passed to the `config_override` input.
 |--------|--------|--------|--------|
 | model_path | string |  | Path to the GGUF model file. Relative paths are supported. The path is specified relative to `ComfyUI\custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf` |
 | mmproj_path | string |  | Path to the multimodal projector file (required for vision models) |
+| force_mmproj | bool | false | 💡 If there are no images or audio or viseo, `mmproj` still loads into memory (and takes up space for no reason), but the correct template is not lost (`enable_thinking` will work). |
 | n_ctx or ctx | int | 8192 | Context size, maximum tokens the model can process. 💡 Increasing this parameter increases memory consumption, but if there are many pictures and the answer is big, then the answer can be truncated or error if the input data does not fit into the context. Rule: `image_max_tokens + input_text_max_tokens + max_tokens <= n_ctx` |
 | n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = n_ctx` can speed up processing |
 | n_ubatch | int | 512 | 	Micro-batch size for advanced memory management |
@@ -364,7 +367,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | force_gc_unload | bool | False | Enables garbage collection after deleting the LLM model. 💡 If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
 | chat_handler | string |  | Type of chat handler: "gemma4", "qwen35", "qwen3", "qwen25", "gemma3", "llava15", "llava16", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha". 💡 Specify for multimodal models. |
 | chat_format | string |  | Type of chat format for text model: "llama-2", "llama-3", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma", "qwen" 💡 Required to be specified for text models only (or multimodal model in text mode). |
-| chat_format_from_gguf | bool | false | For text models only (or multimodal model in text mode), forces the chat template to be loaded from the model. |
+| chat_format_from_gguf | bool | false | Forces the chat template to be loaded from the gguf model. 💡 If there are pictures, audio, video, it doesn't work. |
 | enable_thinking | bool | False | For "Gemma4, "Qwen35, "minicpmv45", "glm46v" enables the thinking process in the response. |
 | add_vision_id | bool | auto | For "Qwen35", "Qwen3" adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
 | force_reasoning | bool | False | For "Qwen3" forces reasoning mode. |
@@ -673,7 +676,7 @@ Settings for `n_cpu_moe` offloading:
             "n_gpu_layers": -1,
             "n_threads": 8,
             "n_cpu_moe": 20,
-            "use_mmap": false,
+            "use_mmap": true,
             "split_mode": 0,
             "temperature": 0.8,
             "top_p": 0.95,
@@ -702,7 +705,7 @@ Settings for `n_cpu_moe` offloading:
             "n_gpu_layers": -1,
             "n_threads": 8,
             "n_cpu_moe": 16,
-            "use_mmap": false,
+            "use_mmap": true,
             "split_mode": 0,
             "temperature": 0.8,
             "top_p": 0.95,
@@ -731,7 +734,7 @@ Settings for `n_cpu_moe` offloading:
             "n_gpu_layers": -1,
             "n_threads": 8,
             "n_cpu_moe": 20,
-            "use_mmap": false,
+            "use_mmap": true,
             "split_mode": 0,
             "temperature": 0.8,
             "top_p": 0.95,
@@ -1086,7 +1089,7 @@ For example:
             "chat_handler": "llava15", 
             "script": "qwen3vl_run.py",
             "raw_mode": true,
-            "prompt_template": "[INST]{system}\n\n{images}{user}[/INST]",
+            "prompt_template": "[INST]{system}\\n\\n{images}{user}[/INST]",
             "stop": ["</s>", "[INST]", "[/INST]"],
             "silent": false,
             "debug": true
@@ -1203,7 +1206,7 @@ https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer.
         "Z-Qwen_3_4b-Q8_0 (encoder)": {
             "model_path": "H:\\webui_forge_cu121_torch231\\webui\\models\\text_encoder\\Qwen_3_4b-Q8_0.gguf",
             "tokenizer_path": "H:\\LLM2\\Z-Image-Turbo-HF\\tokenizer",
-            "prompt_template": "<|im_start|>user\n{user}<|im_end|>\n<|im_start|>assistant\n"
+            "prompt_template": "<|im_start|>user\\n{user}<|im_end|>\\n<|im_start|>assistant\\n"
             "extract_embedding": true,
             "convert_emb_to_cond": true,
             "pooling_type": 0,
@@ -1249,7 +1252,7 @@ VRAM reached its maximum and then shared memory started to fill up → performan
 | NGL | 29 tok/sec  | 
 | Memory overflow ❌ | 10.8 tok/sec | 
 
-> 💡 **Tip:** Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter. I downloaded the model suggested by LM_Studio purely for testing `n_cpu_moe`.
+> 💡 **Tip:** Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter.
 
 To make the model fit:
 1. Use stronger quantization Q8->Q6->Q4->Q3... (But the stronger the quantization, the more the quality of the model may suffer; below Q4 it may already be unacceptable.)
