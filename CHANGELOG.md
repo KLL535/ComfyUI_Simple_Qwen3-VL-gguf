@@ -1,11 +1,13 @@
-# nightly
-- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update)
+# Nightly
+# V3.7
+- Added `force_mmproj` settings.
+- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update to 0.3.37)
 - Standard parameter names are now supported
-- Added debug calculate token/sec
-- Added encoder options
-- Added video input (as reduced set of frames)
-- Added audio input
-- Added `split_mode` settings
+- Added debug calculate `token/sec`
+- Added options for running encoder (to obtain `embeddings` or `conditioning`)
+- Added video input (while llama.cpp doesn't have native support yet, you can pass a reduced set of frames, see example)
+- Added audio input (see example)
+- Added `split_mode` settings for multi GPU
 # V3.6
 - Add Gemma4 support.
 - Fix raw_mode in text mode.
