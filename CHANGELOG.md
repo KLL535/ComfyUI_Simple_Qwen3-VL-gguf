@@ -1,4 +1,5 @@
 # Nightly
+- Improved error output
 # V3.7
 - Added `force_mmproj` settings.
 - Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update to 0.3.37)

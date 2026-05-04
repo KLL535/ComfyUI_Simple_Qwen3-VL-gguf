@@ -22,22 +22,6 @@ from debug_print import _debug_print
 _cached_llm = None
 _cached_model_hash = None
 
-#_log_callback_initialized = False
-#_log_callback_obj = None
-#def silent_log_callback(level, text, user_data):
-#    pass
-def set_silent_logging(silent):
-    pass
-    #global _log_callback_initialized, _log_callback_obj
-    #if not silent:
-    #    return
-    #if _log_callback_initialized:
-    #    return
-    #import llama_cpp
-    #_log_callback_obj = llama_cpp.llama_log_callback(silent_log_callback)
-    #llama_cpp.llama_log_set(_log_callback_obj, None)
-    #_log_callback_initialized = True
-
 def build_prompt(template: str, system: str, user: str):
     # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
     result = template.replace("{system}", system).replace("{user}", user)
@@ -235,7 +219,7 @@ def _inference(config):
             content_text = f"(with {num_images}/{num_audios}/{num_videos} image/audio/video)"        
 
         t0 = time.perf_counter()
-        set_silent_logging(silent)
+        
         if extract_embedding == False:
             from llama_cpp import Llama
         else:
@@ -419,7 +403,7 @@ def _inference(config):
                 if (use_mmap := config.get("use_mmap")) is not None: llm_kwargs["use_mmap"] = use_mmap
                 if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
                 if (n_keep := config.get("n_keep")) is not None: llm_kwargs["n_keep"] = n_keep
-                if (flash_attn := config.get("flash_attn")) is not None: llm_kwargs["flash_attn"] = flash_attn
+                if (flash_attn_type := config.get("flash_attn_type")) is not None: llm_kwargs["flash_attn_type"] = flash_attn_type
 
                 for key, value in config.items():
                     if key.startswith("extra_llama_"):
@@ -810,11 +794,18 @@ def main():
         _DLL_DIR_HANDLES = []
         if os.name == "nt":
             py_root = os.path.dirname(sys.executable)
-            for rel in (r"Lib\site-packages\torch\lib", r"Lib\site-packages\llama_cpp\lib"):
-                p = os.path.join(py_root, rel)
-                if os.path.isdir(p):
-                    _DLL_DIR_HANDLES.append(os.add_dll_directory(p))
-                    os.environ["PATH"] = p + os.pathsep + os.environ.get("PATH", "")
+            # Всегда добавляем путь к llama_cpp
+            p_llama = os.path.join(py_root, r"Lib\site-packages\llama_cpp\lib")
+            if os.path.isdir(p_llama):
+                _DLL_DIR_HANDLES.append(os.add_dll_directory(p_llama))
+                os.environ["PATH"] = p_llama + os.pathsep + os.environ.get("PATH", "")
+            # Для torch – только если нет CUDA в PATH
+            cuda_in_path = any("CUDA" in p.upper() for p in os.environ.get("PATH", "").split(os.pathsep))
+            if not cuda_in_path:
+                p_torch = os.path.join(py_root, r"Lib\site-packages\torch\lib")
+                if os.path.isdir(p_torch):
+                    _DLL_DIR_HANDLES.append(os.add_dll_directory(p_torch))
+                    os.environ["PATH"] = p_torch + os.pathsep + os.environ.get("PATH", "")
 
         if len(sys.argv) != 2:
             print(json.dumps({"status": "error", "message": "sys.argv != 2"}, ensure_ascii=True), flush=True)

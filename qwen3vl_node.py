@@ -13,7 +13,6 @@ import time
 from PIL import Image
 from typing import Optional, Dict, Any
 import textwrap
-import traceback
 
 try:
     from json_repair import repair_json
@@ -341,10 +340,18 @@ def extract_json_from_output(output: str) -> dict:
 def run_script_subprocess(script_name, config, timeout=300):
     node_dir = os.path.dirname(os.path.abspath(__file__))
     script_path = os.path.join(node_dir, script_name)
+
     if not os.path.exists(script_path):
-        return {"status": "error", "message": f"Script file '{script_name}' not found in {node_dir}"}
+        return {
+            "status": "error", 
+            "message": f"Script file '{script_name}' not found in {node_dir}"
+        }
+
     if os.path.basename(script_name) != script_name:
-        return {"status": "error", "message": "Script name must not contain path separators"}
+        return {
+            "status": "error", 
+            "message": "Script name must not contain path separators"
+        }
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
         json.dump(config, tmp_file, ensure_ascii=False)
@@ -357,27 +364,48 @@ def run_script_subprocess(script_name, config, timeout=300):
             timeout=timeout,
             cwd=node_dir
         )
-        if result.returncode != 0:
-            error_msg = f"Subprocess failed (code {result.returncode})\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-            return {"status": "error", "message": "Model inference failed. Check console for details.", "debug_info": error_msg}
         try:
             output_data = extract_json_from_output(result.stdout)
-            silent = config.get("silent", True)
-            debug = config.get("debug", False)
-            if debug or not silent: 
-                if result.stderr:
-                    print(f"{result.stderr}")
-            return output_data
+            if result.returncode == 0:
+
+                verbose = config.get("verbose", False)
+                if verbose: 
+                    if result.stderr:
+                        print(f"{result.stderr}")
+                        
+                return output_data
+
+            else:
+                if result.returncode == 1:
+                    return {
+                        "status": "error", 
+                        "message": output_data.get('message', "Unknown error"), 
+                        "traceback": output_data.get('traceback', "")
+                    }
+                else:    
+                    return {
+                        "status": "error", 
+                        "message": f"Subprocess failed with code: {result.returncode}" 
+                    }
+
         except Exception as e: 
             return {
                 "status": "error",
                 "message": e,
-                "debug_info": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
             }
+
     except subprocess.TimeoutExpired:
-        return {"status": "error", "message": "Inference timed out (5 min)."}
+        return {
+            "status": "error", 
+            "message": "Inference timed out (5 min)."
+        }
+
     except Exception as e:
-        return {"status": "error", "message": f"Subprocess launch failed: {e}"}
+        return {
+            "status": "error", 
+            "message": f"Subprocess launch failed: {e}"
+        }
+
     finally:
         try:
             os.unlink(tmp_config_path)
@@ -440,43 +468,29 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
 
             return text, conditioning
         else:
-            error_msg = f"[ERROR] {result.get('message', 'Unknown error')}"
+            error_msg = result.get('message', 'Unknown error')
+            output_msg = f"❌ Inference failed:\n{error_msg}\nCheck console for details."
 
-            print(error_msg, file=sys.stderr)
-
-            # Если есть debug_info (подпроцесс)
-            if "debug_info" in result:
-                debug_info = result["debug_info"]
-                if isinstance(debug_info, dict):
-                    stdout = debug_info.get('stdout', '')
-                    stderr = debug_info.get('stderr', '')
-                    if stdout:
-                        print("Subprocess STDOUT:", file=sys.stderr)
-                        print(stdout, file=sys.stderr)
-                    if stderr:
-                        print("Subprocess STDERR:", file=sys.stderr)
-                        print(stderr, file=sys.stderr)
-                else:
-                    print(f"Debug info: {debug_info}", file=sys.stderr)
+            print(f"[ERROR] Inference failed:\n{error_msg}", file=sys.stderr)
 
             if "traceback" in result:
-                print("Traceback:", file=sys.stderr)
                 print(result["traceback"], file=sys.stderr)
 
             # Очистка памяти при ошибке
             unload_model(False, debug)
             clear_memory(True, debug)
 
-            return error_msg, None
+            return output_msg, None
     except Exception as e:
-        error_msg = f"[ERROR] Unexpected error in inference pipeline: {str(e)}"
-        print(error_msg, file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)  
+        error_msg = f"Unexpected error: {str(e)}"
+        output_msg = f"❌ Inference failed:\n{error_msg}\nCheck console for details."
+
+        print(f"[ERROR] Inference failed:\n{error_msg}", file=sys.stderr)
 
         unload_model(False, debug)
         clear_memory(True, debug)
 
-        return error_msg, None
+        return output_msg, None
 
 def unload_model(gccollect = False,debug = False):
     global _current_module
@@ -775,6 +789,7 @@ def old_names_patch(config: Dict[str, Any]) -> Dict[str, Any]:
         "gpu_layers": "n_gpu_layers",
         "output_max_tokens": "max_tokens",
         "present_penalty": "presence_penalty",
+        "flash_attn": "flash_attn_type",
     }
 
     result = config.copy()
