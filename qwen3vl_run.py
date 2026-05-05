@@ -4,11 +4,11 @@ import io
 import json
 import os
 import base64
-import traceback
 import time
 import gc
 import numpy as np
 import tempfile
+import traceback
 from PIL import Image
 
 from pathlib import Path
@@ -162,7 +162,8 @@ def _inference(config):
 
     try:
 
-        #print(config, file=sys.stderr)
+        if config.get("print_config", False):
+            print(f"Config:\n{config}", file=sys.stderr)
 
         debug = config.get("debug", False)
         verbose = config.get("verbose", False)
@@ -173,6 +174,7 @@ def _inference(config):
         image_min_tokens = config.get("image_min_tokens")
         image_max_tokens = config.get("image_max_tokens")
         extract_embedding = config.get("extract_embedding", False)
+        extract_tts = config.get("extract_tts", False)
         max_frames = config.get("max_frames",24)
         raw_mode = config.get("raw_mode", False)
 
@@ -220,10 +222,11 @@ def _inference(config):
 
         t0 = time.perf_counter()
         
-        if extract_embedding == False:
-            from llama_cpp import Llama
-        else:
+        if extract_embedding:
             from llama_cpp.llama_embedding import LlamaEmbedding, LLAMA_POOLING_TYPE_NONE
+        else: 
+            from llama_cpp import Llama
+            
         _debug_print(debug, "import llama_cpp", t0, file=sys.stderr)
 
         mmproj_path = config.get("mmproj_path", "").strip()
@@ -404,6 +407,7 @@ def _inference(config):
                 if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
                 if (n_keep := config.get("n_keep")) is not None: llm_kwargs["n_keep"] = n_keep
                 if (flash_attn_type := config.get("flash_attn_type")) is not None: llm_kwargs["flash_attn_type"] = flash_attn_type
+                if (logits_all := config.get("logits_all")) is not None: llm_kwargs["logits_all"] = logits_all            
 
                 for key, value in config.items():
                     if key.startswith("extra_llama_"):
@@ -500,8 +504,9 @@ def _inference(config):
                     _debug_print(debug, "clearing cache", t2, file=sys.stderr)
 
         output = ""
-        emb_np = None
-        if not extract_embedding:
+        output_data = None
+        data_type = 0
+        if (not extract_embedding) and (not extract_tts):
 
             completion_kwargs = {
                 "max_tokens": config.get("max_tokens", config.get("output_max_tokens", 2048)),
@@ -608,7 +613,12 @@ def _inference(config):
 
                 if is_vision_model:
 
-                    content = [{"type": "text", "text": user_prompt}]
+                    content = []
+
+                    user_prompt_after_content = config.get("user_prompt_after_content", True)
+
+                    if not user_prompt_after_content:
+                        content.append({"type": "text", "text": user_prompt})
 
                     for img_item in images:
                         img_content = _build_image_content(img_item, quality=image_quality)
@@ -624,6 +634,9 @@ def _inference(config):
                         frames_items = _build_video_content(path, max_frames=max_frames, quality=frame_quality)
                         if frames_items is not None:
                             content.extend(frames_items) 
+
+                    if user_prompt_after_content:
+                        content.append({"type": "text", "text": user_prompt})
 
                     if system_prompt:
                         messages = [
@@ -670,7 +683,7 @@ def _inference(config):
             if not config.get("raw_output", False):
                 output = output.strip()
 
-        else: #extract_embedding = true
+        elif extract_embedding:
 
             tokenizer_path = config.get("tokenizer_path")
 
@@ -717,11 +730,24 @@ def _inference(config):
                 if scale is not None: 
                     emb_np = (emb_np * scale).astype(np.float32)
 
+                output_data = emb_np
+                data_type = 1
+
             except Exception as e:
                 print(f"[WARNING] Embedding extraction failed: {e}", file=sys.stderr)
             _debug_print(debug, "get embedding", t_emb, file=sys.stderr)
 
-        return {"status": "success", "output": output}, emb_np
+        elif extract_tts:
+
+            t_tts = time.perf_counter()
+
+            # 
+            # 
+            #
+
+            _debug_print(debug, "get tts", t_tts, file=sys.stderr)
+
+        return {"status": "success", "output": output, "data_type": data_type}, output_data
 
     except Exception as e:
         return {
@@ -827,20 +853,20 @@ def main():
 
         swap_dup()
 
-        result, cond_tensor = _inference(config)
+        result, data_type = _inference(config)
 
-        # Сохраняем embedding
-        if cond_tensor is not None:
+        # Сохраняем data
+        if data_type is not None:
 
             import pickle
 
-            t_emb = time.perf_counter()
+            t_save_data = time.perf_counter()
             with tempfile.NamedTemporaryFile(suffix='.pkl', delete=False) as f:
-                pickle.dump(cond_tensor, f)
-                cond_path = f.name    
-            result["embedding_file"] = cond_path
+                pickle.dump(data_type, f)
+                data_path = f.name    
+            result["data_file"] = data_path
             debug = config.get("debug", False)
-            _debug_print(debug, "save embedding", t_emb, file=sys.stderr)
+            _debug_print(debug, "save data", t_save_data, file=sys.stderr)
    
         restore_dup()
 

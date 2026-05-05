@@ -13,6 +13,7 @@ import time
 from PIL import Image
 from typing import Optional, Dict, Any
 import textwrap
+import traceback
 
 try:
     from json_repair import repair_json
@@ -307,16 +308,16 @@ def save_pil_temp(pil_img, file_format, jpeg_quality):
             pil_img.save(f, format='PNG', optimize=True)
         return f.name
 
-def extract_embedding_from_file(emb_path):
-    embedding = None
-    if emb_path and os.path.exists(emb_path):
+def extract_data_from_file(data_path):
+    data = None
+    if data_path and os.path.exists(data_path):
         try:
-            with open(emb_path, 'rb') as f:
-                embedding = pickle.load(f)
-            os.unlink(emb_path)
+            with open(data_path, 'rb') as f:
+                data = pickle.load(f)
+            os.unlink(data_path)
         except Exception as e:
-            print(f"[WARNING] Failed to load embedding: {e}")
-    return embedding
+            print(f"[WARNING] Failed to load data: {e}")
+    return data
 
 def extract_json_from_output(output: str) -> dict:
     """Извлекает JSON из вывода, игнорируя логи до/после"""
@@ -334,6 +335,7 @@ def extract_json_from_output(output: str) -> dict:
     
     try:
         return json.loads(json_str)
+
     except json.JSONDecodeError:
         raise ValueError(f"Invalid JSON in output:\n{output}")
 
@@ -364,35 +366,37 @@ def run_script_subprocess(script_name, config, timeout=300):
             timeout=timeout,
             cwd=node_dir
         )
+
         try:
             output_data = extract_json_from_output(result.stdout)
-            if result.returncode == 0:
-
-                verbose = config.get("verbose", False)
-                if verbose: 
-                    if result.stderr:
-                        print(f"{result.stderr}")
-                        
-                return output_data
-
-            else:
-                if result.returncode == 1:
-                    return {
-                        "status": "error", 
-                        "message": output_data.get('message', "Unknown error"), 
-                        "traceback": output_data.get('traceback', "")
-                    }
-                else:    
-                    return {
-                        "status": "error", 
-                        "message": f"Subprocess failed with code: {result.returncode}" 
-                    }
-
-        except Exception as e: 
+        except Exception as e:
             return {
-                "status": "error",
-                "message": e,
+                "status": "error", 
+                "message": str(e),
+                "traceback": f"STDERR:\n{result.stderr}"
             }
+
+        if result.returncode == 0:
+
+            debug = config.get("debug", False)
+            if debug: 
+                if result.stderr:
+                    print(f"{result.stderr}")
+                    
+            return output_data
+
+        else:
+            if result.returncode == 1:
+                return {
+                    "status": "error", 
+                    "message": output_data.get('message', "Unknown error"), 
+                    "traceback": output_data.get('traceback', "")
+                }
+            else:    
+                return {
+                    "status": "error", 
+                    "message": f"Subprocess failed with code: {result.returncode}" 
+                }
 
     except subprocess.TimeoutExpired:
         return {
@@ -403,7 +407,8 @@ def run_script_subprocess(script_name, config, timeout=300):
     except Exception as e:
         return {
             "status": "error", 
-            "message": f"Subprocess launch failed: {e}"
+            "message": f"Subprocess launch failed: {e}",
+            "traceback": traceback.format_exc()
         }
 
     finally:
@@ -415,10 +420,10 @@ def run_script_subprocess(script_name, config, timeout=300):
 def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = False, debug = False):
     global _current_module
     if not script_name:
-        return "[ERROR] Script name is not defined", None
+        return "[ERROR] Script name is not defined", None, None
     try:
 
-        embedding = None
+        data = None
         if mode == "subprocess":
             unload_model(gccollect, debug)
             result = run_script_subprocess(script_name, config, timeout=300)
@@ -426,30 +431,31 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
             if script_name == "qwen3vl_run.py":
                 module = qwen3vl_run
             else:
-                return f"Direct execution not supported for script '{script_name}'", None
+                return f"Direct execution not supported for script '{script_name}'", None, None
             if _current_module is not None and _current_module != module:
                 unload_model(gccollect, debug)
 
             _current_module = module
-            result, embedding = module.run_inference_direct(config)
+            result, data = module.run_inference_direct(config)
 
             if mode == "direct_clean":
                 unload_model(gccollect, debug)
 
         if result.get("status") == "success":
             text = result.get("output", "")
+            data_type = result.get("data_type", 0)
 
             if mode == "subprocess":
-                embedding_file = result.get("embedding_file")
-                if embedding_file is not None:
-                    embedding = extract_embedding_from_file(embedding_file)
-            
+                data_file = result.get("data_file")
+                if data_file:
+                    data = extract_data_from_file(data_file)
+
             conditioning = None
-            if embedding is not None:
+            if data_type == 1 and data is not None:
 
                 convert_emb_to_cond = config.get("convert_emb_to_cond")
                 if convert_emb_to_cond is not None:
-                    hidden_states = torch.from_numpy(embedding).unsqueeze(0)
+                    hidden_states = torch.from_numpy(data).unsqueeze(0)
                     #  Формируем conditioning
                     seq_len = hidden_states.shape[1]
                     attention_mask = torch.ones((1, seq_len), dtype=torch.long)
@@ -464,9 +470,13 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
                         ]
                     ]
                 else:
-                    conditioning = embedding
+                    conditioning = data
 
-            return text, conditioning
+            audio = None
+            if data_type == 2 and data is not None:
+                pass
+
+            return text, conditioning, audio
         else:
             error_msg = result.get('message', 'Unknown error')
             output_msg = f"❌ Inference failed:\n{error_msg}\nCheck console for details."
@@ -480,17 +490,19 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
             unload_model(False, debug)
             clear_memory(True, debug)
 
-            return output_msg, None
+            return output_msg, None, None
     except Exception as e:
-        error_msg = f"Unexpected error: {str(e)}"
+        error_msg = f"Unexpected error: {e}"
         output_msg = f"❌ Inference failed:\n{error_msg}\nCheck console for details."
 
         print(f"[ERROR] Inference failed:\n{error_msg}", file=sys.stderr)
 
+        print(traceback.format_exc())
+
         unload_model(False, debug)
         clear_memory(True, debug)
 
-        return output_msg, None
+        return output_msg, None, None
 
 def unload_model(gccollect = False,debug = False):
     global _current_module
@@ -613,8 +625,8 @@ class SimpleQwen3VL_GGUF_Node:
             }
         }
 
-    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING")
-    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt")
+    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING" )
+    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt" )
     FUNCTION = "run"
     CATEGORY = CATEGORY_NAME
 
@@ -737,7 +749,7 @@ class SimpleQwen3VL_GGUF_Node:
                 raise ValueError(f"Script {script_name} is not defined")
 
             # Запуск инференса
-            text, conditioning = run_inference_pipeline(script_name, final_config, mode, gccollect, debug = debug)
+            text, conditioning, audio = run_inference_pipeline(script_name, final_config, mode, gccollect, debug = debug)
 
             return (text, conditioning, system_prompt, user_prompt)
 
