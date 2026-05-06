@@ -32,7 +32,7 @@ class Qwen3VL_ModelConfig:
                 
                 # === КРИТИЧЕСКИЕ: Память/Контекст/Оптимизация ===
                 "n_ctx": ("INT", {
-                    "default": 8192, "min": 512, "max": 131072, "step": 512,
+                    "default": 8192, "min": 512, "max": 1048576, "step": 512,
                     "tooltip": "Context size: image_tokens + input_tokens + output_tokens <= n_ctx"
                 }),
                 "n_batch": ("INT", {
@@ -65,16 +65,16 @@ class Qwen3VL_ModelConfig:
                 }),
                 "offload_kqv": ("BOOLEAN", {
                 	"default": True, 
-                	"tooltip": "Offload KV Cache to GPU. Turn OFF if Out of Memory."
+                	"tooltip": "Offload KV Cache to GPU. Turn OFF (slow) for safe VRAM."
                 }),
                 
                 # === КРИТИЧЕСКИЕ: Мультимодаль ===
-                "chat_handler": (["gemma4","gemma3", "qwen35", "qwen3", "qwen25", "llava16", "llava15", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "lfm25vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha", "step3vl" ], {
-                    "default": "qwen35",
+                "chat_handler": (["none", "gemma4", "gemma3", "qwen35", "qwen3", "qwen25", "llava16", "llava15", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "lfm25vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha", "step3vl" ], {
+                    "default": "none",
                     "tooltip": "Chat template for multimodal models."
                 }),
-                "chat_format": (["auto","llama-2", "llama-3", "llama-4", "qwen", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma" ], {
-                    "default": "auto",
+                "chat_format": (["none","llama-2", "llama-3", "llama-4", "qwen", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma" ], {
+                    "default": "none",
                     "tooltip": "Chat format for text-only models."
                 }),
                 "force_mmproj": ("BOOLEAN", {
@@ -88,7 +88,7 @@ class Qwen3VL_ModelConfig:
                 
                 # === ОПЦИОНАЛЬНЫЕ: Отладка ===
                 "verbose": ("BOOLEAN", {"default": False, "tooltip": "Verbose llama.cpp logging"}),
-                "debug": ("BOOLEAN", {"default": False, "tooltip": "Output timing info to console"}),
+                "debug": ("BOOLEAN", {"default": True, "tooltip": "Output timing info to console"}),
             }
         }
     
@@ -110,8 +110,8 @@ class Qwen3VL_ModelConfig:
                      use_mmap: bool = True,
                      use_mlock: bool = False,
                      offload_kqv: bool = True,
-                     chat_handler: str = "qwen35",
-                     chat_format: str = "auto",
+                     chat_handler: str = "none",
+                     chat_format: str = "none",
                      force_mmproj: bool = False,
                      enable_thinking: bool = False,
                      verbose: bool = False,
@@ -122,7 +122,7 @@ class Qwen3VL_ModelConfig:
         config = {
             "script": "qwen3vl_run.py",  
         }
-        
+      
         # 2. Собираем только НЕ-пустые значения из текущей ноды
         local_params = {
             "model_path": model_path,
@@ -136,14 +136,13 @@ class Qwen3VL_ModelConfig:
             "use_mlock": use_mlock,
             "offload_kqv": offload_kqv,
             "n_cpu_moe": n_cpu_moe,
-            "chat_handler": chat_handler,
-            "chat_format": chat_format if chat_format != "auto" else None,
+            "chat_handler": chat_handler if chat_handler != "none" else None,
+            "chat_format": chat_format if chat_format != "none" else None,
             "enable_thinking": enable_thinking,
             "force_mmproj": force_mmproj,
             "verbose": verbose,
             "debug": debug,
         }
-
         
         # 3. Применяем фильтрованный локальный конфиг (None = не перезаписывать)
         for k, v in local_params.items():
@@ -211,7 +210,23 @@ class Qwen3VL_SamplingConfig:
                 "frequency_penalty": ("FLOAT", {
                     "default": 0.0, "min": -2.0, "max": 2.0, "step": 0.1,
                     "tooltip": "Penalize tokens by frequency. >0 reduces repetition of common words."
-                }),              
+                }),  
+
+                # === ОПЦИОНАЛЬНО: ЛИМИТЫ ИЗОБРАЖЕНИЙ (0 = не задано) ===
+                "image_min_tokens": ("INT", {
+                    "default": 0,  
+                    "min": 0, 
+                    "max": 8192, 
+                    "step": 1,
+                    "tooltip": "Min tokens for image embedding. 0 = not set"
+                }),
+                "image_max_tokens": ("INT", {
+                    "default": 0,  
+                    "min": 0, 
+                    "max": 16384, 
+                    "step": 1,
+                    "tooltip": "Max tokens for image embedding. 0 = not set"
+                }),            
             }
         }
     
@@ -230,6 +245,8 @@ class Qwen3VL_SamplingConfig:
                      repeat_penalty: float = 1.1,
                      presence_penalty: float = 0.0,
                      frequency_penalty: float = 0.0,
+                     image_min_tokens: int = 0,
+    	             image_max_tokens: int = 0,
                      config_override: str = None):
         
         # 1. Базовый конфиг
@@ -238,6 +255,8 @@ class Qwen3VL_SamplingConfig:
         # 2. Локальные параметры (None = не применять)
         local_params = {
             "max_tokens": max_tokens,
+            "image_min_tokens": image_min_tokens if image_min_tokens > 0 else None,
+            "image_max_tokens": image_max_tokens if image_max_tokens > 0 else None,
             "temperature": temperature,
             "top_p": top_p,
             "min_p": min_p,
@@ -246,7 +265,7 @@ class Qwen3VL_SamplingConfig:
             "presence_penalty": presence_penalty if presence_penalty != 0.0 else None,
             "frequency_penalty": frequency_penalty if frequency_penalty != 0.0 else None,
         }
-        
+       
         # 3. Применяем локальные (пропуская None)
         for k, v in local_params.items():
             if v is not None:
