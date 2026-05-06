@@ -1,0 +1,263 @@
+#configurator.py
+
+from .qwen3vl_node import old_names_patch, config_override_repair, CATEGORY_NAME
+
+import os
+import json
+import hashlib
+from typing import Optional, Union, Dict, Any
+
+class Qwen3VL_ModelConfig:
+
+    #Model Configuration Node
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),  # Вход для стака конфигов
+            },
+            "required": {
+                # === КРИТИЧЕСКИЕ: Пути ===
+                "model_path": ("STRING", {
+                    "default": "", 
+                    "placeholder": "models/Qwen3-VL.gguf",
+                    "tooltip": "Path to GGUF model file (relative to custom_nodes dir)"
+                }),
+                "mmproj_path": ("STRING", {
+                    "default": "", 
+                    "placeholder": "models/mmproj.gguf (optional)",
+                    "tooltip": "Path to multimodal projector (required for vision)"
+                }),
+                
+                # === КРИТИЧЕСКИЕ: Память/Контекст/Оптимизация ===
+                "n_ctx": ("INT", {
+                    "default": 8192, "min": 512, "max": 131072, "step": 512,
+                    "tooltip": "Context size: image_tokens + input_tokens + output_tokens <= n_ctx"
+                }),
+                "n_batch": ("INT", {
+                    "default": 512, "min": 32, "max": 8192, "step": 32,
+                    "tooltip": "Prompt processing batch. Lower = less VRAM, higher = faster."
+                }),
+                "n_ubatch": ("INT", {
+                    "default": 512, "min": 32, "max": 8192, "step": 32,
+                    "tooltip": "Micro-batch size for advanced memory management"
+                }),
+                "n_gpu_layers": ("INT", {
+                    "default": -1, "min": -1, "max": 256, "step": 1,
+                    "tooltip": "Layers to GPU: -1=all, 0=CPU only. Reduce if OOM."
+                }),               
+                "n_cpu_moe": ("INT", {
+                    "default": 0, "min": 0, "max": 128, "step": 1,
+                    "tooltip": "MoE experts on CPU (VRAM saver). 0 = all on GPU."
+                }),
+                "n_threads": ("INT", {
+                    "default": 8, "min": 1, "max": 64, "step": 1,
+                    "tooltip": "CPU threads for inference. Match physical cores."
+                }),
+                "use_mmap": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Memory mapping. set True if faster model loading."
+                }),
+                "use_mlock": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Lock model in RAM (prevent swap). Uses more RAM."
+                }),
+                "offload_kqv": ("BOOLEAN", {
+                	"default": True, 
+                	"tooltip": "Offload KV Cache to GPU. Turn OFF if Out of Memory."
+                }),
+                
+                # === КРИТИЧЕСКИЕ: Мультимодаль ===
+                "chat_handler": (["gemma4","gemma3", "qwen35", "qwen3", "qwen25", "llava16", "llava15", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "lfm25vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha", "step3vl" ], {
+                    "default": "qwen35",
+                    "tooltip": "Chat template for multimodal models."
+                }),
+                "chat_format": (["auto","llama-2", "llama-3", "llama-4", "qwen", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma" ], {
+                    "default": "auto",
+                    "tooltip": "Chat format for text-only models."
+                }),
+                "force_mmproj": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Force load mmproj even without images (preserves template for enable_thinking)."
+                }),
+                "enable_thinking": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Enable 'thinking' mode for Qwen3.5/Gemma4 (requires more output tokens)."
+                }),
+                
+                # === ОПЦИОНАЛЬНЫЕ: Отладка ===
+                "verbose": ("BOOLEAN", {"default": False, "tooltip": "Verbose llama.cpp logging"}),
+                "debug": ("BOOLEAN", {"default": False, "tooltip": "Output timing info to console"}),
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("config",)
+    FUNCTION = "build_config"
+    CATEGORY = CATEGORY_NAME
+    OUTPUT_NODE = False
+    
+    def build_config(self, 
+                     model_path: str = "",
+                     mmproj_path: str = "",
+                     n_ctx: int = 8192,
+                     n_batch: int = 512,
+                     n_ubatch: int = 512,
+                     n_gpu_layers: int = -1,
+                     n_cpu_moe: int = 0,
+                     n_threads: int = 8,
+                     use_mmap: bool = True,
+                     use_mlock: bool = False,
+                     offload_kqv: bool = True,
+                     chat_handler: str = "qwen35",
+                     chat_format: str = "auto",
+                     force_mmproj: bool = False,
+                     enable_thinking: bool = False,
+                     verbose: bool = False,
+                     debug: bool = False,
+                     config_override: str = None):
+        
+        # 1. Базовый конфиг 
+        config = {
+            "script": "qwen3vl_run.py",  
+        }
+        
+        # 2. Собираем только НЕ-пустые значения из текущей ноды
+        local_params = {
+            "model_path": model_path,
+            "mmproj_path": mmproj_path,
+            "n_ctx": n_ctx,
+            "n_gpu_layers": n_gpu_layers,
+            "n_threads": n_threads,
+            "n_batch": n_batch,
+            "n_ubatch": n_ubatch,
+            "use_mmap": use_mmap,
+            "use_mlock": use_mlock,
+            "offload_kqv": offload_kqv,
+            "n_cpu_moe": n_cpu_moe,
+            "chat_handler": chat_handler,
+            "chat_format": chat_format if chat_format != "auto" else None,
+            "enable_thinking": enable_thinking,
+            "force_mmproj": force_mmproj,
+            "verbose": verbose,
+            "debug": debug,
+        }
+
+        
+        # 3. Применяем фильтрованный локальный конфиг (None = не перезаписывать)
+        for k, v in local_params.items():
+            if v is not None:
+                config[k] = v
+
+        # 4. Применяем config_override
+        if config_override and str(config_override).strip():
+            try:
+                override_dict = config_override_repair(str(config_override))
+                config.update(old_names_patch(override_dict))
+            except Exception as e:
+                raise ValueError(e)      
+        
+        # 5. Валидация критических полей
+        if not config.get("model_path"):
+            raise ValueError("❌ model_path is required! Set path to your GGUF model.")
+        
+        return (config,)
+
+class Qwen3VL_SamplingConfig:
+
+    #Sampling Configuration Node 
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "optional": {
+                "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
+            },
+            "required": {
+                # === КРИТИЧЕСКИЕ: Лимиты ===
+                "max_tokens": ("INT", {
+                    "default": 2048, "min": 16, "max": 32768, "step": 16,
+                    "tooltip": "Max output tokens. Thinking models need 4096+."
+                }),
+
+                # === КРИТИЧЕСКИЕ: Сэмплинг ===
+                "temperature": ("FLOAT", {
+                    "default": 0.7, "min": 0.0, "max": 2.0, "step": 0.05, "round": 0.01,
+                    "tooltip": "0.1=focused, 0.7=balanced, 1.2+=creative. Lower = more deterministic."
+                }),
+                "top_p": ("FLOAT", {
+                    "default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "tooltip": "Nucleus sampling: cumulative probability cutoff. Lower = more focused."
+                }),
+                "min_p": ("FLOAT", {
+                    "default": 0.05, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "tooltip": "Cut off tokens with prob < min_p * (top_token_prob). Great for reducing garbage."
+                }),
+                "top_k": ("INT", {
+                    "default": 40, "min": 0, "max": 500, "step": 1,
+                    "tooltip": "Limit to top-K tokens. 0 = disabled. Good for strict output."
+                }),
+                
+                # === КРИТИЧЕСКИЕ: Пенальти ===
+                "repeat_penalty": ("FLOAT", {
+                    "default": 1.1, "min": 1.0, "max": 2.0, "step": 0.05,
+                    "tooltip": "Penalty for repeating tokens. >1.0 discourages loops."
+                }),
+                "presence_penalty": ("FLOAT", {
+                    "default": 0.0, "min": -2.0, "max": 2.0, "step": 0.1,
+                    "tooltip": "Penalize tokens that appeared at all. >0 encourages new topics."
+                }),
+                "frequency_penalty": ("FLOAT", {
+                    "default": 0.0, "min": -2.0, "max": 2.0, "step": 0.1,
+                    "tooltip": "Penalize tokens by frequency. >0 reduces repetition of common words."
+                }),              
+            }
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("config",)
+    FUNCTION = "build_config"
+    CATEGORY = CATEGORY_NAME
+    OUTPUT_NODE = False
+    
+    def build_config(self,
+    	             max_tokens: int = 2048,
+                     temperature: float = 0.7,
+                     top_p: float = 0.95,
+                     min_p: float = 0.05,
+                     top_k: int = 40,
+                     repeat_penalty: float = 1.1,
+                     presence_penalty: float = 0.0,
+                     frequency_penalty: float = 0.0,
+                     config_override: str = None):
+        
+        # 1. Базовый конфиг
+        config = {}
+        
+        # 2. Локальные параметры (None = не применять)
+        local_params = {
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p,
+            "min_p": min_p,
+            "top_k": top_k, 
+            "repeat_penalty": repeat_penalty,
+            "presence_penalty": presence_penalty if presence_penalty != 0.0 else None,
+            "frequency_penalty": frequency_penalty if frequency_penalty != 0.0 else None,
+        }
+        
+        # 3. Применяем локальные (пропуская None)
+        for k, v in local_params.items():
+            if v is not None:
+                config[k] = v
+        
+        # 4. Применяем config_override
+        if config_override and str(config_override).strip():
+            try:
+                override_dict = config_override_repair(str(config_override))
+                config.update(old_names_patch(override_dict))
+            except Exception as e:
+                raise ValueError(e)   
+        
+        return (config,)

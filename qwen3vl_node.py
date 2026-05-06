@@ -511,6 +511,79 @@ def unload_model(gccollect = False,debug = False):
             _current_module.unload_llama_model(gccollect, debug)
         _current_module = None
 
+def config_override_repair(text: str):
+    def _convert_to_json(text: str) -> str:
+        # Список плейсхолдеров, которые нужно игнорировать
+        placeholders = ['{system}', '{images}', '{user}']
+        temp_tokens = ['__PH_SYSTEM__', '__PH_IMAGES__', '__PH_USER__']
+        
+        # Замена плейсхолдеров
+        for ph, token in zip(placeholders, temp_tokens):
+            text = text.replace(ph, token)    
+        
+        # Удаляем часть до первого '{' и после последнего '}', если они есть
+        start_brace = text.find('{')
+        end_brace = text.rfind('}')
+        if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
+            json_str = text[start_brace:end_brace+1]
+        else:
+            json_str = text
+        json_str = json_str.strip()
+        if not json_str.startswith('{'):
+            json_str = '{' + json_str + '}'
+        
+        # Возврат плейсхолдеров обратно
+        for token, ph in zip(temp_tokens, placeholders):
+            json_str = json_str.replace(token, ph)
+        
+        return json_str.strip()
+
+    def _flatten_dict(data: Any) -> Dict[str, Any]:
+        result = {}
+        if not isinstance(data, dict):
+            return result
+        for key, value in data.items():
+            if isinstance(value, dict):
+                result.update(_flatten_dict(value))
+            else:
+                result[key] = value
+        return result
+
+    # 1. Вырезаем чистое JSON-тело
+    json_body = _convert_to_json(text)
+    if not json_body:
+        return {}
+
+    parsed = None
+    error_msg = None
+
+    # 2. Пробуем стандартный парсер 
+    try:
+        parsed = json.loads(json_body)
+    except json.JSONDecodeError as e:
+        error_msg = f"Standard JSON parser failed: {e}"
+
+    # 3. Если не вышло — пробуем repair
+    if parsed is None and HAS_JSON_REPAIR:
+        try:
+            repaired = repair_json(json_body)
+            parsed = json.loads(repaired)
+        except Exception as e:
+            error_msg = f"json_repair couldn't fix the JSON: {e}"
+
+    # 4. Если всё ещё не распарсилось — ошибка
+    if parsed is None:
+        raise ValueError(error_msg)
+
+    # 5. Сплющиваем любую вложенность в один уровень
+    parsed = _flatten_dict(parsed)
+
+    # 6. Валидация и кэширование
+    if not isinstance(parsed, dict):
+        raise ValueError(f"config_override must be a JSON object: {parsed}")
+
+    return parsed.copy()
+
 # ========== Основная нода ==========
 class SimpleQwen3VL_GGUF_Node:
     _cached_config_hash = ""
@@ -518,83 +591,14 @@ class SimpleQwen3VL_GGUF_Node:
 
     @classmethod
     def _config_override_repair(cls, text: str) -> Dict[str, Any]:
-
         config_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
         if cls._cached_config_hash == config_hash and cls._cached_config:
             return cls._cached_config.copy()
 
-        def _convert_to_json(text: str) -> str:
-            # Список плейсхолдеров, которые нужно игнорировать
-            placeholders = ['{system}', '{images}', '{user}']
-            temp_tokens = ['__PH_SYSTEM__', '__PH_IMAGES__', '__PH_USER__']
-            
-            # Замена плейсхолдеров
-            for ph, token in zip(placeholders, temp_tokens):
-                text = text.replace(ph, token)    
-            
-            # Удаляем часть до первого '{' и после последнего '}', если они есть
-            start_brace = text.find('{')
-            end_brace = text.rfind('}')
-            if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
-                json_str = text[start_brace:end_brace+1]
-            else:
-                json_str = text
-            json_str = json_str.strip()
-            if not json_str.startswith('{'):
-                json_str = '{' + json_str + '}'
-            
-            # Возврат плейсхолдеров обратно
-            for token, ph in zip(temp_tokens, placeholders):
-                json_str = json_str.replace(token, ph)
-            
-            return json_str.strip()
-
-        def _flatten_dict(data: Any) -> Dict[str, Any]:
-            result = {}
-            if not isinstance(data, dict):
-                return result
-            for key, value in data.items():
-                if isinstance(value, dict):
-                    result.update(_flatten_dict(value))
-                else:
-                    result[key] = value
-            return result
-
-        # 1. Вырезаем чистое JSON-тело
-        json_body = _convert_to_json(text)
-        if not json_body:
-            return {}
-
-        parsed = None
-        error_msg = None
-
-        # 2. Пробуем стандартный парсер 
-        try:
-            parsed = json.loads(json_body)
-        except json.JSONDecodeError as e:
-            error_msg = f"Standard JSON parser failed: {e}"
-
-        # 3. Если не вышло — пробуем repair
-        if parsed is None and HAS_JSON_REPAIR:
-            try:
-                repaired = repair_json(json_body)
-                parsed = json.loads(repaired)
-            except Exception as e:
-                error_msg = f"json_repair couldn't fix the JSON: {e}"
-
-        # 4. Если всё ещё не распарсилось — ошибка
-        if parsed is None:
-            raise ValueError(error_msg)
-
-        # 5. Сплющиваем любую вложенность в один уровень
-        parsed = _flatten_dict(parsed)
-
-        # 6. Валидация и кэширование
-        if not isinstance(parsed, dict):
-            raise ValueError(f"config_override must be a JSON object: {parsed}")
+        parsed = config_override_repair(text)
 
         cls._cached_config_hash = config_hash
-        cls._cached_config = parsed.copy()
+        cls._cached_config = parsed
         return parsed
 
     @classmethod
@@ -659,9 +663,9 @@ class SimpleQwen3VL_GGUF_Node:
                 config = old_names_patch(model_presets[model_preset])
 
             # Применяем config_override
-            if config_override and config_override.strip():
+            if config_override and str(config_override).strip():
                 try:
-                    override_dict = self._config_override_repair(config_override)
+                    override_dict = self._config_override_repair(str(config_override))
                     config.update(old_names_patch(override_dict))
                 except Exception as e:
                     raise ValueError(e)            

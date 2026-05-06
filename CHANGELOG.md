@@ -1,4 +1,5 @@
 # Nightly
+- Added simple LLM configurator
 - Improved error output
 # V3.7
 - Added `force_mmproj` settings.

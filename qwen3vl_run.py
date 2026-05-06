@@ -357,6 +357,10 @@ def _inference(config):
                     from llama_cpp.llama_chat_format import LFM2VLChatHandler
                     chat_handler = LFM2VLChatHandler(**handler_kwargs)
 
+                elif chat_handler_type == "lfm25vl":
+                    from llama_cpp.llama_chat_format import LFM25VLChatHandler
+                    chat_handler = LFM25VLChatHandler(**handler_kwargs)
+
                 elif chat_handler_type == "paddleocr":
                     from llama_cpp.llama_chat_format import PaddleOCRChatHandler
                     chat_handler = PaddleOCRChatHandler(**handler_kwargs)
@@ -372,6 +376,15 @@ def _inference(config):
                 elif chat_handler_type == "llama3visionalpha":
                     from llama_cpp.llama_chat_format import Llama3VisionAlphaChatHandler
                     chat_handler = Llama3VisionAlphaChatHandler(**handler_kwargs)
+
+                elif chat_handler_type == "step3vl":
+                    from llama_cpp.llama_chat_format import Step3VLChatHandler
+                    extra_handler_kwargs = {
+                        "enable_thinking": config.get("enable_thinking", True),
+                    }
+                    chat_handler = Step3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
+
+                    
 
                 else:
                     return {"status": "error", "message": f"Unknown chat handler type: {chat_handler_type}"}, None
@@ -407,7 +420,8 @@ def _inference(config):
                 if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
                 if (n_keep := config.get("n_keep")) is not None: llm_kwargs["n_keep"] = n_keep
                 if (flash_attn_type := config.get("flash_attn_type")) is not None: llm_kwargs["flash_attn_type"] = flash_attn_type
-                if (logits_all := config.get("logits_all")) is not None: llm_kwargs["logits_all"] = logits_all            
+                if (logits_all := config.get("logits_all")) is not None: llm_kwargs["logits_all"] = logits_all   
+                if (offload_kqv := config.get("offload_kqv")) is not None: llm_kwargs["offload_kqv"] = offload_kqv 
 
                 for key, value in config.items():
                     if key.startswith("extra_llama_"):

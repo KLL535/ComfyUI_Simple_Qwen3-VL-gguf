@@ -4,6 +4,7 @@
 from .qwen3vl_node import SimpleQwen3VL_GGUF_Node
 from .utils_node import MasterPromptLoader,SimpleStyleSelector,SimpleCameraSelector,UnloadQwenModel,SimpleRemoveThinkNode,SimpleTriggerNode
 from .deprecated_node import Qwen3VL_GGUF_Node
+from .configurator import Qwen3VL_ModelConfig, Qwen3VL_SamplingConfig
 
 NODE_CLASS_MAPPINGS = {
     "SimpleQwenVLggufV2": SimpleQwen3VL_GGUF_Node,
@@ -13,6 +14,9 @@ NODE_CLASS_MAPPINGS = {
     "SimpleQwenUnload": UnloadQwenModel,
     "SimpleRemoveThinkNode": SimpleRemoveThinkNode,
     "SimpleTriggerNode": SimpleTriggerNode,
+    "Qwen3VL_ModelConfig": Qwen3VL_ModelConfig,
+    "Qwen3VL_SamplingConfig": Qwen3VL_SamplingConfig,
+
 
     #deprecated_node
     "SimpleQwenVLgguf": Qwen3VL_GGUF_Node,
@@ -26,6 +30,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SimpleQwenUnload": "Simple Qwen Unload",  
     "SimpleRemoveThinkNode": "Simple Remove Think", 
     "SimpleTriggerNode": "Simple Trigger Node",
+    "Qwen3VL_ModelConfig": "LLM Model Config",
+    "Qwen3VL_SamplingConfig": "LLM Sampling Config",
 
     #deprecated_node
     "SimpleQwenVLgguf": "Qwen-VL Vision Language Model",
