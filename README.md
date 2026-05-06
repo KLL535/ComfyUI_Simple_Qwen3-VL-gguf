@@ -12,6 +12,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 # Last update:
 **06.05.2026 - Nightly**
+- Added simple LLM configurator
 - Improved error output
   
 **03.05.2026 - V3.7**
@@ -287,6 +288,8 @@ Utils:
 - `Simple Qwen Unload` - Forces unloading of the currently loaded Qwen model from VRAM. Essential when using keep_vram mode to manually free memory after a series of inferences, or to reset the model state before loading a different configuration. Also useful in combination with the Trigger Node to manage memory in complex pipelines.
 - `Simple Remove Think` - Removes `think` sections from model output. Also handles cases where only a closing `think` tag is present, trimming everything before it. Designed for reasoning models (DeepSeek-R1 etc.) that output a thought process before the final answer. The node returns only the cleaned response.
 - `Simple Trigger Node` - Enforces execution order in complex workflows. For example, place it before the `Load Checkpoint`, and then the loader will execute only after the trigger input is received. Otherwise, the `Load Checkpoint` may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
+- `LLM Model Config` - Allows you to configure LLM settings (Model part) - see the `Config` section.
+- `LLM Sampling Config` - Allows you to configure LLM settings (Sampling part)
   
 Deprecated version:
 - `Qwen-VL Vision Language Model` - Legacy version of the main node. Retained for backward compatibility with old workflows but no longer actively developed.
@@ -325,6 +328,20 @@ A universal version. The model and its parameters mast be passed to the `config_
 
 </details>
 
+# Use case1. Manual Config
+
+<img width="836" height="460" alt="image" src="https://github.com/user-attachments/assets/db89cd37-e974-4a3a-8987-886b10393513" />
+
+Configurations can be stacked. Each additional configuration, via the "config_override" input, overwrites the specified fields and leaves the others unchanged.
+
+# Use case2. Text Config (Advanced)
+
+<img width="1331" height="696" alt="Image" src="https://github.com/user-attachments/assets/320192ed-d0c2-46bb-bc44-7f24d8348f3a" />
+
+# Use case3. Model Preset drop-down list
+
+Configurations loads from `system_prompts_user.json`
+
 # Model Configs:
 
 Possible model configurations that can be passed to the `config_override` input.
@@ -341,8 +358,9 @@ Possible model configurations that can be passed to the `config_override` input.
 | n_ctx or ctx | int | 8192 | Context size, maximum tokens the model can process. 💡 Increasing this parameter increases memory consumption, but if there are many pictures and the answer is big, then the answer can be truncated or error if the input data does not fit into the context. Rule: `image_max_tokens + input_text_max_tokens + max_tokens <= n_ctx` |
 | n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = n_ctx` can speed up processing |
 | n_ubatch | int | 512 | 	Micro-batch size for advanced memory management |
-| image_min_tokens | int | 1024 | Minimum number of tokens to allocate for image embeddings |
-| image_max_tokens | int | 4096 | Maximum number of tokens to allocate for image embeddings |
+| image_min_tokens | int |  | Minimum number of tokens to allocate for image embeddings.  |
+| image_max_tokens | int |  | Maximum number of tokens to allocate for image embeddings.  |
+| user_prompt_after_content | bool | True | Inserts user_prompt after the image, otherwise before the image. |
 | max_tokens or output_max_tokens | int | 2048 | Maximum number of tokens to generate. A smaller number saves time, but may result in a truncated response. Thinking models require many output tokens |
 | temperature | float | 0.7 | Sampling temperature; Lower values (e.g., 0.1) make output more deterministic and focused; higher values (e.g., 1.5) increase randomness and creativity |
 | top_p | float | 0.92 | Nucleus sampling probability (0.0–1.0). The model considers only the tokens whose cumulative probability reaches top_p. Lower values make output more focused |
@@ -354,6 +372,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | swa_full | bool | False | Enable full Stochastic Weight Averaging (SWA). 💡 Enabling this setting may cause higher memory consumption. |
 | use_mmap | bool |  | Enable mmap. 💡 Observation. For Windows, it's better to turn it off. |
 | use_mlock | bool |  | Enable mlock. |
+| offload_kqv | bool | True | Offload KV Cache to GPU. Turn OFF (slow) for safe VRAM. |
 | n_cpu_moe | int |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. |
 | cpu_moe | bool |  | For MoE models unloads all experts into RAM. Allows to save VRAM memory |
 | pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
@@ -384,6 +403,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | max_audios | int | 3 | You can set a limit on the number of incoming audio (in batch mode, you can transfer many audio) | 
 | max_frames | int | 24 | Allows you to limit the frame size for video, which will result in frame scaling. Transferring many frames will require significantly increasing the context window, which may run out of memory. On the other hand, scaling frames may result in the loss of important motion information. The player may see a slideshow instead of a video, which will be helpfully reported. | 
 | audio_sample_rate | int | | You can set a new sampling frequency and then the audio will be resampled. | 
+| print_config | bool | false | Prints the full configuration to the console for debugging. | 
 
 Multi-GPU settings https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/24:
 | Field | Type | Default | Description |
