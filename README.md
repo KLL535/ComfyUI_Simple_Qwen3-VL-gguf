@@ -64,6 +64,8 @@ python -m pip install json_repair,colorama
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
+> 💡 **WARNING:** These ready-made VHLs may not have CPU acceleration implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. To ensure all optimizations are enabled, you should compile the project from source code on your own computer!
+
 > 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfy-UI.
 
 </details>
@@ -793,7 +795,47 @@ Fit in 16 Gb VRAM:
 
 <details>
 
-<summary>Gemma4</summary>
+<summary>Gemma4-26B-A4B</summary>
+
+- https://huggingface.co/noctrex/gemma-4-26B-A4B-it-uncensored-heretic-MXFP4_MOE-GGUF
+
+For example:
+`Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE.gguf` + `mmproj-BF16.gguf`
+
+Not fit in 16 Gb VRAM -> set `n_cpu_moe`.
+
+```json
+        "gemma-4-26B-A4B": {
+            "model_path": "H:\\LLM2\\gemma\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE.gguf",
+            "mmproj_path": "H:\\LLM2\\gemma\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE\\mmproj-BF16.gguf",
+            "max_tokens": 4096,
+            "n_ctx": 4096,
+            "n_batch": 512,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "split_mode": 0,
+            "n_cpu_moe": 10,
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "min_p": 0.05,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "top_k": 40,
+            "chat_handler": "gemma4",
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "enable_thinking": false,
+            "force_mmproj": true,
+            "verbose": false,
+        },
+```
+
+</details>
+
+<details>
+
+<summary>Gemma4-E4B</summary>
 
 - https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF
 - https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF
