@@ -1,6 +1,8 @@
 # deprecated_node.py
 from .qwen3vl_node import clear_memory,clear_temp_files,process_images,run_inference_pipeline,old_config_patch,CATEGORY_NAME
 
+#THIS NODE IS NO LONGER SUPPORTED
+
 class Qwen3VL_GGUF_Node:
     @classmethod
     def INPUT_TYPES(cls):
@@ -35,6 +37,7 @@ class Qwen3VL_GGUF_Node:
     RETURN_NAMES = ("text","conditioning")
     FUNCTION = "run"
     CATEGORY = CATEGORY_NAME
+    DESCRIPTION = "THIS NODE IS NO LONGER SUPPORTED! Use \"Simple Qwen-VL Vision Language Model\""
 
     def run(self, 
         system_prompt, 
@@ -95,7 +98,7 @@ class Qwen3VL_GGUF_Node:
             script, config = old_config_patch(script, config)
 
             # 4. Launching the inference pipeline
-            text, conditioning = run_inference_pipeline(script, config)
+            text, conditioning, audio = run_inference_pipeline(script, config)
 
             return (text, conditioning)
 
