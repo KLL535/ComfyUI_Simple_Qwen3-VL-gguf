@@ -373,7 +373,7 @@ def run_script_subprocess(script_name, config, timeout=300):
             return {
                 "status": "error", 
                 "message": str(e),
-                "traceback": f"STDERR:\n{result.stderr}"
+                "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
             }
 
         if result.returncode == 0:
@@ -390,18 +390,20 @@ def run_script_subprocess(script_name, config, timeout=300):
                 return {
                     "status": "error", 
                     "message": output_data.get('message', "Unknown error"), 
-                    "traceback": output_data.get('traceback', "")
+                    "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\n{output_data.get('traceback', "")}"
                 }
             else:    
                 return {
                     "status": "error", 
-                    "message": f"Subprocess failed with code: {result.returncode}" 
+                    "message": f"Subprocess failed with code: {result.returncode}", 
+                    "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
                 }
 
     except subprocess.TimeoutExpired:
         return {
             "status": "error", 
-            "message": "Inference timed out (5 min)."
+            "message": "Inference timed out (5 min).",
+            "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         }
 
     except Exception as e:
