@@ -1,4 +1,5 @@
-# ComfyUI_Simple_Qwen3-VL-gguf
+<img width="2048" height="448" alt="03562-1098669413054586" src="https://github.com/user-attachments/assets/3aff5798-eed5-4d23-a0da-ff26c770e9b4" />
+
 Simple gguf LLM Qwen3-VL, Qwen3.5, Qwen3.6, Gemma4 and others model loader for Comfy-UI.
 
 # Why need this version?
@@ -41,6 +42,9 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 - Added support for Qwen3.5
 
 # Correct installation of llama-cpp-python:
+
+<img width="2048" height="448" alt="03539-666999726183895" src="https://github.com/user-attachments/assets/9ccf32c1-69e4-4ef7-be42-a1210675988f" />
+
 Qwen3 support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
 The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
@@ -283,6 +287,9 @@ This project requires CUDA runtime libraries. They can be sourced from:
 3. Restarting the frontend (F5)
 
 # Implementation Features:
+
+<img width="2048" height="448" alt="03516-367822266126236" src="https://github.com/user-attachments/assets/c2dfa61c-dda9-4638-a16c-0b36ff093c36" />
+
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 > 💡 **Update:** The llama_python_cpp code has been improved and no longer leaks memory, so it is now possible to call llama_cpp directly.
 
@@ -667,6 +674,8 @@ Allows select a user prompt from templates:
 </details>
 
 # Models (for example):
+
+<img width="2048" height="448" alt="03522-929995336568847" src="https://github.com/user-attachments/assets/0dc6c148-c049-4fc4-9363-eedb04db2785" />
 
 <details>
 
@@ -1302,6 +1311,9 @@ https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer.
 ---
 
 # Speed test and memory overflow problem:
+
+<img width="2048" height="448" alt="03458-310245416557914" src="https://github.com/user-attachments/assets/ed94d57c-5050-4fdf-b41c-688cfc88e09e" />
+
 LLM and CLIP cannot be split (as can be done with UNET). They must be loaded in their entirety.
 But if the model is MoE, you can unload some of the experts into RAM so that they can be processed by the CPU. This way you can run large models.
 
@@ -1364,6 +1376,8 @@ You can view the net generation time (`eval time` in llama.cpp verbose output) i
 ---
 
 ## Troubleshooting:
+
+<img width="2048" height="448" alt="03528-1060011778618551" src="https://github.com/user-attachments/assets/ce5e50f4-131f-4f4e-959e-f9890d32b2fc" />
 
 Try enabling debug output:
 ```
