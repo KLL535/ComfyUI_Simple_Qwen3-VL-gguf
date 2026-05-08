@@ -17,7 +17,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
   
 **03.05.2026 - V3.7**
 - Added `force_mmproj` settings.
-- Added support for `n_cpu_moe`, `cpu_moe` (requires llama_cpp_python update to 0.3.37)
+- Added support for `n_cpu_moe`, `cpu_moe`. Requires llama_cpp_python update to 0.3.37+. See the limitations in the `Speed ​​test and memory overflow problem section` below.
 - Standard parameter names are now supported
 - Added debug calculate `token/sec`
 - Added options for running encoder (to obtain `embeddings` or `conditioning`)
@@ -67,13 +67,13 @@ python -m pip install json_repair,colorama
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
-> 💡 **WARNING:** These ready-made VHLs may not have CPU acceleration implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. To ensure all optimizations are enabled, you should compile the project from source code on your own computer!
+> 💡 **WARNING:** These ready-made **basic** VHLs may not have CPU acceleration implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. To ensure all optimizations are enabled, you should compile the project from source code on your own computer! Also, ready-made VHLs may not contain VMM, which will lead to a crash with an OOM (out of memory) error in case of insufficient VRAM.
 
 > 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfy-UI.
 
 </details>
 
-### Variant 2 - Build from source code (I recommend this variant to learn)
+### Variant 2 - Build from source code (I recommend this variant)
 
 <details>
 
@@ -160,14 +160,20 @@ cd *path_to_src*\llama-cpp-python
 
 ```
 *path_to_comfyui*\python -m pip install json_repair,colorama
-set CMAKE_ARGS="-DGGML_CUDA=on"
+
+set CMAKE_ARGS=-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=120 -DGGML_CUDA_FA=ON -DGGML_CUDA_FA_ALL_QUANTS=ON -DCMAKE_BUILD_TYPE=Release
 *path_to_comfyui*\python_embeded\python -m pip install . 
 ```
+
 ✅ The command above is for embedded Python (typical for ComfyUI). Adjust the Python path if you're using a system or virtual environment.
-⚠️ Note about -e flag:
-If you choose to install with -e (editable mode):
-`python -m pip install -e .`
-Do not delete the source folder after installation — the editable install relies on the original directory structure.
+Compute Capability number. Replace 120 with your value:
+
+```
+RTX 50-series (Blackwell) → 120
+RTX 40-series → 89
+RTX 30-series → 86
+RTX 20-series → 75
+```
 
 ⏱️ Build time: Without Ninja, compilation may take 30–60 minutes depending on your hardware.
 
@@ -179,7 +185,7 @@ Do not delete the source folder after installation — the editable install reli
 
 <details>
 
-<summary>Simple bat file for fast update</summary>
+<summary>Simple bat file for fast rebuild</summary>
 
 ```bat
 cd llama-cpp-python\vendor\llama.cpp\
@@ -194,8 +200,17 @@ H:\ComfyUI128\python_embeded\python.exe -m pip install . --no-cache-dir --no-bui
 pause
 ```
 
-> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfu-ui.
+✅ The command above is for embedded Python (typical for ComfyUI). Adjust the Python path if you're using a system or virtual environment.
+Compute Capability number. Replace 120 with your value:
 
+```
+RTX 50-series (Blackwell) → 120
+RTX 40-series → 89
+RTX 30-series → 86
+RTX 20-series → 75
+```
+
+> 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfu-ui.
 
 </details>
 
@@ -1293,7 +1308,7 @@ But if the model is MoE, you can unload some of the experts into RAM so that the
 
 In any case, make sure your VRAM doesn't overflow. If you allow your VRAM to overflow, some layers will be loaded into slower RAM, the GPU will be forced to read from RAM, which will inevitably lead to a 5-7x performance degradation!
 
-Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution in middle graph. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns.
+Open **Task Manager** (Ctrl+Alt+Del) → Performance tab → GPU → set 'CUDA' engine graph. Check the memory usage during execution in middle graph. It shouldn't exceed the VRAM memory limit. Even nearing the upper limit can be considered overflow, which will cause catastrophic performance slowdowns. And in some cases, even to a crash with an **OOM (out of memory)** error.
 GPU drivers often reserve a small amount of VRAM for system needs, so 100% VRAM usage will not be possible.
 
 Model fits (good speed) ✅:
@@ -1310,11 +1325,18 @@ Memory overflow (speed down ) ❌:
 
 VRAM reached its maximum and then shared memory started to fill up → performance degradation.
 
-| Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | 
-|--------|--------|
-| n_cpu_moe | 50-60 tok/sec | 
-| NGL | 29 tok/sec  | 
-| Memory overflow ❌ | 10.8 tok/sec | 
+| Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | Note |
+|--------|--------|--------|
+| n_cpu_moe | 50-60 tok/sec | llama.cpp build from source |
+| NGL | 29 tok/sec  | llama.cpp build from source |
+| Memory overflow ❌ | 10.8 tok/sec | llama.cpp build from source |
+
+> 💡 **WARNING:** These ready-made **basic** VHLs may not have CPU acceleration (AVX, AVX2, AVX512) implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. To ensure all optimizations are enabled, you should build llama.cpp from source code on your own computer! Also, ready-made VHLs may not contain VMM, which will lead to a crash with an OOM (out of memory) error in case of insufficient VRAM.
+
+| Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | Note |
+|--------|--------|--------|
+| n_cpu_moe | 20-30 tok/sec | 💡 llama.cpp from ready-made basic VHLs without `AVX, AVX2, AVX512` |
+| Memory overflow ❌ | **crash** | 💡 llama.cpp from ready-made basic VHLs without `VMM` |
 
 > 💡 **Tip:** Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter.
 
@@ -1322,7 +1344,7 @@ To make the model fit:
 1. Use stronger quantization Q8->Q6->Q4->Q3... (But the stronger the quantization, the more the quality of the model may suffer; below Q4 it may already be unacceptable.)
 2. Reduce `n_ctx`, but not too much, otherwise the response may be cut off.
 3. In a larger context enable KV cache quantization `"type_k": 8`, `"type_v": 8`
-4. Use MoE model with expert unloading (n_cpu_moe > 0 or cpu_moe = true). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
+4. Use MoE model with expert unloading (n_cpu_moe > 0 or cpu_moe = true and n_gpu_layers=-1). Some experts will be stored in RAM and processed by the CPU. This is a more efficient method than NGL.
 - n_cpu_moe = 20 (You need to choose the best number) → put 20 experts on CPU, rest on GPU → All available VRAM is full, higher speed.
 - cpu_moe = true → All experts on CPU → minimal VRAM consumption.
 5. If nothing else is possible use NGL offload (n_gpu_layers > 0). Some layers will be stored in RAM and processed by the CPU.
@@ -1336,9 +1358,9 @@ Please note that in addition to the model and projector weights, you also need t
 
 If the memory is full before this node starts use `unload_all_models = true`.
 
-Also, keep in mind that LM Studio does a "warm-up" immediately after loading a model. That is, it runs a fake prompt, which allows for stable speed later. 
-
-This node always performs a "cold start". This may reduces the speed.
+If `debug=true` this node in calculates in console the generation time (tok/sec) from the start of inference to its completion, which also includes overhead such as graph compilation/optimization, vision encoder preprocessing (if applicable), prompt tokenization & embedding, VRAM allocation, sampling/decoding initialization etc.
+LM Studio displays the net generation time, so the values in LM Studio will be higher (better tok/sec).
+You can view the net generation time (`eval time` in llama.cpp verbose output) in console by enabling `verbose=true`.
 
 ---
 
@@ -1346,6 +1368,7 @@ This node always performs a "cold start". This may reduces the speed.
 
 Try enabling debug output:
 ```
+"debug": true
 "verbose": true
 ```
 
