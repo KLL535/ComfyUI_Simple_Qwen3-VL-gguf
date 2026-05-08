@@ -288,7 +288,7 @@ This project requires CUDA runtime libraries. They can be sourced from:
 
 # Implementation Features:
 
-<img width="2048" height="448" alt="03516-367822266126236" src="https://github.com/user-attachments/assets/c2dfa61c-dda9-4638-a16c-0b36ff093c36" />
+<img width="2048" height="448" alt="03574-151373789329086" src="https://github.com/user-attachments/assets/e2e534ad-dc4a-47a7-b277-9b06fd263960" />
 
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 > 💡 **Update:** The llama_python_cpp code has been improved and no longer leaks memory, so it is now possible to call llama_cpp directly.
