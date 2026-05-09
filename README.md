@@ -1,4 +1,4 @@
-<img width="2048" height="448" alt="03562-1098669413054586" src="https://github.com/user-attachments/assets/3aff5798-eed5-4d23-a0da-ff26c770e9b4" />
+<img width="2048" height="448" alt="+03981-1122652814683257" src="https://github.com/user-attachments/assets/9699cb74-7433-442a-8d7d-be4ea6e045ec" />
 
 Simple gguf LLM Qwen3-VL, Qwen3.5, Qwen3.6, Gemma4 and others model loader for Comfy-UI.
 
