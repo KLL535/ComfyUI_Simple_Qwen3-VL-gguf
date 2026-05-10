@@ -43,8 +43,6 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 # Correct installation of llama-cpp-python:
 
-<img width="2048" height="448" alt="03539-666999726183895" src="https://github.com/user-attachments/assets/9ccf32c1-69e4-4ef7-be42-a1210675988f" />
-
 Qwen3 support hasn't been added to the standard library, `llama-cpp-python`, which is downloaded via `pip install llama-cpp-python` - this didn't work.
 The standard version `llama-cpp-python` hasn't been updated for a long time.
 `llama-cpp-python` 0.3.16 last commit on Aug 15, 2025 and it doesn't support qwen3.
@@ -287,8 +285,6 @@ This project requires CUDA runtime libraries. They can be sourced from:
 3. Restarting the frontend (F5)
 
 # Implementation Features:
-
-<img width="2048" height="448" alt="03574-151373789329086" src="https://github.com/user-attachments/assets/e2e534ad-dc4a-47a7-b277-9b06fd263960" />
 
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 > 💡 **Update:** The llama_python_cpp code has been improved and no longer leaks memory, so it is now possible to call llama_cpp directly.
