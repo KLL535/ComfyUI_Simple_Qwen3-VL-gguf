@@ -14,6 +14,7 @@ from PIL import Image
 from typing import Optional, Dict, Any
 import textwrap
 import traceback
+import re
 
 try:
     from json_repair import repair_json
@@ -513,78 +514,114 @@ def unload_model(gccollect = False,debug = False):
             _current_module.unload_llama_model(gccollect, debug)
         _current_module = None
 
-def config_override_repair(text: str):
-    def _convert_to_json(text: str) -> str:
-        # Список плейсхолдеров, которые нужно игнорировать
-        placeholders = ['{system}', '{images}', '{user}']
-        temp_tokens = ['__PH_SYSTEM__', '__PH_IMAGES__', '__PH_USER__']
+def config_override_repair(text: str) -> Dict[str, Any]:
+    """
+    Парсит конфиг в разных форматах с ошибками.
+    """
+    
+    def extract_json_block(s: str) -> str:
+        """
+        Находит объект {...}, игнорируя скобки внутри строк.
+        Если внешних скобок нет — оборачивает «голые» key: value.
+        """
+        # 1. Ищем первый {, который НЕ внутри строки
+        start = -1
+        in_str = False
+        escape = False
+        for i, c in enumerate(s):
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_str:
+                escape = True
+                continue
+            if c == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if c == '{':
+                start = i
+                break
         
-        # Замена плейсхолдеров
-        for ph, token in zip(placeholders, temp_tokens):
-            text = text.replace(ph, token)    
+        if start == -1:
+            # Нет внешних скобок — оборачиваем «голые» пары
+            content = s.strip().strip(',').strip()
+            return '{' + content + '}' if content else '{}'
         
-        # Удаляем часть до первого '{' и после последнего '}', если они есть
-        start_brace = text.find('{')
-        end_brace = text.rfind('}')
-        if start_brace != -1 and end_brace != -1 and end_brace > start_brace:
-            json_str = text[start_brace:end_brace+1]
-        else:
-            json_str = text
-        json_str = json_str.strip()
-        if not json_str.startswith('{'):
-            json_str = '{' + json_str + '}'
+        # 2. Сопоставляем скобки, начиная с найденного start
+        depth = 0
+        in_str = False
+        escape = False
         
-        # Возврат плейсхолдеров обратно
-        for token, ph in zip(temp_tokens, placeholders):
-            json_str = json_str.replace(token, ph)
+        for i in range(start, len(s)):
+            c = s[i]
+            if escape:
+                escape = False
+                continue
+            if c == '\\' and in_str:
+                escape = True
+                continue
+            if c == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return s[start:i+1].strip()
         
-        return json_str.strip()
-
-    def _flatten_dict(data: Any) -> Dict[str, Any]:
-        result = {}
-        if not isinstance(data, dict):
-            return result
-        for key, value in data.items():
-            if isinstance(value, dict):
-                result.update(_flatten_dict(value))
-            else:
-                result[key] = value
-        return result
-
-    # 1. Вырезаем чистое JSON-тело
-    json_body = _convert_to_json(text)
-    if not json_body:
+        # Fallback: скобки не закрылись — пробуем спасти
+        block = s[start:].rstrip(' ,\t\n\r')
+        if not block.endswith('}'):
+            block += '}'
+        return block.strip()
+    
+    def quick_fixes(s: str) -> str:
+        """Безопасные правки: висячие запятые перед } или ]"""
+        return re.sub(r',\s*([}\]])', r'\1', s)
+    
+    # ─────────────────────────────────────────────────────────────
+    # Основной поток
+    # ─────────────────────────────────────────────────────────────
+    raw = extract_json_block(text)
+    if raw in ('', '{}'):
         return {}
-
+    
     parsed = None
-    error_msg = None
-
-    # 2. Пробуем стандартный парсер 
-    try:
-        parsed = json.loads(json_body)
-    except json.JSONDecodeError as e:
-        error_msg = f"Standard JSON parser failed: {e}"
-
-    # 3. Если не вышло — пробуем repair
-    if parsed is None and HAS_JSON_REPAIR:
+    last_error = None
+    
+    # Пробуем: чистый парсинг → с быстрыми фиксами → с json_repair
+    for processor in [lambda x: x, quick_fixes]:
         try:
-            repaired = repair_json(json_body)
-            parsed = json.loads(repaired)
-        except Exception as e:
-            error_msg = f"json_repair couldn't fix the JSON: {e}"
-
-    # 4. Если всё ещё не распарсилось — ошибка
+            parsed = json.loads(processor(raw))
+            break
+        except json.JSONDecodeError as e:
+            last_error = e
+            continue
+    
     if parsed is None:
-        raise ValueError(error_msg)
-
-    # 5. Сплющиваем любую вложенность в один уровень
-    parsed = _flatten_dict(parsed)
-
-    # 6. Валидация и кэширование
+        try:
+            from json_repair import repair_json
+            parsed = json.loads(repair_json(raw))
+        except Exception:
+            pass
+    
+    if parsed is None:
+        preview = text[:150].replace('\n', ' ')
+        raise ValueError(f"Не удалось распарсить конфиг: {last_error}. Вход: {preview}...")
+    
     if not isinstance(parsed, dict):
-        raise ValueError(f"config_override must be a JSON object: {parsed}")
+        if isinstance(parsed, list) and parsed and isinstance(parsed[0], dict):
+            parsed = parsed[0]
+        else:
+            raise ValueError(f"Ожидался JSON-объект, получено: {type(parsed).__name__}")
+    
+    return parsed.copy()  
 
-    return parsed.copy()
 
 # ========== Основная нода ==========
 class SimpleQwen3VL_GGUF_Node:
