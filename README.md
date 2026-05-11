@@ -836,6 +836,67 @@ Fit in 16 Gb VRAM:
 
 <details>
 
+<summary>Nemotron-3-Nano-Omni-30B</summary>
+
+- https://huggingface.co/unsloth/NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-GGUF
+
+For example:
+`NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_NL.gguf` + `mmproj-BF16.gguf`
+
+Not fit in 16 Gb VRAM -> Use `n_cpu_moe = 24`:
+
+```json
+        "NVIDIA-Nemotron-3-Nano-Omni-30B": {
+            "model_path": "H:\\LLM2\\nemotron\\NVIDIA-Nemotron-3-Nano-Omni-30B\\NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_NL.gguf",
+            "mmproj_path": "H:\\LLM2\\nemotron\\NVIDIA-Nemotron-3-Nano-Omni-30B\\mmproj-BF16.gguf",
+            "max_tokens": 4096,
+            "n_ctx": 8192,
+            "n_batch": 8192,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "n_cpu_moe": 24,
+            "split_mode": 0,
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "min_p": 0.05,
+            "repeat_penalty": 1.1,
+            "presence_penalty": 0.0,
+            "top_k": 40,
+            "enable_thinking": true,
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "verbose": false,
+            "chat_handler": "qwen35"
+        },
+```
+
+> 💡 **WARNING:** Chat handler `qwen35` is not compatible with this model. The model will work, but the quality may deteriorate.
+
+There is an alternative solution: override the chat template.
+If you only need to process text and/or images, you can use this template overrides:
+Thinking version (add these lines):
+
+```
+            "chat_handler": "llava15",
+            "raw_mode": true,
+            "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n<think>\\n",
+            "stop": ["<|endoftext|>"]
+```
+
+Non-thinking version (add these lines):
+
+```
+            "chat_handler": "llava15",
+            "raw_mode": true,
+            "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n",
+            "stop": ["<|endoftext|>"]
+```
+
+</details>
+
+<details>
+
 <summary>Gemma4-26B-A4B</summary>
 
 - https://huggingface.co/noctrex/gemma-4-26B-A4B-it-uncensored-heretic-MXFP4_MOE-GGUF
