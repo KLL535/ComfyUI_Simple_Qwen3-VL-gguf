@@ -440,6 +440,8 @@ Possible model configurations that can be passed to the `config_override` input.
 | max_frames | int | 24 | Allows you to limit the frame size for video, which will result in frame scaling. Transferring many frames will require significantly increasing the context window, which may run out of memory. On the other hand, scaling frames may result in the loss of important motion information. The player may see a slideshow instead of a video, which will be helpfully reported. | 
 | audio_sample_rate | int | | You can set a new sampling frequency and then the audio will be resampled. | 
 | print_config | bool | false | Prints the full configuration to the console for debugging. | 
+| type_k | int |  | Define the data format (degree of compression/quantization) that is used to store the KV-cache (Context Cache) 💡 Some variant may not work. Default: F16 | 
+| type_v | int |  | Define the data format (degree of compression/quantization) that is used to store the KV-cache (Context Cache) 💡 Some variant may not work. Default: F16 | 
 
 Multi-GPU settings https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/24:
 | Field | Type | Default | Description |
