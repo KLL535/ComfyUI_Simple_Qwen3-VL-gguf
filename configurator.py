@@ -7,6 +7,46 @@ import json
 import hashlib
 from typing import Optional, Union, Dict, Any
 
+GGML_TYPES = {
+    "F32": 0,
+    "F16": 1,
+    "Q4_0": 2,
+    "Q4_1": 3,
+    # 4,5
+    "Q5_0": 6,
+    "Q5_1": 7,
+    "Q8_0": 8,
+    "Q8_1": 9,
+    "Q2_K": 10,
+    "Q3_K": 11,
+    "Q4_K": 12,
+    "Q5_K": 13,
+    "Q6_K": 14,
+    "Q8_K": 15,
+    "IQ2_XXS": 16,
+    "IQ2_XS": 17,
+    "IQ3_XXS": 18,
+    "IQ1_S": 19,
+    "IQ4_NL": 20,
+    "IQ3_S": 21,
+    "IQ2_S": 22,
+    "IQ4_XS": 23,
+    "I8": 24,
+    "I16": 25,
+    "I32": 26,
+    "I64": 27,
+    "F64": 28,
+    "IQ1_M": 29,
+    "BF16": 30,
+    # 31,32,33
+    "TQ1_0": 34,
+    "TQ2_0": 35,
+    # 36,37,38
+    "MXFP4": 39,  # MXFP4 (1 block)
+    "NVFP4": 40,  # NVFP4 (4 blocks, E4M3 scale)
+    "Q1_0": 41,
+}
+
 class Qwen3VL_ModelConfig:
 
     #Model Configuration Node
@@ -89,6 +129,9 @@ class Qwen3VL_ModelConfig:
                 # === ОПЦИОНАЛЬНЫЕ: Отладка ===
                 "verbose": ("BOOLEAN", {"default": False, "tooltip": "Verbose llama.cpp logging"}),
                 "debug": ("BOOLEAN", {"default": True, "tooltip": "Output timing info to console"}),
+
+                "type_k": (list(GGML_TYPES.keys()), {"default": "F16"}),
+                "type_v": (list(GGML_TYPES.keys()), {"default": "F16"}),
             }
         }
     
@@ -116,7 +159,9 @@ class Qwen3VL_ModelConfig:
                      enable_thinking: bool = False,
                      verbose: bool = False,
                      debug: bool = False,
-                     config_override: str = None):
+                     config_override: str = None,
+                     type_k = "F16",
+                     type_v = "F16"):
         
         # 1. Базовый конфиг 
         config = {
@@ -125,8 +170,8 @@ class Qwen3VL_ModelConfig:
       
         # 2. Собираем только НЕ-пустые значения из текущей ноды
         local_params = {
-            "model_path": model_path,
-            "mmproj_path": mmproj_path,
+            "model_path": model_path if model_path != "" else None,
+            "mmproj_path": mmproj_path if mmproj_path != "" else None,
             "n_ctx": n_ctx,
             "n_gpu_layers": n_gpu_layers,
             "n_threads": n_threads,
@@ -142,6 +187,8 @@ class Qwen3VL_ModelConfig:
             "force_mmproj": force_mmproj,
             "verbose": verbose,
             "debug": debug,
+            "type_k": GGML_TYPES[type_k] if type_k != "F16" else None,
+            "type_v": GGML_TYPES[type_v] if type_v != "F16" else None,
         }
         
         # 3. Применяем фильтрованный локальный конфиг (None = не перезаписывать)
@@ -156,10 +203,6 @@ class Qwen3VL_ModelConfig:
                 config.update(old_names_patch(override_dict))
             except Exception as e:
                 raise ValueError(e)      
-        
-        # 5. Валидация критических полей
-        if not config.get("model_path"):
-            raise ValueError("❌ model_path is required! Set path to your GGUF model.")
         
         return (config,)
 

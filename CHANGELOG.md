@@ -1,4 +1,5 @@
 # Nightly
+- Added utils: `Simple Text To Batch`, `Simple Text Insert`, `Simple Text Replace`, `Simple Join Strings`
 - Added simple LLM configurator
 - Improved error output
 # V3.7

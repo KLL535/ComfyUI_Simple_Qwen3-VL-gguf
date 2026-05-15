@@ -209,3 +209,140 @@ class SimpleRemoveThinkNode:
         cleaned = cleaned.strip()
 
         return (cleaned,)
+
+class TextToBatchNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
+                "separator": ("STRING", {"default": "SEPARATOR", "multiline": False}),
+                "max_count": ("INT", {"default": 10, "min": 1, "max": 100000, "step": 1}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    OUTPUT_IS_LIST = (True,)  
+    FUNCTION = "execute"
+    CATEGORY = CATEGORY_NAME
+    DESCRIPTION = "Splits text into a batch using the specified separator. The number of elements does not exceed max_count."
+
+    def execute(self, text, separator, max_count):
+        # Если разделитель не задан, возвращаем исходный текст одним элементом
+        if not separator:
+            return ([text],)
+
+        # Обработка популярных escape-последовательностей для удобства ввода в UI
+        sep = separator.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r")
+
+        # maxsplit = N-1 гарантирует, что на выходе будет не более N элементов
+        maxsplit = max(0, int(max_count) - 1)
+        
+        # split
+        chunks = text.split(sep, maxsplit)
+
+        # strip
+        chunks = [chunk.strip() for chunk in chunks]
+        
+        return (chunks,)
+
+class SimpleJoinStringsNode:
+    CATEGORY = CATEGORY_NAME
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "join_strings"
+    DESCRIPTION = "Combines up to 10 strings into one"
+
+    """Combines up to 10 strings into one, skipping empty or None values."""
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "delimiter": ("STRING", {"default": " "}),
+            },
+            "optional": {
+                **{f"text{i}": ("STRING", {"multiline": True, "default": "", "forceInput": True}) 
+                    for i in range(1, 11)}
+            }
+        }
+
+    def join_strings(self, delimiter = " ", **kwargs):
+        delimiter = delimiter.replace('\\n', '\n') \
+                             .replace('\\t', '\t') \
+                             .replace('\\r', '\r')
+
+        texts = [kwargs.get(f"text{i}") for i in range(1, 11)]
+        # Фильтрация пустых и None значений
+        filtered = [str(t).strip() for t in texts if t is not None and str(t).strip() != ""]
+        return (delimiter.join(filtered), )  
+
+class SimpleTextReplaceNode:
+    def __init__(self):
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
+                "rules": ("STRING", {"multiline": True, "default": "replace text=new text\nremove text="}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    FUNCTION = "process"
+    CATEGORY = CATEGORY_NAME
+    DESCRIPTION = "Replace subtext A to B in input text. Rules format: A1=B1 \\n A2=B2 ..."
+
+    def process(self, text = "", rules = "replace text=new text\nremove text="):
+
+        if text is None:
+            return (None,)
+
+        if text == "":
+            return ("",)
+
+        # Split replacement rules into lines
+        replacement_rules = []
+        for line in rules.split('\n'):
+            line = line.strip()
+            if '=' in line:
+                left, right = line.split('=', 1)
+                replacement_rules.append((left.strip(), right.strip()))
+        
+        # Apply replacements in sequence
+        for left, right in replacement_rules:
+            text = text.replace(left, right)
+        
+        return (text,)
+
+class SimpleTextInsertNode:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": ("STRING", {"default": "", "multiline": True, "forceInput": True}),
+                "placeholder": ("STRING", {"default": "$1"}),
+                "insert": ("STRING", {"default": "", "forceInput": True}),  
+            },
+        }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    FUNCTION = "text_insert"
+    CATEGORY = CATEGORY_NAME
+    DESCRIPTION = "Replace placeholder in text"
+
+    def text_insert(self, text = "", placeholder = "$1", insert = ""):
+
+        if text is None:
+            return (None,)
+
+        if text == "":
+            return ("",)
+        
+        if placeholder:
+            text = text.replace(placeholder, insert)
+
+        return (text,)
