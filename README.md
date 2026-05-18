@@ -71,7 +71,7 @@ python -m pip install json_repair,colorama
 python -m pip install temp\llama_cpp_python-0.3.18-cp313-cp313-win_amd64.whl
 ```
 
-> 💡 **WARNING:** These ready-made **basic** VHLs may not have CPU acceleration implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. To ensure all optimizations are enabled, you should compile the project from source code on your own computer! Also, ready-made VHLs may not contain VMM, which will lead to a crash with an OOM (out of memory) error in case of insufficient VRAM.
+> 💡 **WARNING:** These ready-made **basic** VHLs may not have CPU acceleration implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. Use VHL with optimizations enabled, or better yet, compile the project yourself for your hardware.
 
 > 💡 **Tip:** In subprocess mode, you can launch it immediately. In other modes, you need to restart Comfy-UI.
 
@@ -1010,6 +1010,58 @@ You can write custom `prompt template` and then thinking will turn off.
 
 <details>
 
+<summary>Sulphur prompt enhancer</summary>
+
+An interesting uncensored fine-tuned model for LTX 2.3.
+
+- https://huggingface.co/SulphurAI/Sulphur-2-base/tree/main/prompt_enhancer
+
+> 💡 **Warning:** A highly specialized model for enhance prompts for LTX 2.3.
+
+> 💡 **Warning:** The module is poorly described, so the following settings are set by eye. More optimal settings may exist.
+
+> 💡 **Tip:** `system_preset_to_user_prompt: true` means that the system prompt will be passed to the user prompt (before user prompt). 
+
+> 💡 **Tip:** `user_prompt_after_content: false` means that the image will be transmitted at the end.
+
+system_prompt: none or LTX I2V or LTX T2V
+
+```json
+        "sulphur_prompt_enhancer": {
+            "model_path": "H:\\LLM2\\sulphur\\sulphur_prompt_enhancer_model-q8_0.gguf",
+            "mmproj_path": "H:\\LLM2\\sulphur\\mmproj-BF16.gguf",
+            "max_tokens": 2048,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 2048,
+            "temperature": 0.8,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "top_k": 40,
+            "repeat_penalty": 1.1,
+            "script": "qwen3vl_run.py",
+            "n_ctx": 8192,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "n_batch": 4096,
+            "n_ubatch": 512,
+            "use_mmap": true,
+            "use_mlock": false,
+            "offload_kqv": true,
+            "n_cpu_moe": 0,
+            "chat_handler": "qwen35",
+            "enable_thinking": false,
+            "force_mmproj": false,
+            "verbose": false,
+            "debug": true,
+            "user_prompt_after_content": false,
+            "system_preset_to_user_prompt": true
+        },
+```
+
+</details>
+
+<details>
+
 <summary>Cydonia-24B</summary>
 
 An interesting fine-tuned model based on mistral.
@@ -1405,16 +1457,16 @@ VRAM reached its maximum and then shared memory started to fill up → performan
 
 | Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | Note |
 |--------|--------|--------|
-| n_cpu_moe | 50-60 tok/sec | llama.cpp build from source |
-| NGL | 29 tok/sec  | llama.cpp build from source |
-| Memory overflow ❌ | 10.8 tok/sec | llama.cpp build from source |
+| n_cpu_moe | 50-60 tok/sec | llama.cpp build from source with `AVX, AVX2, AVX512` |
+| NGL | 29 tok/sec  | llama.cpp build from source with `AVX, AVX2, AVX512` |
+| Memory overflow ❌ | 10.8 tok/sec | llama.cpp build from source with `VMM` |
 
-> 💡 **WARNING:** These ready-made **basic** VHLs may not have CPU acceleration (AVX, AVX2, AVX512) implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. To ensure all optimizations are enabled, you should build llama.cpp from source code on your own computer! Also, ready-made VHLs may not contain VMM, which will lead to a crash with an OOM (out of memory) error in case of insufficient VRAM.
+> 💡 **WARNING:** These ready-made **basic** VHLs may not have CPU acceleration (AVX, AVX2, AVX512) implementations. Therefore, installing them may not yield any benefit from `n_cpu_moe` or `cpu_moe`. Use VHL with optimizations enabled, or better yet, compile the project yourself for your hardware. Also, ready-made VHLs may not contain VMM (Virtual Memory Management), which will lead to a crash with an OOM (out of memory) error in case of insufficient VRAM.
 
 | Mode | Speed for Qwen3.6-35B-A3B-Q4_K_M in 16 Gb VRAM | Note |
 |--------|--------|--------|
-| n_cpu_moe | 20-30 tok/sec | 💡 llama.cpp from ready-made basic VHLs without `AVX, AVX2, AVX512` |
-| Memory overflow ❌ | **crash** | 💡 llama.cpp from ready-made basic VHLs without `VMM` |
+| n_cpu_moe | 20-30 tok/sec | 💡 llama.cpp from ready-made basic VHLs **without** `AVX, AVX2, AVX512` |
+| Memory overflow ❌ | **OOM crash** | 💡 llama.cpp from ready-made basic VHLs **without** `VMM` |
 
 > 💡 **Tip:** Search for models on huggingface and choose models with better quantization, such as UD_IQ from unsloth. They will be smarter and lighter.
 
