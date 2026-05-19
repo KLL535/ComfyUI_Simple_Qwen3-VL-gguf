@@ -716,12 +716,8 @@ For example:
             "n_batch": 4096,
             "n_ubatch": 512,
             "n_gpu_layers": -1,
-            "n_threads": 8,
-            "use_mmap": true,
-            "use_mlock": false,
-            "offload_kqv": true,
             "verbose": false,
-            "debug": true,
+            "debug": true
         },
 ```
 
