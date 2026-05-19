@@ -19,8 +19,12 @@ if current_dir not in sys.path:
 from debug_print import _debug_print
 
 # Глобальный кеш для модели (чтобы сохранять между прямыми вызовами)
-_cached_llm = None
-_cached_model_hash = None
+_model_caches = {
+    "keep_vram": {"llm": None, "hash": None},
+    "save1":      {"llm": None, "hash": None},
+    "save2":      {"llm": None, "hash": None},
+    "save3":      {"llm": None, "hash": None},
+}
 
 def build_prompt(template: str, system: str, user: str):
     # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
@@ -178,8 +182,6 @@ def _inference(config):
         max_frames = config.get("max_frames",24)
         raw_mode = config.get("raw_mode", False)
 
-        global _cached_llm, _cached_model_hash
-
         # --- Проверка обязательных полей ---
         model_path = config.get("model_path", "").strip()
         if not model_path:
@@ -195,8 +197,13 @@ def _inference(config):
             os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_device)
 
         # --- Определяем, нужно ли перезагружать модель ---
-        current_hash = config.get("config_hash",None)
-        need_new_model = current_hash is None or _cached_llm is None or _cached_model_hash != current_hash
+        global _model_caches
+        cache_mode = config.get("cache_mode", "keep_vram")
+        if cache_mode not in _model_caches:
+            cache_mode = "keep_vram"
+        current_cache = _model_caches[cache_mode]
+        current_hash = config.get("config_hash", None)
+        need_new_model = current_hash is None or current_cache["llm"] is None or current_cache["hash"] != current_hash
 
         # --- Получаем списки изображений, аудио, видео ---
         images = config.get("images") or config.get("images_path") or []
@@ -240,7 +247,7 @@ def _inference(config):
             # --- Загрузка новой модели ---
 
             # Выгружаем старую модель
-            unload_llama_model(gccollect, debug)
+            unload_llama_model(gccollect, debug, target=cache_mode)
 
             chat_handler = None
 
@@ -446,7 +453,7 @@ def _inference(config):
                     elif chat_format:
                         llm_kwargs["chat_format"] = chat_format 
 
-                _cached_llm = Llama(**llm_kwargs)
+                current_cache["llm"] = Llama(**llm_kwargs)
 
                 if chat_handler is not None:
 
@@ -454,7 +461,7 @@ def _inference(config):
 
                         from jinja2 import Template
 
-                        gguf_original_template_string = _cached_llm.metadata.get('tokenizer.chat_template', None)
+                        gguf_original_template_string = current_cache["llm"].metadata.get('tokenizer.chat_template', None)
                         gguf_original_template = Template(gguf_original_template_string)
 
                         # Подмена, но это не работает
@@ -499,9 +506,9 @@ def _inference(config):
                         new_key = key[len("extra_llama_"):]
                         llm_kwargs[new_key] = value
 
-                _cached_llm = LlamaEmbedding(**llm_kwargs)
+                current_cache["llm"] = LlamaEmbedding(**llm_kwargs)
 
-            _cached_model_hash = current_hash
+            current_cache["hash"] = current_hash
             _debug_print(debug, "load_model", t1, file=sys.stderr)
 
         else:
@@ -509,10 +516,10 @@ def _inference(config):
             
             if config.get("clearing_cache", True):
                 t2 = time.perf_counter()
-                _cached_llm._ctx.memory_clear(True)
-                _cached_llm.n_tokens = 0     
-                if _cached_llm.is_hybrid and _cached_llm._hybrid_cache_mgr is not None:
-                    _cached_llm._hybrid_cache_mgr.clear()
+                current_cache["llm"]._ctx.memory_clear(True)
+                current_cache["llm"].n_tokens = 0     
+                if current_cache["llm"].is_hybrid and current_cache["llm"]._hybrid_cache_mgr is not None:
+                    current_cache["llm"]._hybrid_cache_mgr.clear()
                     _debug_print(debug, "clearing hybrid cache", t2, file=sys.stderr)
                 else:
                     _debug_print(debug, "clearing cache", t2, file=sys.stderr)
@@ -558,7 +565,7 @@ def _inference(config):
                 template_str = config.get("prompt_template", default_template)
                 text_before, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
 
-                chat_handler = getattr(_cached_llm, "chat_handler", None)        
+                chat_handler = getattr(current_cache["llm"], "chat_handler", None)        
                 if chat_handler is not None:
 
                     t3 = time.perf_counter()
@@ -589,7 +596,7 @@ def _inference(config):
                     _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
 
                     t_inference0 = time.perf_counter()
-                    result = _cached_llm.create_chat_completion(
+                    result = current_cache["llm"].create_chat_completion(
                         messages=messages,
                         stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                         **completion_kwargs
@@ -607,7 +614,7 @@ def _inference(config):
                     # Текстовый режим
 
                     t_inference0 = time.perf_counter()
-                    result = _cached_llm.create_completion(
+                    result = current_cache["llm"].create_completion(
                         prompt=text_before + text_after,
                         stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                         **completion_kwargs
@@ -682,7 +689,7 @@ def _inference(config):
                     completion_kwargs["stop"] = custom_stop
 
                 t_inference0 = time.perf_counter()
-                result = _cached_llm.create_chat_completion(
+                result = current_cache["llm"].create_chat_completion(
                     messages=messages,
                     **completion_kwargs
                 )
@@ -703,7 +710,7 @@ def _inference(config):
 
             if tokenizer_path is not None:
                 t_tok = time.perf_counter()
-                original_tokenize = _cached_llm.tokenize
+                original_tokenize = current_cache["llm"].tokenize
                 try:
                     from transformers import AutoTokenizer
                     tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
@@ -715,10 +722,10 @@ def _inference(config):
                         #    print(f"key={key}", file=sys.stderr)
                         return tokens
 
-                    _cached_llm.tokenize = custom_tokenize
+                    current_cache["llm"].tokenize = custom_tokenize
                 except Exception as e:
                     print(f"[WARNING] External tokenizer failed: {e}", file=sys.stderr)
-                    _cached_llm.tokenize = original_tokenize
+                    current_cache["llm"].tokenize = original_tokenize
 
                 _debug_print(debug, "connect external tokenizer", t_tok, file=sys.stderr)
 
@@ -731,7 +738,7 @@ def _inference(config):
                 #prompt = f"<|im_start|>user\nA red apple<|im_end|>\n<|im_start|>assistant\n"
                 #[151644,872,198,32,2518,23268,151645,198,151644,77091,198]
 
-                response = _cached_llm.create_embedding(prompt, normalize = -1)
+                response = current_cache["llm"].create_embedding(prompt, normalize = -1)
 
                 emb = response['data'][0]['embedding']
 
@@ -776,26 +783,32 @@ def run_inference_direct(config):
     """Функция для прямого вызова. Возвращает словарь с результатом."""
     return _inference(config)
 
-def unload_llama_model(gccollect, debug = False):
+def unload_llama_model(gccollect, debug = False, target="all"):
     """Выгружает модель из VRAM"""
-    global _cached_llm, _cached_model_hash
-    if _cached_llm is not None:
-        t_start = time.perf_counter()
-        try:
-            if hasattr(_cached_llm, '_ctx') and _cached_llm._ctx is not None:
-                _cached_llm._ctx.close()  
-        except Exception:
-            pass  
-        del _cached_llm
-        _cached_llm = None
-        _debug_print(debug, "unload_llama_model", t_start, file=sys.stderr)   
+    global _model_caches
 
-        if gccollect:
+    targets = list(_model_caches.keys()) if target == "all" else ([target] if target in _model_caches else [])
+
+    cleared = False
+    for key in targets:
+        cache = _model_caches[key]
+        if cache["llm"] is not None:
             t_start = time.perf_counter()
-            gc.collect()
-            _debug_print(debug, "gc.collect", t_start)
-
-    _cached_model_hash = None
+            try:
+                if hasattr(cache["llm"], '_ctx') and cache["llm"]._ctx is not None:
+                    cache["llm"]._ctx.close()
+            except Exception:
+                pass
+            del cache["llm"]
+            cache["llm"] = None
+            cache["hash"] = None
+            _debug_print(debug, f"unload_llama_model ({key})", t_start, file=sys.stderr)
+            cleared = True
+            
+    if cleared and gccollect:
+        t_start = time.perf_counter()
+        gc.collect()
+        _debug_print(debug, "gc.collect", t_start, file=sys.stderr)
 
 # Режим подпроцесса
 

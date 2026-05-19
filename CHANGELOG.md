@@ -1,4 +1,7 @@
 # Nightly
+- Added example `qwen_vl_test_translate`
+- Added modes: `save1`, `save2`, `save3`
+- Added example `qwen_vl_test_image_storytaler`
 - Added utils: `Simple Text To Batch`, `Simple Text Insert`, `Simple Text Replace`, `Simple Join Strings`
 - Added simple LLM configurator
 - Improved error output

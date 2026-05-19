@@ -145,6 +145,7 @@ class UnloadQwenModel:
     def INPUT_TYPES(cls):
         return {
             "required": {
+                "target": (["all", "keep_vram", "save1", "save2", "save3"], {"default": "all"}),
                 "input": (anytype, {"default": None, "tooltip": "ANY, input -> output", "forceInput": True}),
             },
         }
@@ -154,8 +155,8 @@ class UnloadQwenModel:
     FUNCTION = "trigger_node"
     CATEGORY = CATEGORY_NAME
 
-    def trigger_node(self, input=None):
-        unload_model()
+    def trigger_node(self, target="all", input=None):
+        unload_model(target=target)
         return (input,)
 
 class SimpleTriggerNode:

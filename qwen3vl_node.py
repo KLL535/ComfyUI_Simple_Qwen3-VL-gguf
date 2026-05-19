@@ -428,22 +428,28 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
 
         data = None
         if mode == "subprocess":
-            unload_model(gccollect, debug)
+            #subprocess - выгружаем модель keep_vram в начале 
+            unload_model(gccollect, debug, target="keep_vram")
+
             result = run_script_subprocess(script_name, config, timeout=300)
         else:
             if script_name == "qwen3vl_run.py":
                 module = qwen3vl_run
             else:
-                return f"Direct execution not supported for script '{script_name}'", None, None
+                return f"[ERROR] Direct execution not supported for script '{script_name}'", None, None
+
+            #Другой скрипт выбран - выгружаем все
             if _current_module is not None and _current_module != module:
-                unload_model(gccollect, debug)
+                unload_model(gccollect, debug, target="all")
 
             _current_module = module
             result, data = module.run_inference_direct(config)
 
+            #direct_clean - выгружаем модель в конце 
             if mode == "direct_clean":
-                unload_model(gccollect, debug)
+                unload_model(gccollect, debug, target="keep_vram")
 
+        #Обработка результата
         if result.get("status") == "success":
             text = result.get("output", "")
             data_type = result.get("data_type", 0)
@@ -489,8 +495,8 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
             if "traceback" in result:
                 print(result["traceback"], file=sys.stderr)
 
-            # Очистка памяти при ошибке
-            unload_model(False, debug)
+            # Очистка памяти при ошибке - выгружаем все
+            unload_model(False, debug, target="all")
             clear_memory(True, debug)
 
             return output_msg, None, None
@@ -502,16 +508,17 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
 
         print(traceback.format_exc())
 
-        unload_model(False, debug)
+        # Очистка памяти при ошибке - выгружаем все
+        unload_model(False, debug, target="all")
         clear_memory(True, debug)
 
         return output_msg, None, None
 
-def unload_model(gccollect = False,debug = False):
+def unload_model(gccollect = False, debug = False, target="keep_vram"):
     global _current_module
-    if _current_module is not None:
-        if hasattr(_current_module, 'unload_llama_model'):
-            _current_module.unload_llama_model(gccollect, debug)
+    if _current_module is not None and hasattr(_current_module, 'unload_llama_model'):
+            _current_module.unload_llama_model(gccollect, debug=debug, target=target)
+    if target == "all":
         _current_module = None
 
 def config_override_repair(text: str) -> Dict[str, Any]:
@@ -655,7 +662,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
                 "seed": ("INT", {"default": 42}),
                 "unload_all_models": ("BOOLEAN", {"default": False}),
-                "mode": (["subprocess", "direct_clean", "keep_vram"], {"default": "subprocess"}),
+                "mode": (["subprocess", "direct_clean", "keep_vram", "save1", "save2", "save3"], {"default": "subprocess"}),
             },
             "optional": {
                 "image": ("IMAGE",),
@@ -773,12 +780,14 @@ class SimpleQwen3VL_GGUF_Node:
 
             script_name, config = old_config_patch(script_name, config)
 
+            cache_mode = mode if mode.startswith("save") else "keep_vram"
             config_str = json.dumps(config, sort_keys=True, ensure_ascii=False).encode('utf-8')
             config_hash = hashlib.sha256(config_str).hexdigest()
 
             # Итоговый конфиг для инференса
             final_config = {
                 **config,
+                "cache_mode": cache_mode,
                 "user_prompt": user_prompt,
                 "system_prompt": system_prompt,
                 "images": images_value,
