@@ -13,6 +13,8 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 # Last update:
 **16.05.2026 - Nightly**
+- Added example `qwen_vl_test_translate`
+- Added modes: `save1`, `save2`, `save3`
 - Added example `qwen_vl_test_image_storytaler`
 - Added utils: `Simple Text To Batch`, `Simple Text Insert`, `Simple Text Replace`, `Simple Join Strings`
 - Added simple LLM configurator
@@ -293,9 +295,10 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 
 | Mode | Characteristics | Benefits |
 |--------|--------|--------|
-| subprocess | Inference runs in a separate Python process. The model is loaded and unloaded for each execution. All temporary files (images) are cleaned up automatically. |	• Complete isolation – no VRAM leaks between runs. • Safe for Comfy-UI or main script. |
-| direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are passed as PIL objects (no temporary files).	| • Faster than subprocess (no process spawn overhead). • Good for repeated calls with different models/configs. • Still frees VRAM after each use. |
-| keep_vram | Inference runs in the main process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. Images are passed as PIL objects. |	• Maximum speed for multiple inferences with identical settings. • Ideal for batch processing or iterative workflows where memory is high/models are small. | 
+| subprocess | Inference runs in a separate Python process. The model is loaded and unloaded for each execution. |	✅ Complete isolation – no VRAM leaks. ✅ Safe main script - no crash. 💡 Frees VRAM after each use. |
+| direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are transmitted directly (no temporary files).	| ✅ Faster than subprocess (no process spawn overhead). 💡 Still frees VRAM after each use. |
+| keep_vram | Inference runs in the main ComfyUI process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. |	✅ Maximum speed for batch processing or iterative workflows. 💡 When switching the mode to `direct_clean` or `subprocess`, this cache will be unloaded. | 
+| save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `UnloadQwenModel` node and unload a specific cache or all caches. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
 
 # Nodes:
 🌐 SimpleQwenVL:
@@ -682,6 +685,47 @@ Allows select a user prompt from templates:
 # Models (for example):
 
 <img width="2048" height="448" alt="03522-929995336568847" src="https://github.com/user-attachments/assets/0dc6c148-c049-4fc4-9363-eedb04db2785" />
+
+<details>
+
+<summary>HY-MT1.5-1.8B (translate)</summary>
+
+- https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/tree/main
+
+For example:
+`HY-MT1.5-1.8B-Q4_K_M.gguf`
+
+> 💡 **TIP:** Here I made a prompt template in which the target_language is set through the `system_prompt_override` input. Just supply the text with the target language there, for example `Russian`. And the text that needs to be translated should be submitted to the `user_prompt` input.
+
+> 💡 **WARNING:** The model is highly specialized and understands only strictly defined tasks.
+
+```json
+        "HY-MT1.5-1.8B (translate)": {
+            "model_path": "H:\\LLM2\\HY-MT1.5-1.8B-Q4_K_M.gguf",
+            "raw_mode": true,
+            "prompt_template": "<｜hy_User｜>Translate the following segment into {system}, without additional explanation.\\n\\n{user}<｜hy_Assistant｜>",
+            "stop": [ "<｜hy_place▁holder▁no▁2｜>" ],
+            "max_tokens": 2048,
+            "top_k": 20,
+            "top_p": 0.6,
+            "temperature": 0.7,
+            "repeat_penalty": 1.05,
+            "min_p": 0.05,   
+            "script": "qwen3vl_run.py",
+            "n_ctx": 4096,
+            "n_batch": 4096,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "use_mmap": true,
+            "use_mlock": false,
+            "offload_kqv": true,
+            "verbose": false,
+            "debug": true,
+        },
+```
+
+</details>
 
 <details>
 
@@ -1503,6 +1547,7 @@ Try enabling debug output:
 "debug": true
 "verbose": true
 ```
+And use `subprocess` mode. In other modes, some logs may be suppressed by the main system settings.
 
 <details>
 
