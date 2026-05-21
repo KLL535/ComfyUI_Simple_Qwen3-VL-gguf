@@ -351,11 +351,13 @@ A universal version. The model and its parameters mast be passed to the `config_
 
 ### Output:
 - `text`: *STRING* - generated text
-- `conditioning` - (**in development**)
+- `conditioning`: *CONDITIONING* - For embedding mode only
 - `system preset`: *STRING* - Current system prompt (if you want to keep it)
 - `user preset`: *STRING* - Current user prompt (same as input)
 
 </details>
+
+enhance this for video generation
 
 # Use case1. Manual Config
 
@@ -705,6 +707,7 @@ For example:
             "raw_mode": true,
             "prompt_template": "<｜hy_User｜>Translate the following segment into {system}, without additional explanation.\\n\\n{user}<｜hy_Assistant｜>",
             "stop": [ "<｜hy_place▁holder▁no▁2｜>" ],
+            "system_prompt_default": "Russian",
             "max_tokens": 2048,
             "top_k": 20,
             "top_p": 0.6,
@@ -1064,7 +1067,7 @@ An interesting uncensored fine-tuned model for LTX 2.3.
 
 > 💡 **Tip:** `user_prompt_after_content: false` means that the image will be transmitted at the end.
 
-system_prompt: none or LTX I2V or LTX T2V
+system_prompt: `none` or `LTX I2V` or `LTX T2V` or `enhance this for video generation`
 
 ```json
         "sulphur_prompt_enhancer": {
