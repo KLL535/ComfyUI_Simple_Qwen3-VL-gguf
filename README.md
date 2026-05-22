@@ -12,7 +12,9 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 5. No auto-loaded models. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk to config. 
 
 # Last update:
-**16.05.2026 - Nightly**
+**22.05.2026 - Nightly**
+
+**22.05.2026 - V3.8**
 - Added example `qwen_vl_test_translate`
 - Added modes: `save1`, `save2`, `save3`
 - Added example `qwen_vl_test_image_storytaler`
