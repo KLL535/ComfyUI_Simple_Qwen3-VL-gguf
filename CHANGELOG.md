@@ -1,4 +1,5 @@
 # Nightly
+# V3.8
 - Added example `qwen_vl_test_translate`
 - Added modes: `save1`, `save2`, `save3`
 - Added example `qwen_vl_test_image_storytaler`
