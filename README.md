@@ -692,28 +692,27 @@ Allows select a user prompt from templates:
 
 <details>
 
-<summary>HY-MT1.5-1.8B (translate)</summary>
+<summary>HY-MT2 (translate)</summary>
 
-- https://huggingface.co/tencent/HY-MT1.5-1.8B-GGUF/tree/main
+- https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
 
-For example:
-`HY-MT1.5-1.8B-Q4_K_M.gguf`
+For example: `Hy-MT2-1.8B-Q4_K_M.gguf`
 
 > 💡 **TIP:** Here I made a prompt template in which the target_language is set through the `system_prompt_override` input. Just supply the text with the target language there, for example `Russian`. And the text that needs to be translated should be submitted to the `user_prompt` input.
 
 > 💡 **WARNING:** The model is highly specialized and understands only strictly defined tasks.
 
 ```json
-        "HY-MT1.5-1.8B (translate)": {
-            "model_path": "H:\\LLM2\\HY-MT1.5-1.8B-Q4_K_M.gguf",
+        "HY-1.8B (translate)": {
+            "model_path": "H:\\LLM3\\Hy-MT2-1.8B-Q4_K_M.gguf",
             "raw_mode": true,
-            "prompt_template": "<｜hy_User｜>Translate the following segment into {system}, without additional explanation.\\n\\n{user}<｜hy_Assistant｜>",
+            "prompt_template": "<｜hy_begin▁of▁sentence｜>Translate the following segment into {system}, without additional explanation.<｜hy_place▁holder▁no▁3｜><｜hy_User｜>{user}<｜hy_Assistant｜>",
             "stop": [ "<｜hy_place▁holder▁no▁2｜>" ],
             "system_prompt_default": "Russian",
             "max_tokens": 2048,
             "top_k": 20,
             "top_p": 0.6,
-            "temperature": 0.7,
+            "temperature": 0.7,   
             "repeat_penalty": 1.05,
             "min_p": 0.05,   
             "script": "qwen3vl_run.py",
@@ -721,9 +720,80 @@ For example:
             "n_batch": 4096,
             "n_ubatch": 512,
             "n_gpu_layers": -1,
+            "n_threads": 8,
+            "use_mmap": true,
+            "use_mlock": false,
+            "offload_kqv": true,
             "verbose": false,
             "debug": true
         },
+```
+
+- https://huggingface.co/tencent/Hy-MT2-7B-GGUF
+
+For example: `Hy-MT2-7B-Q4_K_M.gguf`
+
+```
+"HY-7B (translate)": {
+            "model_path": "H:\\LLM3\\Hy-MT2-7B-Q4_K_M.gguf",
+            "raw_mode": true,
+            "prompt_template": "<|startoftext|>Translate the following segment into {system}, without additional explanation.<|extra_4|>{user}<|extra_0|>",
+            "stop": [ "<|eos|>" ],
+            "system_prompt_default": "Russian",
+            "max_tokens": 2048,
+            "top_k": 20,
+            "top_p": 0.6,
+            "temperature": 0.7,   
+            "repeat_penalty": 1.05,
+            "min_p": 0.05,   
+            "script": "qwen3vl_run.py",
+            "n_ctx": 4096,
+            "n_batch": 4096,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "use_mmap": true,
+            "use_mlock": false,
+            "offload_kqv": true,
+            "verbose": false,
+            "debug": true
+        },
+```
+
+- https://huggingface.co/GrahLnn/Hy-MT2-30B-A3B-4bit-GGUF/tree/main/patches
+
+For example: `Hy-MT2-30B-A3B-Q4_K_M.gguf`
+
+> 💡 **WARNING:** **Not yet supported by the library.** A patch for llama.cpp is required, or wait until support is added to llama.cpp.
+
+> 💡 **TIP:** "n_cpu_moe": 12 to 16G VRAM
+
+```
+"HY-30B-A3B (translate)": {
+    "model_path": "H:\\LLM3\\Hy-MT2-30B-A3B-Q4_K_M.gguf",
+    "raw_mode": true,
+    "prompt_template": "<|start_header_id|>user<|end_header_id|>\\n\\nTranslate the following segment into {system}, without additional explanation.\\n\\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\\n\\n",
+    "stop": [ "<|eot_id|>", "<|start_header_id|>" ],
+    "system_prompt_default": "Russian",
+    "max_tokens": 2048,
+    "top_k": 20,
+    "top_p": 0.6,
+    "temperature": 0.3,
+    "repeat_penalty": 1.05,
+    "min_p": 0.05,   
+    "script": "qwen3vl_run.py",
+    "n_ctx": 4096,
+    "n_batch": 4096,
+    "n_ubatch": 512,
+    "n_gpu_layers": -1,
+    "n_cpu_moe": 12,
+    "n_threads": 8,
+    "use_mmap": false,
+    "use_mlock": false,
+    "offload_kqv": true,
+    "verbose": false,
+    "debug": true
+},
 ```
 
 </details>
