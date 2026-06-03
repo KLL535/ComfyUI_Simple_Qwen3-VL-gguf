@@ -13,6 +13,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 # Last update:
 **22.05.2026 - Nightly**
+- Fix disappearance of "\n" line breaks in `raw_mode`
 
 **22.05.2026 - V3.8**
 - Added example `qwen_vl_test_translate`
