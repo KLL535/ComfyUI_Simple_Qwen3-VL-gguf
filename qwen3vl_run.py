@@ -29,7 +29,8 @@ _model_caches = {
 def build_prompt(template: str, system: str, user: str):
     # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
     result = template.replace("{system}", system).replace("{user}", user)
-    
+    result = result.replace('\\n', '\n')
+
     # 2. Разбиваем по {images}
     if "{images}" in result:
         parts = result.split("{images}", 1)  # Разделить только по первому вхождению
@@ -703,6 +704,9 @@ def _inference(config):
 
             if not config.get("raw_output", False):
                 output = output.strip()
+
+            if config.get("debug_output", False):
+                print(f"[DEBUG] LLM output: {output}", file=sys.stderr)
 
         elif extract_embedding:
 
