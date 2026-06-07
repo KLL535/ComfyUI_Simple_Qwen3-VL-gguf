@@ -403,8 +403,7 @@ def run_script_subprocess(script_name, config, timeout=300):
     except subprocess.TimeoutExpired:
         return {
             "status": "error", 
-            "message": "Inference timed out (5 min).",
-            "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            "message": "Inference timed out (5 min)."
         }
 
     except Exception as e:
