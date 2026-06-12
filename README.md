@@ -693,6 +693,42 @@ Allows select a user prompt from templates:
 
 <details>
 
+<summary>gemma-4-12B</summary>
+
+- https://huggingface.co/lmstudio-community/gemma-4-12B-it-QAT-GGUF
+
+> 💡 **TIP:** It works well for ideogram4 json, I think. 
+
+```json
+        "Gemma-4-12B": {
+            "model_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-QAT-Q4_0.gguf",
+            "mmproj_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\mmproj-gemma-4-12B-it-QAT-BF16.gguf",
+            "max_tokens": 10240,
+            "n_ctx": 12288,
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "n_gpu_layers": -1,
+            "n_threads": 8,
+            "split_mode": 0,
+            "temperature": 0.5,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "repeat_penalty": 1.05,
+            "presence_penalty": 0.0,
+            "top_k": 20,
+            "chat_handler": "gemma4",
+            "script": "qwen3vl_run.py",
+            "debug": true,
+            "enable_thinking": true,
+            "force_mmproj": false,
+            "verbose": false
+        },
+```
+
+</details>
+
+<details>
+
 <summary>HY-MT2 (translate)</summary>
 
 - https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF
