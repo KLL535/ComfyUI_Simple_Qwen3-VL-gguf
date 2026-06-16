@@ -1,4 +1,6 @@
 # Nightly
+# V3.9
+- Fix f-string: unmatched caused by nested double quotes
 - Fix disappearance of "\n" line breaks in raw_mode
 # V3.8
 - Added example `qwen_vl_test_translate`

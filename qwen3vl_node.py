@@ -391,7 +391,7 @@ def run_script_subprocess(script_name, config, timeout=300):
                 return {
                     "status": "error", 
                     "message": output_data.get('message', "Unknown error"), 
-                    "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\n{output_data.get('traceback', "")}"
+                    "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\n{output_data.get('traceback', '')}"
                 }
             else:    
                 return {
