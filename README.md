@@ -696,6 +696,50 @@ Allows select a user prompt from templates:
 
 <details>
 
+<summary>Ernie Image Prompt Enhancer</summary>
+
+Highly specialized LLM for Ernie Image. 
+
+- https://huggingface.co/Green-Sky/Ernie-Image-Prompt-Enhancer-Ministral-3B-GGUF
+
+- https://huggingface.co/unsloth/Ministral-3-3B-Reasoning-2512-GGUF
+
+For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-BF16.gguf`
+
+> 💡 **TIP:** A special system prompt is required; in the templates it is called `Ernie Prompt Enhancer`.
+
+> 💡 **TIP:** The result will only be in Chinese.
+
+```json
+        "Ernie-Image-Prompt-Enhancer": {
+            "model_path": "H:\\LLM3\\ernie\\Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf",
+            "mmproj_path": "H:\\LLM3\\ernie\\mmproj-BF16.gguf",
+            "max_tokens": 2048,
+            "image_min_tokens": 1024,
+            "image_max_tokens": 1024,
+            "ctx": 4096,
+            "n_batch": 2048,
+            "n_ubatch": 512,
+            "gpu_layers": -1,
+            "temperature": 0.7,
+            "top_p": 0.92,
+            "min_p": 0.01,
+            "top_k": 40,
+            "repeat_penalty": 1.15,
+            "chat_handler": "llava15", 
+            "script": "qwen3vl_run.py",
+            "raw_mode": true,
+            "prompt_template": "[SYSTEM_PROMPT]{system}[/SYSTEM_PROMPT][INST]{user}{images}[/INST]",
+            "stop": ["</s>", "[INST]", "[/INST]"],
+            "debug": true,
+            "verbose": false
+        },
+```
+
+</details>
+
+<details>
+
 <summary>gemma-4-12B</summary>
 
 - https://huggingface.co/lmstudio-community/gemma-4-12B-it-QAT-GGUF
