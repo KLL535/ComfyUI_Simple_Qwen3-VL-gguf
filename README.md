@@ -706,7 +706,11 @@ Highly specialized LLM for Ernie Image.
 
 For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 
-> 💡 **TIP:** A special system prompt is required; in the templates it is called `Ernie Prompt Enhancer`.
+> 💡 **TIP:** A special `system prompt` is required; in the templates it is called `Ernie Prompt Enhancer`.
+
+> 💡 **TIP:** The `user prompt` should look like this: `{"prompt": "{prompt}", "width": {width}, "height": {height}}`
+
+> 💡 **TIP:** `mmproj` should be left empty "" if image input are not needed.
 
 > 💡 **TIP:** The result will only be in Chinese.
 
@@ -721,11 +725,11 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
             "n_batch": 2048,
             "n_ubatch": 512,
             "gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 40,
-            "repeat_penalty": 1.15,
+            "temperature": 0.8,
+            "top_p": 0.8,
+            "min_p": 0.05,
+            "top_k": 64,
+            "repeat_penalty": 1.05,
             "chat_handler": "llava15", 
             "script": "qwen3vl_run.py",
             "raw_mode": true,
