@@ -455,7 +455,7 @@ def _inference(config):
                         llm_kwargs["chat_format"] = chat_format 
 
                 current_cache["llm"] = Llama(**llm_kwargs)
-
+                
                 if chat_handler is not None:
 
                     if config.get("chat_format_from_gguf", False):
@@ -536,11 +536,23 @@ def _inference(config):
                 "seed": config.get("seed", 42),
                 "repeat_penalty": config.get("repeat_penalty", 1.1),
                 "frequency_penalty": config.get("frequency_penalty", 0.0),
-                "present_penalty": config.get("presence_penalty", config.get("present_penalty", 0.0)),   
                 "top_p": config.get("top_p", 0.92),
                 "min_p": config.get("min_p", 0.05),
                 "top_k": config.get("top_k", 0),
             }
+
+            #present_penalty/presence_penalty issue
+            present_penalty = config.get("presence_penalty", config.get("present_penalty", 0.0))
+            method = current_cache["llm"].create_chat_completion
+            if hasattr(method, "__func__") and hasattr(method.__func__, "__code__"):
+                func = method.__func__
+                allowed_args = func.__code__.co_varnames[1:func.__code__.co_argcount]
+                if "presence_penalty" in allowed_args:
+                    completion_kwargs["presence_penalty"] = present_penalty
+                elif "present_penalty" in allowed_args:
+                    completion_kwargs["present_penalty"] = present_penalty
+            else:
+                completion_kwargs["present_penalty"] = present_penalty
 
             for key, value in config.items():
                 if key.startswith("extra_completion_"):
