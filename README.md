@@ -12,8 +12,11 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 5. No auto-loaded models. You can use any models you already have (from LM Studio etc). Just simply specify their path on the disk to config. 
 
 # Last update:
-**Nightly**
 
+**Nightly (tests)**
+- add node `Ideogram 4 JSON Preview` and `Ideogram 4 JSON Swap XY Coordinates`
+- present_penalty/presence_penalty issue
+  
 **16.06.2026 - V3.9**
 - Fix f-string: unmatched caused by nested double quotes
 - Fix disappearance of "\n" line breaks in `raw_mode`
