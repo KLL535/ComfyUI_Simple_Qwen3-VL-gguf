@@ -1,4 +1,5 @@
 # Nightly
+- add node `Ideogram 4 JSON Preview` and `Ideogram 4 JSON Swap XY Coordinates`
 - present_penalty/presence_penalty issue
 # V3.9
 - Fix f-string: unmatched caused by nested double quotes

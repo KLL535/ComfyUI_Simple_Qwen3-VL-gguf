@@ -5,6 +5,7 @@ from .qwen3vl_node import SimpleQwen3VL_GGUF_Node
 from .utils_node import MasterPromptLoader,SimpleStyleSelector,SimpleCameraSelector,UnloadQwenModel,SimpleRemoveThinkNode,SimpleTriggerNode,TextToBatchNode,SimpleTextInsertNode,SimpleTextReplaceNode,SimpleJoinStringsNode
 from .deprecated_node import Qwen3VL_GGUF_Node
 from .configurator import Qwen3VL_ModelConfig, Qwen3VL_SamplingConfig
+from .ideogram4 import Ideogram4JsonPreviewOnImage, Ideogram4JsonSwapCoordinates
 
 NODE_CLASS_MAPPINGS = {
     "SimpleQwenVLggufV2": SimpleQwen3VL_GGUF_Node,
@@ -20,6 +21,10 @@ NODE_CLASS_MAPPINGS = {
     "SimpleTextInsertNode": SimpleTextInsertNode,
     "SimpleTextReplaceNode": SimpleTextReplaceNode,
     "SimpleJoinStringsNode": SimpleJoinStringsNode,
+
+    #ideogram4
+    "Ideogram4JsonPreviewOnImage": Ideogram4JsonPreviewOnImage,
+    "Ideogram4JsonSwapCoordinates": Ideogram4JsonSwapCoordinates,
 
     #deprecated_node
     "SimpleQwenVLgguf": Qwen3VL_GGUF_Node,
@@ -40,6 +45,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SimpleTextReplaceNode": "Simple Text Replace",
     "SimpleJoinStringsNode": "Simple Join Strings",
 
+    #ideogram4
+    "Ideogram4JsonPreviewOnImage": "📐 Ideogram 4 JSON Preview",
+    "Ideogram4JsonSwapCoordinates": "🔄 Ideogram 4 JSON Swap XY Coordinates",
+    
     #deprecated_node
     "SimpleQwenVLgguf": "Qwen-VL Vision Language Model",
 }
