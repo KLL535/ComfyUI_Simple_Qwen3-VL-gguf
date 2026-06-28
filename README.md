@@ -14,6 +14,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 # Last update:
 
 **Nightly (tests)**
+- fix UnicodeDecodeError error in subprocess
 - add node `Ideogram 4 JSON Preview` and `Ideogram 4 JSON Swap XY Coordinates`
 - present_penalty/presence_penalty issue
   
@@ -320,14 +321,16 @@ Utils:
 - `Simple Qwen Unload` - Forces unloading of the currently loaded Qwen model from VRAM. Essential when using keep_vram mode to manually free memory after a series of inferences, or to reset the model state before loading a different configuration. Also useful in combination with the Trigger Node to manage memory in complex pipelines.
 - `Simple Remove Think` - Removes `think` sections from model output. Also handles cases where only a closing `think` tag is present, trimming everything before it. Designed for reasoning models (DeepSeek-R1 etc.) that output a thought process before the final answer. The node returns only the cleaned response.
 - `Simple Trigger Node` - Enforces execution order in complex workflows. For example, place it before the `Load Checkpoint`, and then the loader will execute only after the trigger input is received. Otherwise, the `Load Checkpoint` may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
-
-New:
 - `LLM Model Config` - Allows you to configure LLM settings (Model part) - see the `Config` section.
 - `LLM Sampling Config` - Allows you to configure LLM settings (Sampling part)
 - `Simple Text To Batch` - Allows you to split the LLM output by a given separator (to text batch), thus allowing you to obtain multiple scenes from a single request (see example `qwen_vl_test_image_storytaler`).
 - `Simple Text Insert` - Allows you to insert text into the location specified by the placeholder.
 - `Simple Text Replace` - Allows you to set one/multiple rules for auto-replacement/deletion of words/phrases in one node
 - `Simple Join Strings` - Simply concatenates 10 strings using the given separator.
+
+New:
+- `Ideogram 4 JSON Preview` - A simple node for displaying a bbox on an image (needed for ideogram4 json visualization)
+- `Ideogram 4 JSON Swap XY Coordinates` - Some models, such as the Qwen-9B, stubbornly ignore system instructions and swap the Y and X coordinates, causing the image to be drawn rotated 90 degrees. This node swaps the Y and X coordinates in bbox (needed for ideogram4).
   
 Deprecated version:
 - `Qwen-VL Vision Language Model` - Legacy version of the main node. Retained for backward compatibility with old workflows but no longer actively developed.
