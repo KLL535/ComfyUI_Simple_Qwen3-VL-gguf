@@ -751,8 +751,6 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
 
 - https://huggingface.co/lmstudio-community/gemma-4-12B-it-QAT-GGUF
 
-> 💡 **TIP:** It works well for ideogram4 json, I think. 
-
 ```json
         "Gemma-4-12B": {
             "model_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-QAT-Q4_0.gguf",
@@ -778,6 +776,10 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
             "verbose": false
         },
 ```
+
+> 💡 **TIP:** It works well for ideogram4 json. 
+
+<img width="719" height="813" alt="image" src="https://github.com/user-attachments/assets/275815ba-3b26-4082-8cd5-4ea2a71bcd3e" />
 
 </details>
 
