@@ -364,6 +364,8 @@ def run_script_subprocess(script_name, config, timeout=300):
             [sys.executable, script_path, tmp_config_path],
             capture_output=True,
             text=True,
+            #encoding='utf-8',
+            errors='replace',
             timeout=timeout,
             cwd=node_dir
         )
