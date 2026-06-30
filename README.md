@@ -14,6 +14,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 # Last update:
 
 **Nightly (tests)**
+- improvement of video input (part 1)
 - fix UnicodeDecodeError error in subprocess
 - add node `Ideogram 4 JSON Preview` and `Ideogram 4 JSON Swap XY Coordinates`
 - present_penalty/presence_penalty issue
