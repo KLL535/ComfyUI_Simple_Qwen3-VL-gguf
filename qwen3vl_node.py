@@ -261,34 +261,83 @@ def process_audios(audio_inputs, file_mode=True, target_sr=None, max_audios=3):
 
 def process_videos(video_inputs):
     """
-    Стадия 1: Просто вытягивает пути к видеофайлам.
+    Читает форматы VideoFromFile, VideoFromComponents или cырой тензор
     """
-    results = []
+    import numpy as np
+    
+    video_values = []
+    config_updates = {}
     
     for vid in video_inputs:
         if vid is None:
             continue
             
-        video_path = None
-            
-        # Работаем только с новым стандартом VideoFromFile
-        if 'VideoFromFile' in str(type(vid)):
-            # Пытаемся достать приватный атрибут __file
+        vid_type = str(type(vid))
+        
+        # --- Сценарий 1: VideoFromFile (есть файл и параметры обрезки) ---
+        if 'VideoFromFile' in vid_type:
+            video_path = None
             if hasattr(vid, '_VideoFromFile__file'):
                 video_path = str(vid._VideoFromFile__file)
             elif hasattr(vid, 'path'):
                 video_path = str(vid.path)
                 
-            if video_path and os.path.exists(video_path):
-                results.append(video_path)
+            if not video_path or not os.path.exists(video_path):
+                print(f"[ERROR] Invalid video path: {video_path}", file=sys.stderr)
+                continue
+                
+            # Извлекаем параметры обрезки для передачи в config
+            start_time = 0.0
+            duration = 0.0
+            if hasattr(vid, 'get_active_trim_window'):
+                start_time, duration = vid.get_active_trim_window()
+            elif hasattr(vid, 'get_duration'):
+                duration = vid.get_duration()
+                
+            video_values.append(video_path) # Передаем путь (строку)
+            
+            # Кладем параметры обрезки в конфиг
+            config_updates['trim_start'] = start_time
+            config_updates['trim_duration'] = duration
+            
+        # --- Сценарий 2: VideoFromComponents или Сырой тензор (in-memory) ---
+        elif hasattr(vid, 'get_components') or isinstance(vid, torch.Tensor):
+            tensor_frames = None
+            if hasattr(vid, 'get_components'):
+                try:
+                    components = vid.get_components()
+                    if hasattr(components, 'images'):
+                        tensor_frames = components.images
+                except Exception as e:
+                    print(f"[ERROR] Failed to get components: {e}", file=sys.stderr)
+                    continue
             else:
-                print(f"[ERROR] Found VideoFromFile, but file path is invalid: {video_path}", file=sys.stderr)
+                tensor_frames = vid
+                
+            if tensor_frames is None:
+                continue
+                
+            # Конвертируем torch -> numpy (uint8, RGB). 
+            if tensor_frames.dtype in (torch.float32, torch.float16):
+                if tensor_frames.max() > 1.0:
+                    tensor_frames = tensor_frames.clamp(0, 255).byte()
+                else:
+                    tensor_frames = (tensor_frames * 255).clamp(0, 255).byte()
+            elif tensor_frames.dtype != torch.uint8:
+                tensor_frames = tensor_frames.byte()
+                
+            np_frames = tensor_frames.cpu().numpy()
+            
+            # Если формат (Batch, T, H, W, C), берем первый батч
+            if len(np_frames.shape) == 5:
+                np_frames = np_frames[0]
+                
+            video_values.append(np_frames) # Передаем numpy массив (in-memory)
+            
         else:
-            # Предупреждение для старых версий ComfyUI (выдающих тензоры кадров)
-            print("[WARNING] This node requires new ComfyUI 'VideoFromFile' object! "
-                  "Tensors (VHS Load Video) are not supported in this version.", file=sys.stderr)
-                  
-    return results # Список строк-путей
+            print(f"[WARNING] Unsupported video type: {vid_type}", file=sys.stderr)
+            
+    return video_values, config_updates
 
 def tensor_to_pil(img_tensor):
     """Конвертирует тензор (H,W,C) в PIL Image."""
@@ -670,7 +719,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "image2": ("IMAGE",),
                 "image3": ("IMAGE",),
                 "audio": ("AUDIO",),
-                "video": ("VIDEO",),
+                "video": ("*",),
                 "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
                 "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
             }
@@ -759,8 +808,16 @@ class SimpleQwen3VL_GGUF_Node:
             # Видео 
             if video is not None:
                 t_process_videos = time.perf_counter()
-                video_value = process_videos([video])
+                video_value, vid_config = process_videos([video])
+                config.update(vid_config)
                 _debug_print(debug, "process_videos", t_process_videos)
+
+            # Неподдерживаемые сценарии
+            if mode == "subprocess":
+                for val in video_value:
+                    # Если в подпроцесс пытаются передать не путь (строку), а numpy массив
+                    if not isinstance(val, str):
+                        raise ValueError("Subprocess mode is not possible with videos in VideoFromComponents and Raw Tensor formats. Use direct_clean/keep_vram mode.")
 
             if (len(images_value) + len(audio_value) + len(video_value)) == 0:
                 config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша

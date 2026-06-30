@@ -91,64 +91,106 @@ def _build_audio_content(audio_item):
         print(f"build_audio: Unsupported type: {type(audio_item)}", file=sys.stderr)
         return None
 
-def _build_video_content(video_path, max_frames=24, quality=75):
-    """
-    Тут только сценарий 2: путь к файлу -> в base64 
-    С прореживанием кадров
-    """
-    import cv2
+def _build_video_content(video_input, config):
+
+    max_frames = config.get('max_frames', 24)
+    quality = config.get('frame_quality', 75)
+    trim_start = config.get('trim_start', 0.0)
+    trim_duration = config.get('trim_duration', 0.0)
     
     video_content_items = []
+    frames_to_process = []
     
-    cap = cv2.VideoCapture(video_path)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    
-    if total_frames <= 0:
-        print(f"[ERROR] Could not open video at: {video_path}", file=sys.stderr)
+    # Сценарий 1: Путь к файлу (Работа через cv2) ---
+    if isinstance(video_input, str):
+
+        import cv2
+
+        video_path = video_input
+        if not os.path.exists(video_path):
+            print(f"[ERROR] Video file not found: {video_path}", file=sys.stderr)
+            return []
+            
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return []
+            
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        if fps <= 0: fps = 30.0
+        
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames <= 0:
+            cap.release()
+            return []
+            
+        # Применяем обрезку (trim) из config
+        start_frame = int(trim_start * fps)
+        if trim_duration > 0:
+            end_frame = int((trim_start + trim_duration) * fps)
+        else:
+            end_frame = total_frames
+            
+        start_frame = max(0, min(start_frame, total_frames - 1))
+        end_frame = max(start_frame + 1, min(end_frame, total_frames))
+        
+        effective_total = end_frame - start_frame
+        
+        # Прореживание кадров в пределах обрезанного окна
+        if effective_total > max_frames:
+            indices = set(np.linspace(0, effective_total - 1, max_frames, dtype=int).tolist())
+        else:
+            indices = set(range(effective_total))
+            
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+        current_idx = start_frame
+        selected_count = 0
+        
+        while cap.isOpened() and current_idx < end_frame:
+            ret, frame = cap.read()
+            if not ret: break
+            
+            if (current_idx - start_frame) in indices:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frames_to_process.append(frame_rgb)
+                selected_count += 1
+                if selected_count >= max_frames: break
+            current_idx += 1
         cap.release()
+        
+    # Сценарий 2: Numpy массив (in-memory)
+    elif isinstance(video_input, np.ndarray):
+        np_frames = video_input
+        # Ожидаем формат (T, H, W, C)
+        if len(np_frames.shape) != 4:
+            print(f"[ERROR] Invalid numpy array shape for video: {np_frames.shape}", file=sys.stderr)
+            return []
+            
+        total_frames = np_frames.shape[0]
+        
+        # Прореживание
+        if total_frames > max_frames:
+            indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
+            frames_to_process = [np_frames[i] for i in indices]
+        else:
+            frames_to_process = [np_frames[i] for i in range(total_frames)]
+            
+    else:
+        print(f"[ERROR] Unsupported video_input type in _build_video_content: {type(video_input)}", file=sys.stderr)
         return []
         
-    # Рассчитываем индексы кадров для прореживания
-    if total_frames > max_frames:
-        indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
-    else:
-        indices = range(total_frames)
+    # Кодируем кадры в base64 
+    for frame_rgb in frames_to_process:
+        img = Image.fromarray(frame_rgb)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=quality) 
+        img_bytes = buf.getvalue()
+        b64_data = base64.b64encode(img_bytes).decode("utf-8")
         
-    current_idx = 0
-    selected_count = 0
-    
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        if current_idx in indices:
-            # OpenCV (BGR) -> PIL (RGB)
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(frame_rgb)
-            
-            # Быстрое сжатие в JPEG в памяти
-            buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=quality) 
-            img_bytes = buf.getvalue()
-            
-            # Кодируем в base64 и упаковываем по стандарту OpenAI/Llama vision
-            b64_data = base64.b64encode(img_bytes).decode("utf-8")
-            
-            video_content_items.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}
-            })
-            
-            selected_count += 1
-            if selected_count >= max_frames:
-                break
-                
-        current_idx += 1
+        video_content_items.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}
+        })
         
-    cap.release()
-    print(f"[DEBUG] Successfully extracted {len(video_content_items)} frames from {video_path}")
-    
     return video_content_items
 
 def _debug_calc_speed(result, exec_time):
@@ -180,7 +222,6 @@ def _inference(config):
         image_max_tokens = config.get("image_max_tokens")
         extract_embedding = config.get("extract_embedding", False)
         extract_tts = config.get("extract_tts", False)
-        max_frames = config.get("max_frames",24)
         raw_mode = config.get("raw_mode", False)
 
         # --- Проверка обязательных полей ---
@@ -191,7 +232,6 @@ def _inference(config):
         system_prompt = config.get("system_prompt", "").strip()
         user_prompt = config.get("user_prompt", "").strip()
         image_quality = config.get("image_quality", 95)
-        frame_quality = config.get("frame_quality", 75)
 
         cuda_device = config.get("cuda_device")
         if cuda_device is not None:
@@ -597,7 +637,7 @@ def _inference(config):
                     #        content.append(aud_content)
 
                     for path in videos:
-                        frames_items = _build_video_content(path, max_frames=max_frames)
+                        frames_items = _build_video_content(path, config)
                         if frames_items is not None:
                             content.extend(frames_items) 
 
@@ -665,7 +705,7 @@ def _inference(config):
                             content.append(aud_content)
 
                     for path in videos:
-                        frames_items = _build_video_content(path, max_frames=max_frames, quality=frame_quality)
+                        frames_items = _build_video_content(path, config)
                         if frames_items is not None:
                             content.extend(frames_items) 
 
