@@ -14,6 +14,12 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 # Last update:
 
 **Nightly (tests)**
+- Added Bernini presets.
+- Add `_user_prompt_template` functionality. Now you can modify the user_prompt using a specified template (the name of which matches the system_preset)
+- Add `variables` input. You can now set any user placeholders in {} in the system and user prompts.
+- Added autocomplete placeholders `width`, `height`, `image_num`, `ref_num`, `audio_num`, `frame_num`, `user_prompt`. By default, placeholder replase is disabled for backward compatibility. It can be enabled by passing user variables to the `variables` input (just like the config input) or by using `_user_prompt_template`, or by forcing it by entering `"enable_variables": true,` in config.
+- Added the `add_image_id`, `add_audio_id`, and `add_frame_id` configurations, which allow you to number the corresponding content according to a specified template before inserting it.
+- An additional configuration file has been added to the following path: `ComfyUI\user\SimpleQwenVL_configs\system_prompts_user.json`. 
 - improvement of video input (part 1)
 - fix UnicodeDecodeError error in subprocess
 - add node `Ideogram 4 JSON Preview` and `Ideogram 4 JSON Swap XY Coordinates`
