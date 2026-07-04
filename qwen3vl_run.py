@@ -97,6 +97,19 @@ def _build_video_content(video_input, config):
     quality = config.get('frame_quality', 75)
     trim_start = config.get('trim_start', 0.0)
     trim_duration = config.get('trim_duration', 0.0)
+    native_video = config.get('native_video', False) 
+    use_file_url = config.get('use_file_url', False)
+    frame_id = config.get("add_frame_id", None)
+    
+    # ==========================================
+    # РЕЖИМ 1: Нативное видео в llama.cpp
+    # ==========================================
+    if native_video:
+        print("[ERROR] Unsupported native_video", file=sys.stderr)
+
+    # ==========================================
+    # РЕЖИМ 2: Прореженные кадры как изображения
+    # ==========================================
     
     video_content_items = []
     frames_to_process = []
@@ -178,6 +191,7 @@ def _build_video_content(video_input, config):
         print(f"[ERROR] Unsupported video_input type in _build_video_content: {type(video_input)}", file=sys.stderr)
         return []
         
+    num = 0
     # Кодируем кадры в base64 
     for frame_rgb in frames_to_process:
         img = Image.fromarray(frame_rgb)
@@ -186,10 +200,14 @@ def _build_video_content(video_input, config):
         img_bytes = buf.getvalue()
         b64_data = base64.b64encode(img_bytes).decode("utf-8")
         
+        if frame_id:
+            video_content_items.append({"type": "text", "text": frame_id.replace("{num}", num)})
+
         video_content_items.append({
             "type": "image_url",
             "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}
         })
+        num += 1
         
     return video_content_items
 
@@ -690,19 +708,29 @@ def _inference(config):
                     content = []
 
                     user_prompt_after_content = config.get("user_prompt_after_content", True)
+                    image_id = config.get("add_image_id", None)
+                    audio_id = config.get("add_audio_id", None)
 
                     if not user_prompt_after_content:
                         content.append({"type": "text", "text": user_prompt})
 
+                    num = 0
                     for img_item in images:
                         img_content = _build_image_content(img_item, quality=image_quality)
                         if img_content is not None:
-                            content.append(img_content)
+                            if image_id:
+                                content.append({"type": "text", "text": image_id.replace("{num}", num)})
+                            content.append(img_content)     
+                            num += 1                   
 
+                    num = 0
                     for aud_item in audios:
                         aud_content = _build_audio_content(aud_item)
                         if aud_content is not None:
+                            if image_id:
+                                content.append({"type": "text", "text": audio_id.replace("{num}", num)})
                             content.append(aud_content)
+                            num += 1     
 
                     for path in videos:
                         frames_items = _build_video_content(path, config)

@@ -15,14 +15,17 @@ from typing import Optional, Dict, Any
 import textwrap
 import traceback
 import re
+import folder_paths
 
+HAS_JSON_REPAIR = False
 try:
     from json_repair import repair_json
     HAS_JSON_REPAIR = True
 except ImportError:
-    HAS_JSON_REPAIR = False
+    print("Warning: json_repair not available, using standard json parsing only")
 
 CATEGORY_NAME = "🌐 SimpleQwenVL"
+NODE_USER_DIR_NAME = "SimpleQwenVL_configs"
 
 from pathlib import Path
 current_dir = str(Path(__file__).parent)
@@ -37,29 +40,79 @@ _current_module = None
 _config_cache = {}
 _last_modified = {}
 
+_user_dir = None
+# Инициализация при импорте модуля (один раз при старте ComfyUI)
+try:
+    _user_base = folder_paths.get_user_directory()
+    _user_dir = os.path.join(_user_base, NODE_USER_DIR_NAME)
+    os.makedirs(_user_dir, exist_ok=True)
+    
+    # Создаем файл по умолчанию, если его еще нет
+    _user_config_file = os.path.join(_user_dir, "system_prompts_user.json")
+    if not os.path.exists(_user_config_file):
+        default_user_data = {
+            "_system_prompts": {},
+            "_user_prompt_styles": {},
+            "_camera_preset": {},
+            "_model_presets": {},
+            "_user_prompt_template": {}
+        }
+        with open(_user_config_file, 'w', encoding='utf-8') as f:
+            json.dump(default_user_data, f, indent=2, ensure_ascii=False)
+        print(f"Created default user config at: {_user_config_file}")
+    
+except Exception as e:
+    print(f"Warning: Could not initialize user directory for configs: {e}")
+    _user_config_file = None
+
+def get_user_data_directory():
+    """Get the user data directory for prompt stash files."""
+    try:
+        user_base = folder_paths.get_user_directory()
+        user_dir = os.path.join(user_base, NODE_USER_DIR_NAME)
+        os.makedirs(user_dir, exist_ok=True)
+        return user_dir
+    except Exception as e:
+        print(f"Warning: Could not create user directory for configs: {e}")
+        return None
+
 def get_config_files():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    return {
-        'main': os.path.join(current_dir, "system_prompts.json"),
-        'user': os.path.join(current_dir, "system_prompts_user.json"),
-    }
+    
+    files = {}
+    files['main'] = os.path.join(current_dir, "system_prompts.json")
+    files['user_legacy'] = os.path.join(current_dir, "system_prompts_user.json")
+    
+    if _user_config_file:
+        files['user'] = _user_config_file
+    
+    return files
 
 def repair_and_load_json(content: str, filepath: Optional[str] = None) -> Dict:
-    if HAS_JSON_REPAIR:
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-        try:
-            repaired = repair_json(content)
-            return json.loads(repaired)
-        except Exception as e:
-            raise ValueError(f"json_repair couldn't fix the JSON in {filepath}: {e}") from e
-    else:
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"failed to parse JSON in {filepath}: {e}") from e
+    # Сначала пробуем стандартный json.loads
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError as e:
+        # Если не получилось и есть json_repair - пробуем его
+        if HAS_JSON_REPAIR:
+            try:
+                repaired = repair_json(content)
+                # Проверяем, что repair_json вернул что-то
+                if not repaired or not repaired.strip():
+                    raise ValueError(f"json_repair returned empty result for {filepath}")
+                
+                result = json.loads(repaired)
+                print(f"Warning: JSON in {filepath} was repaired by json_repair")
+                return result
+            except Exception as repair_error:
+                raise ValueError(
+                    f"Failed to parse JSON in {filepath} even after repair: {repair_error}\n"
+                    f"Original error: {e}\n"
+                    f"Content preview: {content[:200]}..."
+                ) from repair_error
+        else:
+            # json_repair недоступен - просто выбрасываем ошибку
+            raise ValueError(f"Failed to parse JSON in {filepath}: {e}") from e
 
 def _update_cache_if_needed():
     files = get_config_files()
@@ -88,7 +141,7 @@ def _update_cache_if_needed():
         _config_cache.clear()
         _config_cache.update(combined)
         for name, path in files.items():
-            if os.path.exists(path):
+            if path and os.path.exists(path):
                 _last_modified[name] = os.path.getmtime(path)
     return _config_cache
 
@@ -259,7 +312,7 @@ def process_audios(audio_inputs, file_mode=True, target_sr=None, max_audios=3):
 
     return results
 
-def process_videos(video_inputs):
+def process_videos(video_inputs, config):
     """
     Читает форматы VideoFromFile, VideoFromComponents или cырой тензор
     """
@@ -268,6 +321,8 @@ def process_videos(video_inputs):
     video_values = []
     config_updates = {}
     
+    frame_num = 0
+
     for vid in video_inputs:
         if vid is None:
             continue
@@ -299,6 +354,7 @@ def process_videos(video_inputs):
             # Кладем параметры обрезки в конфиг
             config_updates['trim_start'] = start_time
             config_updates['trim_duration'] = duration
+            frame_num += config.get('max_frames', 24)
             
         # --- Сценарий 2: VideoFromComponents или Сырой тензор (in-memory) ---
         elif hasattr(vid, 'get_components') or isinstance(vid, torch.Tensor):
@@ -333,10 +389,14 @@ def process_videos(video_inputs):
                 np_frames = np_frames[0]
                 
             video_values.append(np_frames) # Передаем numpy массив (in-memory)
+
+            frame_num += len(np_frames)
             
         else:
             print(f"[WARNING] Unsupported video type: {vid_type}", file=sys.stderr)
             
+    config_updates['frame_num'] = frame_num
+
     return video_values, config_updates
 
 def tensor_to_pil(img_tensor):
@@ -722,6 +782,7 @@ class SimpleQwen3VL_GGUF_Node:
                 "video": ("*",),
                 "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
                 "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
+                "variables": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
             }
         }
 
@@ -743,7 +804,8 @@ class SimpleQwen3VL_GGUF_Node:
             audio=None,
             video=None,
             system_prompt_override=None,
-            config_override=None):
+            config_override=None,
+            variables=None):
 
         t_total0 = time.perf_counter()
         temp_paths = []
@@ -752,19 +814,28 @@ class SimpleQwen3VL_GGUF_Node:
         try:
             # Загружаем config из файла
             config = {}
+            user_vars = {}
             if model_preset != "None":
                 model_presets = load_cached_section('_model_presets')
                 if model_preset not in model_presets:
                     raise ValueError(f"Model preset '{model_preset}' not found")
                 config = old_names_patch(model_presets[model_preset])
 
-            # Применяем config_override
+            # Восстанавливаем config_override
             if config_override and str(config_override).strip():
                 try:
                     override_dict = self._config_override_repair(str(config_override))
                     config.update(old_names_patch(override_dict))
                 except Exception as e:
-                    raise ValueError(e)            
+                    raise ValueError(e)      
+
+            # Восстанавливаем variables
+            if variables and str(variables).strip():
+                try:
+                    variables_dict = self._config_override_repair(str(variables))
+                    user_vars.update(old_names_patch(variables_dict))
+                except Exception as e:
+                    raise ValueError(e)         
 
             # Получаем имя скрипта
             script_name = config.get("script", None)
@@ -808,7 +879,7 @@ class SimpleQwen3VL_GGUF_Node:
             # Видео 
             if video is not None:
                 t_process_videos = time.perf_counter()
-                video_value, vid_config = process_videos([video])
+                video_value, vid_config = process_videos([video], config)
                 config.update(vid_config)
                 _debug_print(debug, "process_videos", t_process_videos)
 
@@ -822,19 +893,92 @@ class SimpleQwen3VL_GGUF_Node:
             if (len(images_value) + len(audio_value) + len(video_value)) == 0:
                 config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша
 
-            # Определяем system_prompt
-            system_prompt = config.get("system_prompt_default", "")
+            # system_prompt & user_prompt
 
-            if system_preset != "None":
+            raw_system_prompt = ""
+            raw_user_prompt = user_prompt if user_prompt else ""
+            
+            use_preset_for_user = config.get("system_preset_to_user_prompt", False)
+            enable_placeholders = config.get("enable_variables", False)
+
+            # 1. Определяем системный промпт из override, выпадающего списка или default
+            if not use_preset_for_user:
+                if system_prompt_override is not None:
+                    raw_system_prompt = system_prompt_override.strip()
+                elif system_preset != "None":
+                    system_prompts = load_cached_section('_system_prompts')
+                    raw_system_prompt = system_prompts.get(system_preset, "").strip()
+                else:
+                    raw_system_prompt = config.get("system_prompt_default", "")
+            else:
+                # Если пресет должен уйти в юзер, системный берем из override или default
+                if system_prompt_override is not None:
+                    raw_system_prompt = system_prompt_override.strip()
+                else:
+                    raw_system_prompt = config.get("system_prompt_default", "")
+
+            # 2. Если пресет должен уйти в юзер-промпт, дописываем его туда (для joecaptionbeta и подобных)
+            if use_preset_for_user and system_preset != "None":
                 system_prompts = load_cached_section('_system_prompts')
-                system_prompt = system_prompts.get(system_preset, "").strip()
+                preset_text = system_prompts.get(system_preset, "").strip()
+                if preset_text:
+                    raw_user_prompt = (preset_text + "\n" + raw_user_prompt).strip()
 
-            if config.get("system_preset_to_user_prompt", False):
-                user_prompt = (system_prompt + " " + user_prompt).strip()
-                system_prompt = ""
+            # 3. Читаем шаблон для user_prompt, если он есть (для bernini и подобных)
+            user_prompt_template = None
+            if system_preset != "None":
+                user_prompt_templates = load_cached_section('_user_prompt_template')
+                user_prompt_template = user_prompt_templates.get(system_preset, None)
 
-            if system_prompt_override is not None:
-                system_prompt = system_prompt_override.strip()
+            # Если выключатель выключен, просто возвращаем то, что собрали
+            if enable_placeholders or len(user_vars) > 0 or user_prompt_template:
+                # Если плейсхолдеры включены - собираем переменные            
+                auto_vars = {
+                    "image_num": len(images_value) if images_value else 0, # Количество изображений на трех входах
+                    "ref_num": max(0, len(images_value) - 1), # Количество референсных изображений за вычетом первого
+                    "audio_num": len(audio_value) if audio_value else 0,
+                    "frame_num": config.get('frame_num', 0), # Количество кадров видео
+                    "user_prompt": raw_user_prompt, 
+                }
+                
+                if input_images is not None and len(input_images) > 0:
+                    auto_vars["width"] = input_images[0].shape[2]
+                    auto_vars["height"] = input_images[0].shape[1]
+                else:
+                    auto_vars["width"] = 0
+                    auto_vars["height"] = 0
+
+                # Приоритет: кастомные перекрывают авто
+                final_vars = {**auto_vars, **user_vars}
+
+                # Безопасная замена
+                class SafeDict(dict):
+                    def __missing__(self, key):
+                        return '{' + key + '}'
+
+                if user_prompt_template is not None:
+                    raw_user_prompt = user_prompt_template
+
+                try:
+                    # Форматируем системный промпт
+                    final_system_prompt = raw_system_prompt.format_map(SafeDict(final_vars))
+                    
+                    # Форматируем юзер-промпт (используя тот же словарь)
+                    final_user_prompt = raw_user_prompt.format_map(SafeDict(final_vars))
+                    
+                except Exception as e:
+                    raise ValueError(f"Error formatting prompts: {e}")
+
+                # Если {user_prompt} был в системном, очищаем юзерский, чтобы LLM не читал его дважды.
+                if "{user_prompt}" in raw_system_prompt:
+                    final_user_prompt = ""
+
+                system_prompt = final_system_prompt
+                user_prompt = final_user_prompt
+            else:
+                system_prompt = raw_system_prompt
+                user_prompt = raw_user_prompt
+
 
             script_name, config = old_config_patch(script_name, config)
 
