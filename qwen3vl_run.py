@@ -201,7 +201,7 @@ def _build_video_content(video_input, config):
         b64_data = base64.b64encode(img_bytes).decode("utf-8")
         
         if frame_id:
-            video_content_items.append({"type": "text", "text": frame_id.replace("{num}", num)})
+            video_content_items.append({"type": "text", "text": frame_id.replace("{num}", str(num))})
 
         video_content_items.append({
             "type": "image_url",
@@ -719,7 +719,7 @@ def _inference(config):
                         img_content = _build_image_content(img_item, quality=image_quality)
                         if img_content is not None:
                             if image_id:
-                                content.append({"type": "text", "text": image_id.replace("{num}", num)})
+                                content.append({"type": "text", "text": image_id.replace("{num}", str(num))})
                             content.append(img_content)     
                             num += 1                   
 
@@ -728,7 +728,7 @@ def _inference(config):
                         aud_content = _build_audio_content(aud_item)
                         if aud_content is not None:
                             if image_id:
-                                content.append({"type": "text", "text": audio_id.replace("{num}", num)})
+                                content.append({"type": "text", "text": audio_id.replace("{num}", str(num))})
                             content.append(aud_content)
                             num += 1     
 
