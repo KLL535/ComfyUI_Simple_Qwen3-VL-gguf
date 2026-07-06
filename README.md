@@ -460,9 +460,9 @@ Possible model configurations that can be passed to the `config_override` input.
 | system_preset_to_user_prompt | bool | False | 💡 Allows you to switch the substitution of the `master_preset` list from the `system prompt` to the `user prompt`, if the model understands the task better this way. | 
 | system_prompt_default | string |  | 💡 Allows you to set the default system prompt for the model. | 
 | raw_output | bool | False | If True disables output.strip() | 
-| max_images | int | 10 | You can set a limit on the number of incoming images (in batch mode, you can transfer many images) | 
+| max_images | int | 10 | You can set a limit on the number of incoming images total at the inputs image, image2, image3 (in batch mode, you can transfer many images in each input) | 
 | max_audios | int | 3 | You can set a limit on the number of incoming audio (in batch mode, you can transfer many audio) | 
-| max_frames | int | 24 | Allows you to limit the frame size for video, which will result in frame scaling. Transferring many frames will require significantly increasing the context window, which may run out of memory. On the other hand, scaling frames may result in the loss of important motion information. The player may see a slideshow instead of a video, which will be helpfully reported. | 
+| max_frames | int | 24 | Allows you to limit the frame size for video, which will result in frame scaling. Transferring many frames will require significantly increasing the context window, which may run out of memory. On the other hand, scaling frames may result in the loss of important motion information. The player may see a slideshow instead of a video, which will be helpfully reported. 💡 This only works for videos in VideoFromFile mode. If the video is served in VideoFromComponents/Raw tensor mode—that is, as a pre-prepared set of images—max_frames will have no effect. | 
 | audio_sample_rate | int | | You can set a new sampling frequency and then the audio will be resampled. | 
 | print_config | bool | false | Prints the full configuration to the console for debugging. | 
 | type_k | int |  | Define the data format (degree of compression/quantization) that is used to store the KV-cache (Context Cache) 💡 Some variant may not work. Default: F16 | 
@@ -588,13 +588,13 @@ Any placeholders { } can now be specified in the system and user prompts. Their 
 {width}, {height}, {image_num}, {ref_num}, {audio_num}, {frame_num}, {user_prompt}
 
 Where:
-- {image_num} - The total number of images fed to inputs image, image2, image3.
-- {frame_num} - The total number of frames fed to input video.
-- {audio_num} - The total number of audios fed to input audio.
-- {ref_num} = {image_num}-1. This is needed for instructions where there is one base image (image input), and the rest are reference images.
-- {user_prompt} - Text from the user_prompt input
-- {width} - Length of the first image
-- {height} - Height of the first image
+- `{image_num}` - The total number of images fed to inputs image, image2, image3 at most `max_images` (default 10, see `max_images` config).
+- `{frame_num}` - The total number of frames fed to input video at most `max_frames` (default 25, see `max_frames` config).
+- `{audio_num}` - The total number of audios fed to input audio at most `max_audios` (default 3, see `max_audios` config).
+- `{ref_num}` = {image_num}-1. This is needed for instructions where there is one base image (image input), and the rest are reference images.
+- `{user_prompt}` - Text from the user_prompt input
+- `{width}` - Length of the first image
+- `{height}` - Height of the first image
 
 > 💡 **WARNING:** By default, placeholder replase is disabled for backward compatibility. It can be enabled by:
 > - passing user variables to the `variables` input (just like the config input)
