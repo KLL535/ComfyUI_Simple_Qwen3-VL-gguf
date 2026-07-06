@@ -387,6 +387,13 @@ def process_videos(video_inputs, config):
             # Если формат (Batch, T, H, W, C), берем первый батч
             if len(np_frames.shape) == 5:
                 np_frames = np_frames[0]
+
+            # Прореживание кадров до max_frames
+            max_frames = config.get('max_frames', 24)
+            if len(np_frames) > max_frames:
+                # Равномерно выбираем индексы кадров по всей длине видео
+                indices = np.linspace(0, len(np_frames) - 1, max_frames).astype(int)
+                np_frames = np_frames[indices]
                 
             video_values.append(np_frames) # Передаем numpy массив (in-memory)
 
