@@ -14,6 +14,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 # Last update:
 
 **Nightly (tests)**
+- Added `📸 Load Video Fragment` node.
 - Added Bernini presets.
 - Add `_user_prompt_template` functionality. Now you can modify the user_prompt using a specified template (the name of which matches the system_preset)
 - Add `variables` input. You can now set any user placeholders in {} in the system and user prompts.
