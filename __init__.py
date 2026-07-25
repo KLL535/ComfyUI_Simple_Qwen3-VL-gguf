@@ -6,6 +6,9 @@ from .utils_node import MasterPromptLoader,SimpleStyleSelector,SimpleCameraSelec
 from .deprecated_node import Qwen3VL_GGUF_Node
 from .configurator import Qwen3VL_ModelConfig, Qwen3VL_SamplingConfig
 from .ideogram4 import Ideogram4JsonPreviewOnImage, Ideogram4JsonSwapCoordinates
+from .video_fragment_loader import SimpleLoadVideoFragment
+
+WEB_DIRECTORY = "./js"
 
 NODE_CLASS_MAPPINGS = {
     "SimpleQwenVLggufV2": SimpleQwen3VL_GGUF_Node,
@@ -22,12 +25,15 @@ NODE_CLASS_MAPPINGS = {
     "SimpleTextReplaceNode": SimpleTextReplaceNode,
     "SimpleJoinStringsNode": SimpleJoinStringsNode,
 
+    #video
+    "SimpleLoadVideoFragment": SimpleLoadVideoFragment,
+
     #ideogram4
     "Ideogram4JsonPreviewOnImage": Ideogram4JsonPreviewOnImage,
     "Ideogram4JsonSwapCoordinates": Ideogram4JsonSwapCoordinates,
 
     #deprecated_node
-    "SimpleQwenVLgguf": Qwen3VL_GGUF_Node,
+    "SimpleQwenVLgguf": Qwen3VL_GGUF_Node
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -45,10 +51,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SimpleTextReplaceNode": "Simple Text Replace",
     "SimpleJoinStringsNode": "Simple Join Strings",
 
+    #video
+    "SimpleLoadVideoFragment": "📸 Load Video Fragment",
+
     #ideogram4
     "Ideogram4JsonPreviewOnImage": "📐 Ideogram 4 JSON Preview",
     "Ideogram4JsonSwapCoordinates": "🔄 Ideogram 4 JSON Swap XY Coordinates",
     
     #deprecated_node
-    "SimpleQwenVLgguf": "Qwen-VL Vision Language Model",
+    "SimpleQwenVLgguf": "Qwen-VL Vision Language Model"
 }
+
+__all__ = ['NODE_CLASS_MAPPINGS','NODE_DISPLAY_NAME_MAPPINGS','WEB_DIRECTORY']
