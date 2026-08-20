@@ -1,4 +1,6 @@
 # Nightly
+- Added `words_to_ban` config (logit_bias).
+- Added `📸 Simple Gif Maker` node.
 - Added `📸 Load Video Fragment` node.
 - Added Bernini presets.
 - Add `_user_prompt_template` functionality. Now you can modify the user_prompt using a specified template (the name of which matches the system_preset)

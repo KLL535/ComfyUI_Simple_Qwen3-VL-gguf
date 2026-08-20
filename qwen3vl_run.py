@@ -599,6 +599,38 @@ def _inference(config):
                 "top_k": config.get("top_k", 0),
             }
 
+            # Нежелательные слова 
+            words_to_ban = config.get("words_to_ban", "")
+            if words_to_ban and isinstance(words_to_ban, str):
+                
+                # Разбиваем по запятой
+                words_list = [word.strip() for word in words_to_ban.split(",") if word.strip()]
+                
+                if words_list:
+                    banned_token_ids = []
+                    llm = current_cache["llm"]
+                    
+                    for word in words_list:
+                        # Токенизаторы часто кодируют слово с пробелом в начале как отдельный токен, добавляем оба варианта
+                        variants = [word, " " + word]
+                        
+                        for variant in variants:
+                            try:
+                                tokens = llm.tokenize(variant.encode('utf-8'), add_bos=False)
+                                banned_token_ids.extend(tokens)
+                            except Exception as e:
+                                print(f"[LogitBias Warning] Failed to tokenize '{variant}': {e}")
+
+                    # Удаляем дубликаты и убеждаемся, что ключи - это целые числа (int)
+                    unique_banned_ids = list(set(banned_token_ids))
+                    
+                    # Создаем словарь logit_bias, -100.0 в llama.cpp интерпретируется как полный запрет
+                    logit_bias_dict = {int(token_id): -100.0 for token_id in unique_banned_ids}
+                    
+                    if logit_bias_dict:
+                        completion_kwargs["logit_bias"] = logit_bias_dict
+                        #print(f"[LogitBias] Tokens are banned: {logit_bias_dict}") 
+
             #present_penalty/presence_penalty issue
             present_penalty = config.get("presence_penalty", config.get("present_penalty", 0.0))
             method = current_cache["llm"].create_chat_completion
