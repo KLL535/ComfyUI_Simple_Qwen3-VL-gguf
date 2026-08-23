@@ -14,6 +14,22 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 # Last update:
 
 **Nightly (tests)**
+
+- **Added new configurator 🌐 LLM Config (Advanced)**
+  
+The new advanced configurator brings a completely redesigned configuration experience with the following advantages:
+
+**Key Features:**
+
+1. Built-in Preset Management - Direct access to JSON preset files from within ComfyUI. You can now add new models, delete, or rename presets without manually editing JSON files. The preset browser integrates seamlessly with save/rename/delete buttons right in the node interface.
+2. Complete Parameter Access - All 73+ parameters currently supported by the system are available in one place. To prevent overwhelming users, parameters are organized into 9 collapsible groups (Model & Paths, Memory & Context, Sampling & Generation, etc.). Only essential parameters are visible by default; advanced settings remain hidden until needed.
+3. Windows File Browser - For Windows users, dedicated Browse Model and Browse MMProj buttons allow selecting GGUF files from anywhere on your disk, not just ComfyUI's predefined folders. No more manual path typing!
+4. Flexible Widget Layout - The configurator now supports widget reordering and insertion. You can rearrange parameters or add custom widgets without breaking saved workflows. Field positions in existing workflows will remain stable.
+
+<img width="734" height="825" alt="image" src="https://github.com/user-attachments/assets/f612508c-ef17-4fb1-b3be-0faf2aef2897" />
+
+- Added `words_to_ban` config (logit_bias).
+- Added `📸 Simple Gif Maker` node.
 - Added `📸 Load Video Fragment` node. What makes this node different from others? It can download a file of any size, but it does NOT copy it to the input folder. At the same time it has browse button, crop, resize and timeline.
 - Added Bernini presets.
 - Add `_user_prompt_template` functionality. Now you can modify the user_prompt using a specified template (the name of which matches the system_preset)
@@ -238,53 +254,6 @@ RTX 20-series → 75
 
 </details>
 
-### llama.cpp forks:
-
-You can try installing various forks that implement new functionality that has not yet been added to the main library.
-
-For example:
-
-<details>
-
-<summary>Launch a model with a huge context with TurboQuants</summary>
-
-1. The standard library llama.cpp doesn't yet support TurboQuants, so for now we'll use this fork for llama.cpp (put fork in directory `llama-cpp-python\vendor\llama.cpp`):
-https://github.com/spiritbuun/llama-cpp-turboquant-cuda
-
-2. Check branch: `feature/turboquant-kv-cache`
-   
-3. Then comes the standard compilation (There may be errors, as the project is completely new).
-
-4. In `Comfy-UI`, you will need to enable this mode as follows (no new special models are required, the mechanism works with older models) options, by connecting a textbox to the config_override input with the following text:
-```
-"verbose": true,
-"n_ctx": 262144,
-"type_k": 41,
-"type_v": 41
-```
-Where:
-262144 - max context to model
-41 - ggml type, the following options are available in the fork:
-```
-GGML_TYPE_TURBO3_0 = 41, // TurboQuant 3-bit KV cache: 2-bit PolarQuant + 1-bit QJL
-GGML_TYPE_TURBO4_0 = 42, // TurboQuant 4-bit KV cache: 3-bit PolarQuant + 1-bit QJL
-GGML_TYPE_TURBO2_0 = 43, // TurboQuant 2-bit KV cache: 2-bit PolarQuant, no QJL
-in file llama-cpp-python\vendor\llama.cpp\ggml\include\ggml.h
-```
-5. Result verbose:
-```
-llama_kv_cache: size = 1792.00 MiB (262144 cells,   8 layers,  1/1 seqs), K (turbo3):  896.00 MiB, V (turbo3):  896.00 MiB
-```
-Context compression up to ~4x
-
-6. Asymmetric mode (if you notice a drop in quality, because k-quant are more sensitive)
-```
-"type_k": 8, //Q8 (Not to be confused with quantization of model weights, this is quantization of attention)
-"type_v": 41 //turbo3
-```
-
-</details>
-
 ### CUDA Support
 
 This project requires CUDA runtime libraries. They can be sourced from:
@@ -318,33 +287,36 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 | keep_vram | Inference runs in the main ComfyUI process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. |	✅ Maximum speed for batch processing or iterative workflows. 💡 When switching the mode to `direct_clean` or `subprocess`, this cache will be unloaded. | 
 | save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `UnloadQwenModel` node and unload a specific cache or all caches. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
 
-# Nodes:
-🌐 SimpleQwenVL:
-- `Simple Qwen-VL Vision Language Model` - A universal Vision-Language model node supporting various GGUF models.
+# Nodes
 
-Utils:
-- `Master Prompt Loader` - Loads system prompt presets from a JSON configuration file (`system_prompts.json` / `system_prompts_user.json`). Supports override via an optional string input. Useful for managing complex or frequently used system prompts, ensuring consistency across workflows.
-- `Simple Style Selector` - Loads user prompt style presets from the configuration file. Can randomly select a style or apply a named preset. The selected style text is appended to the user prompt, enabling dynamic variation in generation.
-- `Simple Camera Selector` - Similar to Style Selector but for camera-related descriptions. Appends camera preset text to the user prompt, useful for image captioning tasks that require specific photographic context.
-- `Simple Qwen Unload` - Forces unloading of the currently loaded Qwen model from VRAM. Essential when using keep_vram mode to manually free memory after a series of inferences, or to reset the model state before loading a different configuration. Also useful in combination with the Trigger Node to manage memory in complex pipelines.
-- `Simple Remove Think` - Removes `think` sections from model output. Also handles cases where only a closing `think` tag is present, trimming everything before it. Designed for reasoning models (DeepSeek-R1 etc.) that output a thought process before the final answer. The node returns only the cleaned response.
-- `Simple Trigger Node` - Enforces execution order in complex workflows. For example, place it before the `Load Checkpoint`, and then the loader will execute only after the trigger input is received. Otherwise, the `Load Checkpoint` may execute first and occupy memory inappropriately, which will then have to be unloaded, which wastes time.
-- `LLM Model Config` - Allows you to configure LLM settings (Model part) - see the `Config` section.
-- `LLM Sampling Config` - Allows you to configure LLM settings (Sampling part)
-- `Simple Text To Batch` - Allows you to split the LLM output by a given separator (to text batch), thus allowing you to obtain multiple scenes from a single request (see example `qwen_vl_test_image_storytaler`).
-- `Simple Text Insert` - Allows you to insert text into the location specified by the placeholder.
-- `Simple Text Replace` - Allows you to set one/multiple rules for auto-replacement/deletion of words/phrases in one node
-- `Simple Join Strings` - Simply concatenates 10 strings using the given separator.
+🌐 SimpleQwenVL (Core):
+- **Simple Qwen-VL Vision Language Model** - A universal Vision-Language model node supporting various GGUF models (Qwen, LLaVA, Gemma, MiniCPM, etc.).
+- **🌐 LLM Config (Advanced)** *(NEW)* - The ultimate configuration node. Provides access to all 70+ supported parameters organized into collapsible, logical groups. Features built-in preset management (Save/Rename/Delete) and Windows file browsing. 
 
-New:
-- `Ideogram 4 JSON Preview` - A simple node for displaying a bbox on an image (needed for ideogram4 json visualization)
-- `Ideogram 4 JSON Swap XY Coordinates` - Some models, such as the Qwen-9B, stubbornly ignore system instructions and swap the Y and X coordinates, causing the image to be drawn rotated 90 degrees. This node swaps the Y and X coordinates in bbox (needed for ideogram4).
-  
-Deprecated version:
-- `Qwen-VL Vision Language Model` - Legacy version of the main node. Retained for backward compatibility with old workflows but no longer actively developed.
-> 💡 **Tip:** The problem is that the set of parameters for different models changes and is constantly updated. Trying to include all possible parameters in the parameter list results in a monster, and Comfi-UI doesn't allow dynamically changing this parameter list depending on the model. Therefore, I decided to combine all the parameters into a single text input and call it `config_override`. This is simply a multi-line text field in which you can list as many parameters as needed. If some parameters are left unspecified, default values ​​will be used. This same list can then be saved to a JSON file and selected using a `model_preset`.
+🛠️ Utils:
+- **Master Prompt Loader** - Loads system prompt presets from JSON configuration files. Supports override via an optional string input. Ensures consistency across complex workflows.
+- **Simple Style Selector** - Loads user prompt style presets. Can randomly select a style or apply a named preset, appending it to the user prompt for dynamic generation variation.
+- **Simple Camera Selector** - Similar to Style Selector, but for camera-related descriptions (lens, lighting, angle). Appends photographic context to the user prompt.
+- **Simple Qwen Unload** - Forces unloading of the currently loaded model from VRAM. Essential when using `keep_vram` mode to manually free memory, or to reset the state before loading a new configuration.
+- **Simple Remove Think** - Cleans model output by removing `<think>...</think>` sections. Designed for reasoning models (DeepSeek-R1, Qwen-thinking) to return only the final, cleaned response.
+- **Simple Trigger Node** - Enforces execution order in complex workflows. Prevents heavy nodes (like `Load Checkpoint`) from executing prematurely and occupying VRAM unnecessarily.
+- **Simple Text To Batch** - Splits LLM output by a given separator into a text batch, allowing you to extract multiple scenes or items from a single request.
+- **Simple Text Insert** - Inserts text into a specific location defined by a placeholder.
+- **Simple Text Replace** - Applies one or multiple rules for auto-replacement or deletion of words/phrases in a single node.
+- **Simple Join Strings** - Concatenates up to 10 strings using a specified separator.
+- **Ideogram 4 JSON Preview** - Visualizes bounding boxes from Ideogram 4 JSON output directly on the image.
+- **Ideogram 4 JSON Swap XY Coordinates** - Fixes coordinate swapping (Y/X) for models like Qwen-9B that stubbornly ignore system instructions, preventing rotated bounding boxes.
 
-# Simple Qwen-VL Vision Language Model (universal version)
+📸 Video Utils
+- **📸 Load Video Fragment** *(NEW)* - Extracts and processes a specific time-coded fragment from a large video file.
+- **📸 Simple Gif Maker** *(NEW)* - Creates and saves GIFs with high compression optimization.
+
+⚠️ Deprecated (Legacy):
+- **Qwen-VL Vision Language Model** - Legacy version of the main node. Retained *only* for backward compatibility with old workflows. No longer actively developed.
+- **LLM Model Config** - Legacy configuration node (Model parameters only).
+- **LLM Sampling Config** - Legacy configuration node (Sampling parameters only).
+
+# Simple Qwen-VL Vision Language Model
 A universal version. The model and its parameters mast be passed to the `config_override` input or described in a file `custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf\system_prompts_user.json`
 
 <img width="546" height="609" alt="image" src="https://github.com/user-attachments/assets/4e06cb5f-4901-4dc3-900d-1324e21806e0" />
@@ -378,31 +350,32 @@ A universal version. The model and its parameters mast be passed to the `config_
 
 </details>
 
-enhance this for video generation
+# Use Cases: 3 Ways to Configure Your Model
 
-# Use case1. Manual Config
+### Method 1: The New Advanced Configurator (Recommended)
 
-<img width="836" height="460" alt="image" src="https://github.com/user-attachments/assets/db89cd37-e974-4a3a-8987-886b10393513" />
+The **🌐 LLM Config (Advanced)** node provides a clean, organized interface for all 70+ parameters. 
+- Parameters are grouped into collapsible sections (Model, Memory, Sampling, Hardware, etc.), so you only see what you need.
+- Windows users can use the "Browse" buttons to select GGUF files from anywhere on the disk.
+- Outputs a ready-to-use JSON configuration string to the main node.
 
-Configurations can be stacked. Each additional configuration, via the "config_override" input, overwrites the specified fields and leaves the others unchanged.
+### Method 2: Model Preset Dropdown (Best for Workflow Reusability)
 
-# Use case2. Text Config (Advanced)
+Once you have tuned your settings (either via the Advanced Configurator or manually), you can save them as a named preset.
+- Use the **Save**, **Rename**, and **Delete** buttons in the Advanced Configurator to manage your library.
+- Presets are saved to `system_prompts_user.json` in user folder.
+- In the main node (or configurator), simply select your saved preset from the `model_preset` dropdown list. This instantly loads all associated parameters, making it easy to switch between different models without rewiring your workflow.
+
+### Method 3: Manual Text Config (Best for Power Users & Stacking)
 
 <img width="1331" height="696" alt="Image" src="https://github.com/user-attachments/assets/320192ed-d0c2-46bb-bc44-7f24d8348f3a" />
 
-You don't have to follow the JSON format exactly. If json_repair is installed - it will fix it.
+You can bypass the UI widgets entirely and pass configuration directly as a text string.
+- `Flexible Formatting:` You don't need perfect JSON. If the `json_repair` library is installed, it will automatically fix missing commas or quotes.
+- `Stacking & Overwriting:` Configurations are stackable. Each additional `config_override` input overwrites the specified fields and leaves the rest unchanged. 
+- `Use Case:` This is the *only* way to pass brand-new, experimental parameters to the backend script before they are officially added to the Advanced Configurator's UI widgets.
 
-# Use case3. Model preset drop-down list
-
-You can save your favorite configs to a JSON file and they will be available for selection in the drop-down list `model preset`.
-
-Configurations loads from file `system_prompts_user.json`.
-
-You must fill out this file yourself. An example of how to fill it out can be found in the file `system_prompts_user.example.json`. 
-
-Config values ​​can be taken from the configurator or from the examples below.
-
-<img width="1366" height="578" alt="image" src="https://github.com/user-attachments/assets/80a211c8-713b-4e6e-9ee5-0b731853ec31" />
+> 💡 Pro Tip: You can combine all three methods! Set a base configuration using a `Preset`, tweak a few settings using the `Advanced Configurator`, and inject a final, specific override (like a custom `stop` sequence) via the `config_override` text input. The system resolves them in that exact order of priority.
 
 # Model Configs:
 
@@ -410,172 +383,172 @@ Possible model configurations that can be passed to the `config_override` input.
 
 <details>
 
-<summary>Configs</summary>
+<summary>Configurator Parameters</summary>
+
+📁 Model & Paths
 
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
-| model_path | string |  | Path to the GGUF model file. Relative paths are supported. The path is specified relative to `ComfyUI\custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf` |
-| mmproj_path | string |  | Path to the multimodal projector file (required for vision models) |
-| force_mmproj | bool | false | 💡 If there are no images or audio or viseo, `mmproj` still loads into memory (and takes up space for no reason), but the correct template is not lost (`enable_thinking` will work). |
-| n_ctx or ctx | int | 8192 | Context size, maximum tokens the model can process. 💡 Increasing this parameter increases memory consumption, but if there are many pictures and the answer is big, then the answer can be truncated or error if the input data does not fit into the context. Rule: `image_max_tokens + input_text_max_tokens + max_tokens <= n_ctx` |
-| n_batch | int | 2048 | Batch size for prompt processing. A smaller number saves memory. Setting `n_batch = n_ctx` can speed up processing |
-| n_ubatch | int | 512 | 	Micro-batch size for advanced memory management |
-| image_min_tokens | int |  | Minimum number of tokens to allocate for image embeddings.  |
-| image_max_tokens | int |  | Maximum number of tokens to allocate for image embeddings.  |
-| user_prompt_after_content | bool | True | Inserts user_prompt after the image, otherwise before the image. |
-| max_tokens or output_max_tokens | int | 2048 | Maximum number of tokens to generate. A smaller number saves time, but may result in a truncated response. Thinking models require many output tokens |
-| temperature | float | 0.7 | Sampling temperature; Lower values (e.g., 0.1) make output more deterministic and focused; higher values (e.g., 1.5) increase randomness and creativity |
-| top_p | float | 0.92 | Nucleus sampling probability (0.0–1.0). The model considers only the tokens whose cumulative probability reaches top_p. Lower values make output more focused |
-| min_p | float | 0.05 | Minimum probability for a token to be considered in sampling. Tokens with probability below min_p are ignored |
-| top_k | int | 0 | Top-k sampling. limits to the k most likely tokens. 0 disables top-k |
-| repeat_penalty | float | 1.1 | Penalty for repeating tokens (≥1.0). Values >1 discourage repetition |
-| frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce the likelihood of frequently used tokens |
-| presence_penalty or present_penalty | float | 0.0 | Penalty based on token presence. Positive values reduce the likelihood of tokens that have already appeared |
-| swa_full | bool | False | Enable full Stochastic Weight Averaging (SWA). 💡 Enabling this setting may cause higher memory consumption. |
-| use_mmap | bool |  | Enable mmap. 💡 Observation. For Windows, it's better to turn it off. |
-| use_mlock | bool |  | Enable mlock. |
-| offload_kqv | bool | True | Offload KV Cache to GPU. Turn OFF (slow) for safe VRAM. |
-| n_cpu_moe | int |  | For MoE models that don't fit in VRAM. The number of expert layers that will be in RAM and processed by the CPU. This is a more advanced replacement for `n_gpu_layers`, which is twice as fast. |
-| cpu_moe | bool |  | For MoE models unloads all experts into RAM. Allows to save VRAM memory |
-| pool_size | int | 4194304 | Memory pool size for the model (llama.cpp). |
-| n_threads or cpu_threads | int | os.cpu_count() or 8 | Number of CPU threads to use for inference. |
-| image_quality | int | 95 | JPEG quality (1–100) when encoding images to data URIs. Higher values give better quality but larger size. |
-| frame_quality | int | 75 | JPEG quality (1–100) when encoding video frames to data URIs. Higher values give better quality but larger size. |
-| ctx_checkpoints | int | 0 | Max number of context checkpoints to create per slot |
-| merge_system_and_user | bool | False | If True, combines system and user prompts into a single user message.Used for some llava-type models. |
-| n_gpu_layers or gpu_layers | int | -1 | Number of layers to offload to GPU; -1 means all layers in GPU. 0 means all layers in CPU. Setting a lower number (40 -> 35 -> 30) can help, sometimes even speeding up by avoiding out-of-memory errors. |
-| script | string |  | Name of the Python script to execute ("qwen3vl_run.py"). This field must be specified in the config. |
-| verbose | bool | False | Enables verbose logging from llama.cpp |
-| silent | bool | False | 💡 Unstable function. Disable. |
-| debug | bool | False | Enables output of the time count for each stage to the console. (e.g., [DEBUG] total time: 7.818s | 397 word (50.8 word/sec)) |
-| force_gc_start | bool | False | Enables garbage collection after memory clearing when the `unload_all_models` flag is active. 💡 If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
-| force_gc_unload | bool | False | Enables garbage collection after deleting the LLM model. 💡 If you have a lot of garbage accumulating in your memory, enable this option, but it will increase the time. |
-| chat_handler | string |  | Type of chat handler: "gemma4", "qwen35", "qwen3", "qwen25", "gemma3", "llava15", "llava16", "bakllava", "moondream", "minicpmv26", "minicpmv45", "glm41v", "glm46v", "granite", "lfm2vl", "paddleocr", "obsidian", "nanollava", "llama3visionalpha". 💡 Specify for multimodal models. |
-| chat_format | string |  | Type of chat format for text model: "llama-2", "llama-3", "alpaca", "vicuna", "oasst_llama", "baichuan-2", "baichuan", "openbuddy", "redpajama-incite", "snoozy", "phind", "intel", "open-orca", "mistrallite", "zephyr", "pygmalion", "chatml", "mistral-instruct", "chatglm3", "openchat", "saiga", "gemma", "qwen" 💡 Required to be specified for text models only (or multimodal model in text mode). |
-| chat_format_from_gguf | bool | false | Forces the chat template to be loaded from the gguf model. 💡 If there are pictures, audio, video, it doesn't work. |
-| enable_thinking | bool | False | For "Gemma4, "Qwen35, "minicpmv45", "glm46v" enables the thinking process in the response. |
-| add_vision_id | bool | auto | For "Qwen35", "Qwen3" adds a vision ID token to the prompt. If not set, it will be calculated automatically (True if number of images != 1) |
-| force_reasoning | bool | False | For "Qwen3" forces reasoning mode. |
-| stop | list of strings |  | Stop sequences that halt generation. When any of these strings is generated, the process stops. (e.g., ["tag1", "tag2"]). 💡 Important: Llama automatically adds stop tokens based on `chat_handler` or `chat_format`. Pass `stop` only if you want to override the default behavior. |
-| clearing_cache | bool | True | 💡 Allows you to avoid image freezing due to cache activity | 
-| system_preset_to_user_prompt | bool | False | 💡 Allows you to switch the substitution of the `master_preset` list from the `system prompt` to the `user prompt`, if the model understands the task better this way. | 
-| system_prompt_default | string |  | 💡 Allows you to set the default system prompt for the model. | 
-| raw_output | bool | False | If True disables output.strip() | 
-| max_images | int | 10 | You can set a limit on the number of incoming images total at the inputs image, image2, image3 (in batch mode, you can transfer many images in each input) | 
-| max_audios | int | 3 | You can set a limit on the number of incoming audio (in batch mode, you can transfer many audio) | 
-| max_frames | int | 24 | Allows you to limit the frame size for video, which will result in frame scaling. Transferring many frames will require significantly increasing the context window, which may run out of memory. On the other hand, scaling frames may result in the loss of important motion information. The player may see a slideshow instead of a video, which will be helpfully reported | 
-| audio_sample_rate | int | | You can set a new sampling frequency and then the audio will be resampled. | 
-| print_config | bool | false | Prints the full configuration to the console for debugging. | 
-| type_k | int |  | Define the data format (degree of compression/quantization) that is used to store the KV-cache (Context Cache) 💡 Some variant may not work. Default: F16 | 
-| type_v | int |  | Define the data format (degree of compression/quantization) that is used to store the KV-cache (Context Cache) 💡 Some variant may not work. Default: F16 | 
-| enable_variables | bool | False | Enables substitution of placeholders { } in system and user prompts. `Example: "enable_variables": true` | 
-| add_image_id | str | None | Allows you to additionally mark images with the specified text before inserting them. Example: `"add_image_id": "\\n[Image {num}]:"` | 
-| add_frame_id | str | None | Allows you to additionally mark frames with the specified text before inserting them. Example: `"add_frame_id": "\\n[Frame {num}]:"` | 
-| add_audio_id | str | None | Allows you to additionally mark audios with the specified text before inserting them.  | 
+| model_preset | dropdown | None | Select from saved model presets. Presets are loaded from `system_prompts_user.json` |
+| model_path | string | "" | Path to GGUF model file. Relative paths are supported. The path is specified relative to `ComfyUI\custom_nodes\ComfyUI_Simple_Qwen3-VL-gguf`. Windows only: Use "Browse Model" button to select from file dialog |
+| mmproj_path | string | "" | Path to multimodal projector file (required for vision models). Windows only: Use "Browse MMProj" button |
 
-Multi-GPU settings https://github.com/KLL535/ComfyUI_Simple_Qwen3-VL-gguf/issues/24:
+🗄️ Memory & Context
+
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
-| cuda_device | int/str | None | System level. Sets `CUDA_VISIBLE_DEVICES` environment variable before initialization. Restricts GPU visibility for the entire Python process. Accepts single index (0) or comma-separated list ("0,1"). Remaps logical GPU indices for llama-cpp (e.g., cuda_device=2 makes physical GPU2 appear as logical 0, so main_gpu must be 0). Must be set before any CUDA library loads; runtime changes are ignored. Use for strict GPU isolation in multi-GPU or shared environments. to the specified device(s). 💡 It may not work correctly in `direct_clear` and `keep_vram` modes, since comfi-ui is already running llama.cpp with its own settings. |
-| main_gpu | int | 0 | Library level. Index of the primary GPU to use when split_mode=0 (NONE). Ignored in LAYER/ROW modes except for KV-cache placement. Works with CUDA_VISIBLE_DEVICES filtering: if CUDA_VISIBLE_DEVICES=1, then main_gpu=0 refers to physical GPU1. |
-| split_mode | int | 1 | GPU splitting mode: 0=NONE (No splitting. The model is loaded onto a single main_gpu), 1=LAYER (distribute layers across GPUs. This is the most common mode. Different layers of the neural network are assigned to different GPUs. For example, layers 1-16 go to GPU0, and 17-32 go to GPU1.), 2=ROW (tensor parallelism, this splits the actual weight matrices across GPUs. It can be faster for certain operations but usually requires higher bandwidth between GPUs). Use 0 for single-GPU setups to avoid distribution overhead. |
-| tensor_split | list | None | List of floats specifying the fraction of the model to offload to each GPU (e.g., [0.7, 0.3] for 70%/30% split). Only effective when split_mode=1 (LAYER). Length must match number of visible GPUs. If not set, llama-cpp auto-balances based on VRAM. |
+| n_ctx | int | 8192 | Context size (max tokens model can process). Rule: `image_tokens + input_tokens + max_tokens ≤ n_ctx`. Increasing this increases VRAM consumption. Too small = truncated responses |
+| n_batch | int | 2048 | Batch size for prompt processing. Lower = less VRAM, higher = faster prompt evaluation. Setting `n_batch = n_ctx` can speed up processing |
+| n_ubatch | int | 512 | 	Micro-batch size for advanced memory management. Controls physical batch size during inference |
+| n_keep | int | 256 | 	Number of tokens to keep in KV-cache from initial prompt. Useful for few-shot/long-context scenarios |
+| offload_kqv | bool | True | Offload KV Cache to GPU. Turn OFF to save VRAM (will be slower). Prevents VRAM overflow |
+| type_k | dropdown/int | 1=F16 | KV-cache quantization type for Keys. Controls compression/quantization level. 💡 Some variants may not work with all model | 
+| type_v | dropdown/int | 1=F16 | KV-cache quantization type for Values. Same as type_k but for Value tensors | 
+| use_mmap | bool | False | Enable memory mapping for model loading. 💡 On Windows, it's often better to turn OFF for stability |
+| use_mlock | bool | False | Enable mlock. Lock model in RAM to prevent OS swapping. Uses more RAM but prevents page faults |
+| pool_size | int | 4194304 | Memory pool size for llama.cpp. Increase if you get ggml_new_object: not enough space |
+| logits_all | bool | False | Evaluate logits for ALL tokens (not just last one). Required for perplexity evaluation, but significantly increases VRAM and time |
+| ctx_checkpoints | int | 0 | Max number of context checkpoints to create per slot. 0 = disabled. Used for prompt caching |
+| swa_full | bool | False | Enable full Sliding Window Attention context. Required for some models (Mistral/Gemma) to prevent truncation |
 
-Encoder options:
+🎲 Sampling & Generation
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
-| extract_embedding | bool | false | true - allows you to get embeddings. |
-| tokenizer_path | str | "" | Allows you to override the tokenizer, in case the built-in gguf does not work correctly. You need to specify the path to the folder. May slow down performance as it requires calling transformers. |
-| prompt_template | str | {user} | Some models require a prompt template to work correctly. |
-| convert_emb_to_cond | bool | false | true - The output will be conditioning, understandable comfy, false - embeddings. |
-| embedding_scale | float | None | Allows you to multiply all weights by a given constant. |
-| pooling_type | bool | 0 | Determines the format of the output vectors: -1 (LLAMA_POOLING_TYPE_UNSPECIFIED) — The type is not specified. The system will attempt to determine it automatically (if the metadata is embedded in the GGUF file). 0 (LLAMA_POOLING_TYPE_NONE) — Pooling is disabled. The model returns an array of vectors for each token (the same two-dimensional list [N × Hidden_Dim]). 1 (LLAMA_POOLING_TYPE_MEAN) — The arithmetic mean. The library will automatically add the token vectors and divide by their number. The output will be a single combined vector. 2 (LLAMA_POOLING_TYPE_CLS) — Only the CLS token. Will take the vector of the very first token in the sequence. 3 (LLAMA_POOLING_TYPE_LAST) — Only the last token. Takes the token vector where the sentence ends. 4 (LLAMA_POOLING_TYPE_RANK) — Specific pooling for reranking models (used to attach the classification head to the graph). |
+| max_tokens | int | 2048 | Maximum tokens to generate. Thinking models usually need more (4096+). Smaller = faster but may truncate response |
+| temperature | float | 0.7 | Sampling temperature. Lower (0.1) = deterministic/focused, Higher (1.5+) = creative/random. 0.7 is balanced |
+| top_p | float | 0.92 | Nucleus sampling cutoff. Model considers tokens whose cumulative probability reaches top_p. Lower = more focused |
+| min_p | float | 0.05 | Minimum probability threshold. Tokens with prob < min_p × top_token_prob are filtered out. Great for reducing garbage |
+| top_k | int | 0 | Limit to top-K most likely tokens. 0 = disabled. Good for strict output control |
+| repeat_penalty | float | 1.1 | Penalty for repeating tokens. Values >1 discourage repetition loops. 1.1 is mild, 1.5+ is aggressive |
+| presence_penalty | float | 0.0 | Penalty based on token presence. Positive values encourage new topics, negative favor repetition |
+| frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce repetition of common words |
+| enable_thinking | bool | False | Enable thinking/reasoning process for Gemma, Qwen, MiniCPM, GLM models. Requires more output tokens |
+| force_reasoning | bool | False | For Qwen3: force reasoning mode even on simple queries. Makes model always "think" before answering |
+| words_to_ban | string | "" | Comma-separated list of banned words. Applies logit_bias of -100 to their tokens. Example: woman,Woman,man,Man |
 
-Custom prompt templates:
+⚙️ Hardware & Acceleration
+
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
-| raw_mode | bool | False | Allows you to enable custom templates mode.  |
-| prompt_template | string | default to joycaption | Prompt format. See the model recommendations. The template must include placeholders `{system}`, `{images}`, `{user}` |
-| stop | list of strings | default to joycaption | Stop sequences that halt generation. In this mode it is necessary to set it. See the model recommendations. |
+| n_gpu_layers | int | -1 | Layers to offload to GPU. -1 = all, 0 = CPU only. Reduce if OOM (try 40→35→30) |
+| n_cpu_moe | int | 0 | For MoE models: experts to keep on CPU. Saves VRAM. Slower than full GPU, but faster/stable than OS swap |
+| cpu_moe | bool | False | For MoE models: unload ALL experts into RAM. Minimal VRAM usage, slower inference |
+| n_threads | int | 8 | CPU threads for inference. Match physical cores (not hyperthreads) for best performance |
+| flash_attn_type | dropdown/int | -1=AUTO | Flash Attention backend. Requires compatible llama.cpp build. AUTO selects best available |
+| split_mode | dropdown/int | 0-NONE | GPU splitting: 0=NONE (single GPU), 1=LAYER (distribute layers), 2=ROW (tensor parallelism) |
+| main_gpu | int | 0 | Primary GPU index when split_mode=NONE. Works with CUDA_VISIBLE_DEVICES filtering |
+| cuda_device | string | "" | Sets CUDA_VISIBLE_DEVICES before init. Single index (0) or comma-separated (0,1). Empty = not set |
+| tensor_split | list of strings | "" | Fractions for GPU split (e.g., [0.7, 0.3] for 70%/30%). Only for split_mode=LAYER. Empty = auto-balance |
 
-<details>
-  
-<summary>default prompt_template example</summary>
+💬 Chat, Prompts & Variables
 
-#### Joycaption: 
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| chat_handler | dropdown/string | "none" | Chat handler for multimodal models: gemma4, qwen35, qwen3, qwen25, llava16, minicpmv45, etc. Required for vision models |
+| chat_format | dropdown/string | "none" | Chat format for text-only models: llama-2, llama-3, chatml, alpaca, etc. Not needed if chat_handler is set |
+| chat_format_from_gguf | bool | False | Force loading chat template from GGUF metadata. 💡 Does NOT work with images/audio/video |
+| system_prompt_default | string | "" | Default system prompt for the model. Used when no preset or override is provided | 
+| system_preset_to_user_prompt | bool | False | Move system preset from system prompt role to user prompt role. Useful for models that follow user prompts better | 
+| user_prompt_after_content | bool | True | Insert user_prompt AFTER image/audio/video content. False = insert before |
+| enable_variables | bool | False | Enable substitution of {placeholders} in system and user prompts. Auto-vars: {image_num}, {width}, {height}, etc. |
+| add_vision_id | dropdown/int | "auto" | Add vision ID token. auto = script decides (True if images ≠ 1 or video > 0). Required for Qwen3/Qwen3.5 |
+| add_image_id | string | "" | Template to label images: `\n[Image {num}]:`. {num} = image index. Helps model distinguish multiple images | 
+| add_frame_id | string | "" | Template to label video frames: `\n[Frame {num}]:`. Useful for video understanding tasks | 
+| add_audio_id | string | "" | Template to label audio files: `\n[Audio {num}]:`. For multi-audio scenarios | 
 
-```
-"raw_mode": true,
-"prompt_template": "<|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{images}{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
-"stop": ["<|eot_id|>", "<|end_of_text|>"],
-```
+💬 Prompt Template
 
-> 💡 **Note:** There is no need to write the first token `<|begin_of_text|>`, it is inserted by llama automatically.
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| raw_mode | bool | False | Enable custom raw prompt template mode (bypasses chat handlers). Required for custom templates |
+| prompt_template | string | "" | Custom prompt template. Must include {system}, {images}, {user}. |
+| stop | list of strings | "" | Stop sequences. JSON list ["</s>", "[INST]"] or comma-separated. Empty = handler default |
 
-#### Ministral:
-```
-"raw_mode": true,
-"prompt_template": "[INST]{system}\n\n{images}{user}[/INST]",
-"stop": ["</s>", "[INST]", "[/INST]"],
-```
+🖼️ Multimodal & Media
 
-> 💡 **Note:** There is no need to write the first token `<s>`, it is inserted by llama automatically.
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| force_mmproj | bool | False | Load mmproj even without media inputs. Preserves template for enable_thinking. Uses VRAM unnecessarily if no media |
+| image_min_tokens | int | 0 | Minimum tokens for image embeddings. 0 = not set. Controls memory allocation |
+| image_max_tokens | int | 0 | Maximum tokens for image embeddings. 0 = not set. Prevents oversized image encodings |
+| max_images | int | 10 | Limit on total incoming images across image/image2/image3 inputs (batch mode can send many) | 
+| max_frames | int | 24 | Limit on video frames. More frames = larger context needed. Scaling may lose motion details | 
+| max_audios | int | 3 | Limit on incoming audio clips. Batch mode can send multiple audio per input | 
+| audio_sample_rate | int | 0 | Target sampling frequency for audio resampling. 0 = not set (keep original) | 
+| image_quality | int | 95 | JPEG quality (1-100) when encoding images to data URIs. Higher = better quality, larger size |
+| frame_quality | int | 75 | JPEG quality (1-100) when encoding video frames. Lower than images to save space |
 
+🔢 Embeddings
+
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| extract_embedding | bool | False | Switch to embedding extraction mode. Uses LlamaEmbedding. Text output replaced by CONDITIONING tensor |
+| pooling_type | dropdown/int | 0-NONE | Pooling strategy: -1=UNSPECIFIED (auto), 0=NONE (per-token), 1=MEAN (average), 2=CLS (first token), 3=LAST (last token), 4=RANK (reranking) |
+| tokenizer_path | string | "" | Path to external HuggingFace tokenizer. Overrides built-in llama.cpp tokenizer. May slow performance |
+| embedding_scale | float | 1.0 | Scalar multiplier for output embedding vector. 1.0 = no scaling. Match magnitude for downstream models |
+| convert_emb_to_cond | bool | False | Wrap embedding into ComfyUI CONDITIONING (hidden_states + attention_mask). Required for SD/Flux conditioning |
+
+🛠️ Debug, System & Advanced
+
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| verbose | bool | False | Enable verbose logging from llama.cpp. Prints detailed inference info to console |
+| debug | bool | False | Enable timing output for each stage. Shows [DEBUG] total time: 7.818s | 397 word (50.8 word/sec) |
+| debug_output | bool | False | Print final LLM text output to console | 
+| raw_output | bool | False | Disable output.strip(). Keeps leading/trailing whitespaces in response | 
+| clearing_cache | bool | True | Clear cache to prevent execution freezing during heavy memory activity | 
+| force_gc_start | bool | False | Force garbage collection after memory clearing (when unload_all_models active). Increases time but cleans memory | 
+| force_gc_unload | bool | False | Force garbage collection after deleting LLM model. Prevents memory leake | 
+| script | string | "qwen3vl_run.py" | Name of Python script to execute. Usually don't need to change |
+| extra | string | "" | JSON dict of extra keys passed to backend script. For advanced custom parameters |
+
+**Notes & Nuances**
+
+1. Browse Button Limitation
+The Browse Model and Browse MMProj buttons currently work only on Windows (using native file dialog via ctypes). Linux/macOS users must manually type paths. If there's demand, I can implement GTK/Qt dialogs for other platforms.
+
+2. Override Input Behavior
+The config_override input strictly overwrites fields passed through it. This means:
+- Values shown in widgets may differ from actual output if override is used
+- Override has highest priority (applied last)
+- Use override for dynamic/runtime changes, widgets for static defaults
+
+3. Parameter Naming Consistency
+All parameters use canonical names (n_ctx, n_gpu_layers, max_tokens). Old names (ctx, gpu_layers, output_max_tokens) are automatically converted via old_names_patch() for backward compatibility.
+
+4. Widget Reordering
+Parameters are rendered in a fixed order matching the Python node's INPUT_TYPES(). However, the underlying architecture supports reordering via **kwargs, so future versions may allow custom layouts without breaking saved workflows.
+
+5. Preset Storage
+Presets are saved to ComfyUI/user/SimpleQwenVL_configs/system_prompts_user.json. The file is created automatically on first use. 
+
+6. Multi-GPU Caveats
+cuda_device parameter may not work correctly in direct_clean and keep_vram modes, as ComfyUI itself may have already initialized CUDA with different settings. For multi-GPU, subprocess mode is recommended.
+
+7. Vision ID Logic
+add_vision_id with auto mode calculates: True if (num_images != 1 or num_videos > 0) else False. This matches Qwen3/Qwen3.5 requirements for multi-image scenarios.
+
+8. Memory Pool Sizing
+pool_size default (4194304 = 4MB) works for most models. If you encounter ggml_new_object: not enough space, increase to 8MB (8388608) or 16MB (16777216).
 
 </details>
 
-Extra options.
-| Field | Type | Default | Description |
-|--------|--------|--------|--------|
-| extra_chat_handler_* |  |  | Allows you to pass any arguments to the function `*ChatHandler` |
-| extra_llama_* |  |  | Allows you to pass any arguments to the function `Llama` |
-| extra_chat_completion_* |  |  | Allows you to pass any arguments to the function `create_chat_completion` |
-
-
-The following settings are generated automatically. They DO NOT need to be write in the config.
-| Field | Type | Description |
-|--------|--------|--------|
-| system_prompt | string | System prompt that sets the behavior and context for the model. - add automatically in node |
-| user_prompt | string | User input query or instruction. - add automatically in node |
-| seed | int | Random seed for reproducible generation. - add automatically in node |
-| images or images_path | list | List of images (PIL images or file paths) – add automatically in node |
-| audios or audios_path | list | List of images (WAV bytes or file paths) – add automatically in node |
-| videos or videos_path | list | List of images (only file paths) – add automatically in node |
-| config_hash | string | Hash of the configuration for model caching – generated automatically in node |
-
-</details>
+## Configuration Files & Presets
 
 <details>
   
-<summary>config_override input</summary>
+<summary>Rules & File Hierarchy</summary>
 
-You can pass `config_override` as a JSON dictionary or without formatting.
+The system uses a stackable configuration approach. Files are loaded in the following order of priority:
 
-`config_override` example:
+1. `ComfyUI/user/SimpleQwenVL_configs/system_prompts_user.json` *(Recommended)*  
+   This is the primary user settings file. It is created automatically on first use. The new `Advanced Configurator` reads from and writes to this file directly via its Save/Rename/Delete buttons. *Edit this file or manage it via the UI.*
 
-```
-"model_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\Qwen3.5-9B-Q4_K_M.gguf",
-"mmproj_path": "H:\LLM2\Qwen3.5-9B-Q4_K_M\mmproj-BF16.gguf",
-"max_tokens": 2048,
-"image_min_tokens": 1024,
-"image_max_tokens": 2048,
-"n_ctx": 8192,
-"n_batch": 2048,
-"n_ubatch": 512,
-"n_gpu_layers": -1,
-"temperature": 0.7,
-"top_p": 0.8,
-"min_p": 0.05,
-"top_k": 20,
-"repeat_penalty": 1.0,
-"presence_penalty": 1.5,
-"pool_size": 4194304,
-"chat_handler": "qwen35",
-"enable_thinking": true,
-"script": "qwen3vl_run.py",
-"silent": false,
-"debug": true,
-```
+2. `system_prompts_user.json` *(Legacy Node Folder)*  
+   Located in the node's root directory. Supported for backward compatibility with older setups. If both this file and the `user/` directory file exist, the `user/` directory file takes precedence. Manual editing is discouraged in favor of the UI manager.
+
+3. `system_prompts.json` *(Base Project Settings)*  
+   Located in the node's root directory. Contains default, project-level presets maintained by the developer. **Do not edit this file**, as your changes will be overwritten during node updates.
 
 </details>
 
@@ -603,88 +576,6 @@ Where:
 > - by forcing it by entering `"enable_variables": true,` in config.
 
 <img width="1199" height="660" alt="Image" src="https://github.com/user-attachments/assets/a5923aa8-3733-4464-9383-60a571dfdf10" />
-
-</details>
-
-## system_prompts_user.json file (plaseholders):
-
-Configuration files are stackable:
-1. The `system_prompts.json` file in **node folder** contains the project settings that I will be updating. Do not edit this file, or your changes will be deleted.
-2. The `system_prompts_user.json` file in **node folder** contains the user settings. This file will not be updated. Edit this file.
-3. The `system_prompts_user.json` file in **ComfyUI\user\SimpleQwenVL_configs\** contains the user settings. Edit this file if this file location is more convenient. The file is created automatically.
-
-<details>
-
-<summary>system_prompts_user.json file example</summary>
-
-```json
-{
-    "_system_prompts": {
-        "My system prompt": "You are a helpful and precise image captioning assistant. Write a \"some text\""
-    },
-    "_user_prompt_styles": {
-        "My style": "Transform style to \"some text\""
-    },
-    "_camera_preset": {
-    },
-    "_model_presets": {
-        "Qwen3.5-9B-Q4_K_M": {
-            "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "min_p": 0.05,
-            "top_k": 20,
-            "repeat_penalty": 1.0,
-            "presence_penalty": 1.5,
-            "pool_size": 4194304,
-            "chat_handler": "qwen35",
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "silent": false,
-            "debug": true
-        },
-        "Qwen3-VL-8B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 40,
-            "repeat_penalty": 1.1,
-            "pool_size": 4194304,
-            "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py",
-            "silent": false,
-            "debug": true
-        }
-    }
-}
-``` 
-
-Git settings:
-1. To prevent the file from being restored after a Git update, use a command that disables updates for this file:
-```
-git update-index --skip-worktree system_prompts.json
-```
-2. You can also disable tracking of your changes to the `system_prompts_user.json` file so that the repository is not considered modified:
-```
-git update-index --assume-unchanged system_prompts_user.json
-```
 
 </details>
 
@@ -1395,7 +1286,6 @@ Other parameters should be selected based on recommendations, based on the task,
             "chat_handler": "qwen35",
             "enable_thinking": true,
             "script": "qwen3vl_run.py",
-            "silent": false,
             "debug": true
         },
 ```
@@ -1431,7 +1321,6 @@ For example:
             "pool_size": 4194304,
             "chat_handler": "qwen3",
             "script": "qwen3vl_run.py",
-            "silent": false,
             "debug": true
         },
 ```
@@ -1467,7 +1356,6 @@ For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
             "pool_size": 4194304,
             "chat_handler": "gemma3",
             "script": "qwen3vl_run.py",
-            "silent": false,
             "debug": true
         },
 ```
@@ -1483,7 +1371,7 @@ For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 For example:
 `llama-joycaption-beta-one-hf-llava-q8_0.gguf` + `llama-joycaption-beta-one-llava-mmproj-model-f16.gguf`
 
-> 💡 **Tip:** This model likes it when the task is written in `user_prompt`, so we use the option `"system_preset_to_user_prompt": true`. The system prompt is always the same `"system_prompt_default": "You are a helpful image captioner."` - set this text as the default value. The model requires a special prompt template. So, enable `"raw_mode": true`. This will set the new `prompt_template` and `stop` words to default for this model. However, you can override them if desired. See the configuration description: custom prompt template section. With these parameters, the model will stop sticking, communicating with itself (with the assistant) and will strictly follow the prompt.
+> 💡 **Tip:** This model likes it when the task is written in `user_prompt`, so we use the option `"system_preset_to_user_prompt": true`. The system prompt is always the same `"system_prompt_default": "You are a helpful image captioner."` - set this text as the default value. The model requires a special prompt template. So, enable `"raw_mode": true`. This will set the new `prompt_template` and `stop` words for this model. With these parameters, the model will stop sticking, communicating with itself (with the assistant) and will strictly follow the prompt.
 
 ```json
         "Joycaption-Beta": {
@@ -1509,7 +1397,8 @@ For example:
             "raw_mode": true,
             "system_preset_to_user_prompt": true,
             "system_prompt_default": "You are a helpful image captioner.",
-            "silent": false,
+            "prompt_template": "<|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{images}{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
+            "stop": ["<|eot_id|>", "<|end_of_text|>"],
             "debug": true
         },
 ```
@@ -1549,7 +1438,6 @@ For example:
             "raw_mode": true,
             "prompt_template": "[INST]{system}\\n\\n{images}{user}[/INST]",
             "stop": ["</s>", "[INST]", "[/INST]"],
-            "silent": false,
             "debug": true
         },
 ```
@@ -1582,7 +1470,6 @@ For example: `Mistral-Nemo-Instruct-2407-Q8_0.gguf`
             "pool_size": 4194304,
             "chat_format": "mistral-instruct",   
             "script": "qwen3vl_run.py",
-            "silent": false,
             "debug": true
         },
 ```
@@ -1615,7 +1502,6 @@ For example: `Qwen3-4b-Z-Engineer-V2.gguf`
             "pool_size": 4194304,
             "chat_format": "qwen3",
             "script": "qwen3vl_run.py",        
-            "silent": false,
             "debug": true
         },
 ```
