@@ -4,8 +4,7 @@
 from .qwen3vl_node import SimpleQwen3VL_GGUF_Node
 from .utils_node import MasterPromptLoader,SimpleStyleSelector,SimpleCameraSelector,UnloadQwenModel,SimpleRemoveThinkNode,SimpleTriggerNode,TextToBatchNode,SimpleTextInsertNode,SimpleTextReplaceNode,SimpleJoinStringsNode,SimpleGifMaker
 from .deprecated_node import Qwen3VL_GGUF_Node
-from .configurator import Qwen3VL_ModelConfig, Qwen3VL_SamplingConfig
-#from .configurator import Qwen3VL_AdvancedConfig
+from .configurator import Qwen3VL_AdvancedConfig, Qwen3VL_ModelConfig, Qwen3VL_SamplingConfig
 from .ideogram4 import Ideogram4JsonPreviewOnImage, Ideogram4JsonSwapCoordinates
 from .video_fragment_loader import SimpleLoadVideoFragment
 
@@ -19,13 +18,11 @@ NODE_CLASS_MAPPINGS = {
     "SimpleQwenUnload": UnloadQwenModel,
     "SimpleRemoveThinkNode": SimpleRemoveThinkNode,
     "SimpleTriggerNode": SimpleTriggerNode,
-    "Qwen3VL_ModelConfig": Qwen3VL_ModelConfig,
-    "Qwen3VL_SamplingConfig": Qwen3VL_SamplingConfig,
     "SimpleTextToBatchNode": TextToBatchNode,
     "SimpleTextInsertNode": SimpleTextInsertNode,
     "SimpleTextReplaceNode": SimpleTextReplaceNode,
     "SimpleJoinStringsNode": SimpleJoinStringsNode,
-    #"Qwen3VL_AdvancedConfig": Qwen3VL_AdvancedConfig,
+    "Qwen3VL_AdvancedConfig": Qwen3VL_AdvancedConfig,
 
     #video
     "SimpleLoadVideoFragment": SimpleLoadVideoFragment,
@@ -36,7 +33,9 @@ NODE_CLASS_MAPPINGS = {
     "Ideogram4JsonSwapCoordinates": Ideogram4JsonSwapCoordinates,
 
     #deprecated_node
-    "SimpleQwenVLgguf": Qwen3VL_GGUF_Node
+    "SimpleQwenVLgguf": Qwen3VL_GGUF_Node,
+    "Qwen3VL_ModelConfig": Qwen3VL_ModelConfig,
+    "Qwen3VL_SamplingConfig": Qwen3VL_SamplingConfig,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -47,13 +46,11 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SimpleQwenUnload": "Simple Qwen Unload",  
     "SimpleRemoveThinkNode": "Simple Remove Think", 
     "SimpleTriggerNode": "Simple Trigger Node",
-    "Qwen3VL_ModelConfig": "LLM Model Config",
-    "Qwen3VL_SamplingConfig": "LLM Sampling Config",
     "SimpleTextToBatchNode": "Simple Text To Batch",
     "SimpleTextInsertNode": "Simple Text Insert",
     "SimpleTextReplaceNode": "Simple Text Replace",
     "SimpleJoinStringsNode": "Simple Join Strings",
-    #"Qwen3VL_AdvancedConfig": "LLM Config (Advanced)",
+    "Qwen3VL_AdvancedConfig": "🌐 LLM Config (Advanced)",
 
     #video
     "SimpleLoadVideoFragment": "📸 Load Video Fragment",
@@ -64,7 +61,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "Ideogram4JsonSwapCoordinates": "🔄 Ideogram 4 JSON Swap XY Coordinates",
     
     #deprecated_node
-    "SimpleQwenVLgguf": "Qwen-VL Vision Language Model"
+    "SimpleQwenVLgguf": "Qwen-VL Vision Language Model",
+    "Qwen3VL_ModelConfig": "LLM Model Config",
+    "Qwen3VL_SamplingConfig": "LLM Sampling Config",
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS','NODE_DISPLAY_NAME_MAPPINGS','WEB_DIRECTORY']

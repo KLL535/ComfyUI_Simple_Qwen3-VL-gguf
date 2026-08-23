@@ -36,54 +36,70 @@ import qwen3vl_run
 
 _current_module = None
 
-# ========== Глобальный кеш ==========
+def _norm_default(value, default):
+    """
+    If value equals default (after JSON round-trip), treat as None.
+    Useful for numeric defaults like n_keep=-1, embedding_scale=1.0.
+    """
+    if value is None:
+        return None
+    try:
+        if value == default:
+            return None
+    except Exception:
+        pass
+    return value
+
+# ========== Глобальный кеш и переменные ==========
 _config_cache = {}
 _last_modified = {}
+_user_config_file = None  
 
-_user_dir = None
-# Инициализация при импорте модуля (один раз при старте ComfyUI)
-try:
-    _user_base = folder_paths.get_user_directory()
-    _user_dir = os.path.join(_user_base, NODE_USER_DIR_NAME)
-    os.makedirs(_user_dir, exist_ok=True)
-    
-    # Создаем файл по умолчанию, если его еще нет
-    _user_config_file = os.path.join(_user_dir, "system_prompts_user.json")
-    if not os.path.exists(_user_config_file):
-        default_user_data = {
-            "_system_prompts": {},
-            "_user_prompt_styles": {},
-            "_camera_preset": {},
-            "_model_presets": {},
-            "_user_prompt_template": {}
-        }
-        with open(_user_config_file, 'w', encoding='utf-8') as f:
-            json.dump(default_user_data, f, indent=2, ensure_ascii=False)
-        print(f"Created default user config at: {_user_config_file}")
-    
-except Exception as e:
-    print(f"Warning: Could not initialize user directory for configs: {e}")
-    _user_config_file = None
-
-def get_user_data_directory():
-    """Get the user data directory for prompt stash files."""
+def get_user_config_path() -> str:
+    """Возвращает путь к пользовательскому файлу конфигурации, создавая его при необходимости."""
+    global _user_config_file  
     try:
-        user_base = folder_paths.get_user_directory()
-        user_dir = os.path.join(user_base, NODE_USER_DIR_NAME)
-        os.makedirs(user_dir, exist_ok=True)
-        return user_dir
+        _user_base = folder_paths.get_user_directory()
+        _user_dir = os.path.join(_user_base, NODE_USER_DIR_NAME)
+        os.makedirs(_user_dir, exist_ok=True)
+        
+        _user_config_file = os.path.join(_user_dir, "system_prompts_user.json")
+        if not os.path.exists(_user_config_file):
+            default_user_data = {
+                "_system_prompts": {},
+                "_user_prompt_styles": {},
+                "_camera_preset": {},
+                "_model_presets": {},
+                "_user_prompt_template": {}
+            }
+            with open(_user_config_file, 'w', encoding='utf-8') as f:
+                json.dump(default_user_data, f, indent=2, ensure_ascii=False)
+            print(f"[SimpleQwenVL] Created default user config at: {_user_config_file}")
+        
+        return _user_config_file
     except Exception as e:
-        print(f"Warning: Could not create user directory for configs: {e}")
+        print(f"[SimpleQwenVL] Warning: Could not initialize user directory: {e}")
         return None
+
+def invalidate_cache():
+    """Очищает глобальный кэш, заставляя систему перечитать файлы."""
+    global _config_cache, _last_modified
+    _config_cache.clear()
+    _last_modified.clear()
+
+# ==========================================================
+# ИНИЦИАЛИЗАЦИЯ ПРИ ИМПОРТЕ МОДУЛЯ (ОДИН РАЗ ПРИ СТАРТЕ COMFYUI)
+# ==========================================================
+get_user_config_path()
 
 def get_config_files():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    
     files = {}
     files['main'] = os.path.join(current_dir, "system_prompts.json")
     files['user_legacy'] = os.path.join(current_dir, "system_prompts_user.json")
     
-    if _user_config_file:
+    # Теперь _user_config_file гарантированно содержит путь (или None, если была ошибка)
+    if _user_config_file and os.path.exists(_user_config_file):
         files['user'] = _user_config_file
     
     return files
@@ -97,12 +113,10 @@ def repair_and_load_json(content: str, filepath: Optional[str] = None) -> Dict:
         if HAS_JSON_REPAIR:
             try:
                 repaired = repair_json(content)
-                # Проверяем, что repair_json вернул что-то
                 if not repaired or not repaired.strip():
                     raise ValueError(f"json_repair returned empty result for {filepath}")
-                
                 result = json.loads(repaired)
-                print(f"Warning: JSON in {filepath} was repaired by json_repair")
+                print(f"[SimpleQwenVL] Warning: JSON in {filepath} was repaired by json_repair")
                 return result
             except Exception as repair_error:
                 raise ValueError(
@@ -111,18 +125,19 @@ def repair_and_load_json(content: str, filepath: Optional[str] = None) -> Dict:
                     f"Content preview: {content[:200]}..."
                 ) from repair_error
         else:
-            # json_repair недоступен - просто выбрасываем ошибку
             raise ValueError(f"Failed to parse JSON in {filepath}: {e}") from e
 
 def _update_cache_if_needed():
     files = get_config_files()
     need_reload = False
+    
     for name, path in files.items():
         if os.path.exists(path):
             mtime = os.path.getmtime(path)
             if _last_modified.get(name, 0) < mtime:
                 need_reload = True
                 break
+                
     if need_reload or not _config_cache:
         combined = {}
         for name, path in files.items():
@@ -136,13 +151,15 @@ def _update_cache_if_needed():
                             if key.startswith('_'):
                                 combined.setdefault(key, {}).update(value)
                 except Exception as e:
-                    # В процессе выполнения исключение пойдёт дальше → всплывающее окно
-                    raise ValueError(f"Failed to load config file {path}: {e}") from e
+                    print(f"[SimpleQwenVL] Failed to load config file {path}: {e}")
+                    continue # <--- ВАЖНО: continue вместо raise, чтобы один битый файл не ломал всё
+        
         _config_cache.clear()
         _config_cache.update(combined)
         for name, path in files.items():
             if path and os.path.exists(path):
                 _last_modified[name] = os.path.getmtime(path)
+                
     return _config_cache
 
 def load_cached_section(section_name: str) -> Dict:
@@ -876,7 +893,7 @@ class SimpleQwen3VL_GGUF_Node:
             # Аудио
             if audio is not None:
                 t_process_audios = time.perf_counter()
-                target_sr = config.get("audio_sample_rate") #None - disable resample
+                target_sr = _norm_default(config.get("audio_sample_rate", 0), 0) #0 - disable resample
                 max_audios = config.get("max_audios",3)
                 audio_value = process_audios([audio], file_mode=file_mode, target_sr=target_sr, max_audios=max_audios)
                 if file_mode:

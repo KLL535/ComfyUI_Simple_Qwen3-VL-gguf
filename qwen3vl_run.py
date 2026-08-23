@@ -26,6 +26,45 @@ _model_caches = {
     "save3":      {"llm": None, "hash": None},
 }
 
+def _norm_str(value, none_is_empty=True):
+    """
+    Нормализует строковое значение из конфига.
+    - None, "" -> ""
+    - " None " -> "" (если none_is_empty=True)
+    - " Qwen3 " -> "qwen3"
+    """
+    if not value:
+        return ""
+    val = str(value).lower().strip()
+    if none_is_empty and val == "none":
+        return ""
+    return val
+
+def _norm_3state_bool(value):
+    """
+    Нормализует значение в True или False.
+    Возвращает None для всего остального (например, "auto", None, пустая строка, опечатки).
+    """
+    if value is True or str(value).strip().lower() in ("true", "1"):
+        return True
+    if value is False or str(value).strip().lower() in ("false", "0"):
+        return False
+    return None
+
+def _norm_default(value, default):
+    """
+    Если значение равно значению по умолчанию (после обработки JSON), рассматривать его как None.
+    Полезно для числовых значений по умолчанию, таких как n_keep=-1, embedding_scale=1.0.
+    """
+    if value is None:
+        return None
+    try:
+        if value == default:
+            return None
+    except Exception:
+        pass
+    return value
+
 def build_prompt(template: str, system: str, user: str):
     # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
     result = template.replace("{system}", system).replace("{user}", user)
@@ -97,15 +136,13 @@ def _build_video_content(video_input, config):
     quality = config.get('frame_quality', 75)
     trim_start = config.get('trim_start', 0.0)
     trim_duration = config.get('trim_duration', 0.0)
-    native_video = config.get('native_video', False) 
-    use_file_url = config.get('use_file_url', False)
-    frame_id = config.get("add_frame_id", None)
+    frame_id = _norm_default(config.get("add_frame_id", ""), "")
     
     # ==========================================
     # РЕЖИМ 1: Нативное видео в llama.cpp
     # ==========================================
-    if native_video:
-        print("[ERROR] Unsupported native_video", file=sys.stderr)
+
+    # Unsupported
 
     # ==========================================
     # РЕЖИМ 2: Прореженные кадры как изображения
@@ -226,18 +263,15 @@ def _inference(config):
     """Внутренняя функция, выполняющая инференс с кешированием модели."""
 
     try:
-
-        if config.get("print_config", False):
-            print(f"Config:\n{config}", file=sys.stderr)
-
         debug = config.get("debug", False)
         verbose = config.get("verbose", False)
-        silent = config.get("silent", False)
-        chat_handler_type = config.get("chat_handler", "").lower()
-        chat_format = config.get("chat_format", "").lower()
+
+        chat_handler_type = _norm_str(config.get("chat_handler"))
+        chat_format = _norm_str(config.get("chat_format"))
+
         gccollect = config.get("force_gc_unload", False)
-        image_min_tokens = config.get("image_min_tokens")
-        image_max_tokens = config.get("image_max_tokens")
+        image_min_tokens = _norm_default(config.get("image_min_tokens"), 0)
+        image_max_tokens = _norm_default(config.get("image_max_tokens"), 0)
         extract_embedding = config.get("extract_embedding", False)
         extract_tts = config.get("extract_tts", False)
         raw_mode = config.get("raw_mode", False)
@@ -251,7 +285,7 @@ def _inference(config):
         user_prompt = config.get("user_prompt", "").strip()
         image_quality = config.get("image_quality", 95)
 
-        cuda_device = config.get("cuda_device")
+        cuda_device = _norm_default(config.get("cuda_device", ""), "")
         if cuda_device is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = str(cuda_device)
 
@@ -281,6 +315,10 @@ def _inference(config):
         num_videos=len(videos)
 
         num_content = num_images + num_audios + num_videos
+
+        add_vision_id = _norm_3state_bool(config.get("add_vision_id"))
+        if add_vision_id is None:
+            add_vision_id = (num_images != 1) or (num_videos > 0)
 
         content_text = ""
         if num_content:
@@ -351,7 +389,7 @@ def _inference(config):
                         return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3.5 requires version v0.3.30 or higher."}, None
                     extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", False),
-                        "add_vision_id": config.get("add_vision_id", num_images != 1),
+                        "add_vision_id": add_vision_id,
                     }
                     chat_handler = Qwen35ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
@@ -362,13 +400,21 @@ def _inference(config):
                         return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher."}, None
                     extra_handler_kwargs = {
                         "force_reasoning": config.get("force_reasoning", False),
-                        "add_vision_id": config.get("add_vision_id", num_images != 1),
+                        "add_vision_id": add_vision_id,
                     }
                     chat_handler = Qwen3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
+
+                elif chat_handler_type == "qwen3asr":
+                    from llama_cpp.llama_chat_format import Qwen3ASRChatHandler
+                    chat_handler = Qwen3ASRChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "qwen25":
                     from llama_cpp.llama_chat_format import Qwen25VLChatHandler
                     chat_handler = Qwen25VLChatHandler(**handler_kwargs)
+
+                elif chat_handler_type == "generic":
+                    from llama_cpp.llama_chat_format import GenericMTMDChatHandler
+                    chat_handler = GenericMTMDChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "gemma3":
                     from llama_cpp.llama_chat_format import Gemma3ChatHandler
@@ -381,10 +427,6 @@ def _inference(config):
                 elif chat_handler_type == "llava16":
                     from llama_cpp.llama_chat_format import Llava16ChatHandler
                     chat_handler = Llava16ChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "bakllava":
-                    from llama_cpp.llama_chat_format import BakLlavaChatHandler  # предполагается существование
-                    chat_handler = BakLlavaChatHandler(**handler_kwargs)
 
                 elif chat_handler_type == "moondream":
                     from llama_cpp.llama_chat_format import MoondreamChatHandler
@@ -400,6 +442,13 @@ def _inference(config):
                         "enable_thinking": config.get("enable_thinking", True),
                     }
                     chat_handler = MiniCPMv45ChatHandler(**handler_kwargs, **extra_handler_kwargs)
+
+                elif chat_handler_type == "minicpmv46":
+                    from llama_cpp.llama_chat_format import MiniCPMv46ChatHandler
+                    extra_handler_kwargs = {
+                        "enable_thinking": config.get("enable_thinking", True),
+                    }
+                    chat_handler = MiniCPMv46ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "glm41v":
                     from llama_cpp.llama_chat_format import GLM41VChatHandler
@@ -450,8 +499,6 @@ def _inference(config):
                     }
                     chat_handler = Step3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
-                    
-
                 else:
                     return {"status": "error", "message": f"Unknown chat handler type: {chat_handler_type}"}, None
 
@@ -467,6 +514,7 @@ def _inference(config):
                     "n_ctx": config.get("n_ctx", config.get("ctx", 8192)), #n_ctx or ctx - old name
                     "n_batch": config.get("n_batch", 2048),
                     "n_ubatch": config.get("n_ubatch", 512),
+                    "n_keep": config.get("n_keep", 256),
                     "swa_full": config.get("swa_full", False),
                     "verbose": verbose,
                     "pool_size": config.get("pool_size", 4194304),
@@ -474,20 +522,26 @@ def _inference(config):
                     "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)), #n_gpu_layers or gpu_layers - old name
                     "split_mode": config.get("split_mode", 0),
                     "main_gpu": config.get("main_gpu", 0),
-                    "ctx_checkpoints": config.get("ctx_checkpoints", 0),                
+                    "ctx_checkpoints": config.get("ctx_checkpoints", 0),   
+                    "logits_all": config.get("logits_all", False),
+                    "n_cpu_moe": config.get("n_cpu_moe", 0),
+                    "cpu_moe": config.get("cpu_moe", False),
+                    "use_mmap": config.get("use_mmap", False),
+                    "use_mlock": config.get("use_mlock", False),
+                    "offload_kqv": config.get("offload_kqv", True),
                 }
 
-                if (tensor_split := config.get("tensor_split")) is not None: llm_kwargs["tensor_split"] = tensor_split
-                if (type_k := config.get("type_k")) is not None: llm_kwargs["type_k"] = type_k
-                if (type_v := config.get("type_v")) is not None: llm_kwargs["type_v"] = type_v
-                if (n_cpu_moe := config.get("n_cpu_moe")) is not None: llm_kwargs["n_cpu_moe"] = n_cpu_moe
-                if (cpu_moe := config.get("cpu_moe")) is not None: llm_kwargs["cpu_moe"] = cpu_moe
-                if (use_mmap := config.get("use_mmap")) is not None: llm_kwargs["use_mmap"] = use_mmap
-                if (use_mlock := config.get("use_mlock")) is not None: llm_kwargs["use_mlock"] = use_mlock
-                if (n_keep := config.get("n_keep")) is not None: llm_kwargs["n_keep"] = n_keep
-                if (flash_attn_type := config.get("flash_attn_type")) is not None: llm_kwargs["flash_attn_type"] = flash_attn_type
-                if (logits_all := config.get("logits_all")) is not None: llm_kwargs["logits_all"] = logits_all   
-                if (offload_kqv := config.get("offload_kqv")) is not None: llm_kwargs["offload_kqv"] = offload_kqv 
+                if (tensor_split := _norm_default(config.get("tensor_split", []), [])) is not None:
+                    llm_kwargs["tensor_split"] = tensor_split     
+
+                if (type_k := _norm_default(config.get("type_k"), 1)) is not None:
+                    llm_kwargs["type_k"] = type_k     
+
+                if (type_v := _norm_default(config.get("type_v"), 1)) is not None:
+                    llm_kwargs["type_v"] = type_v 
+
+                if (flash_attn_type := _norm_default(config.get("flash_attn_type"), -1)) is not None:
+                    llm_kwargs["flash_attn_type"] = flash_attn_type            
 
                 for key, value in config.items():
                     if key.startswith("extra_llama_"):
@@ -599,6 +653,10 @@ def _inference(config):
                 "top_k": config.get("top_k", 0),
             }
 
+            custom_stop = _norm_default(config.get("stop",[]),[])
+            if custom_stop is not None:
+                completion_kwargs["stop"] = custom_stop
+
             # Нежелательные слова 
             words_to_ban = config.get("words_to_ban", "")
             if words_to_ban and isinstance(words_to_ban, str):
@@ -653,19 +711,11 @@ def _inference(config):
 
                 # Формируем сообщения для чата
 
-                default_template = (
-                    "<|start_header_id|>system<|end_header_id|>\n\n"
-                    "{system}"  
-                    "<|eot_id|>"
-                    "<|start_header_id|>user<|end_header_id|>\n\n"
-                    "{images}"
-                    "{user}"
-                    "<|eot_id|>"
-                    "<|start_header_id|>assistant<|end_header_id|>"
-                )
+                template_str = config.get("prompt_template", "")
+                if not template_str:
+                    raise ValueError("raw_mode is enabled but prompt_template is empty. Please provide a valid prompt_template")
 
                 # 1. Разбиваем шаблон на части
-                template_str = config.get("prompt_template", default_template)
                 text_before, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
 
                 chat_handler = getattr(current_cache["llm"], "chat_handler", None)        
@@ -680,7 +730,7 @@ def _inference(config):
                         if img_content is not None:
                             content.append(img_content)
 
-                    # Пока аудио не работает
+                    # Пока аудио в raw режиме не работает
                     #for aud_item in audios:
                     #    aud_content = _build_audio_content(aud_item)
                     #    if aud_content is not None:
@@ -695,13 +745,11 @@ def _inference(config):
 
                     messages = [{"role": "user", "content": content}]
 
-
                     _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
 
                     t_inference0 = time.perf_counter()
                     result = current_cache["llm"].create_chat_completion(
                         messages=messages,
-                        stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                         **completion_kwargs
                     )
                     t_inference1 = time.perf_counter()
@@ -719,7 +767,6 @@ def _inference(config):
                     t_inference0 = time.perf_counter()
                     result = current_cache["llm"].create_completion(
                         prompt=text_before + text_after,
-                        stop=config.get("stop", ["<|eot_id|>", "<|end_of_text|>"]),
                         **completion_kwargs
                     )
                     t_inference1 = time.perf_counter()
@@ -740,8 +787,8 @@ def _inference(config):
                     content = []
 
                     user_prompt_after_content = config.get("user_prompt_after_content", True)
-                    image_id = config.get("add_image_id", None)
-                    audio_id = config.get("add_audio_id", None)
+                    image_id = _norm_default(config.get("add_image_id", ""), "")
+                    audio_id = _norm_default(config.get("add_audio_id", ""), "")
 
                     if not user_prompt_after_content:
                         content.append({"type": "text", "text": user_prompt})
@@ -759,7 +806,7 @@ def _inference(config):
                     for aud_item in audios:
                         aud_content = _build_audio_content(aud_item)
                         if aud_content is not None:
-                            if image_id:
+                            if audio_id:
                                 content.append({"type": "text", "text": audio_id.replace("{num}", str(num))})
                             content.append(aud_content)
                             num += 1     
@@ -797,10 +844,6 @@ def _inference(config):
 
                 # --- Инференс ---
 
-                custom_stop = config.get("stop", None)
-                if custom_stop:
-                    completion_kwargs["stop"] = custom_stop
-
                 t_inference0 = time.perf_counter()
                 result = current_cache["llm"].create_chat_completion(
                     messages=messages,
@@ -822,9 +865,8 @@ def _inference(config):
 
         elif extract_embedding:
 
-            tokenizer_path = config.get("tokenizer_path")
-
-            if tokenizer_path is not None:
+            tokenizer_path = config.get("tokenizer_path", "")
+            if tokenizer_path:
                 t_tok = time.perf_counter()
                 original_tokenize = current_cache["llm"].tokenize
                 try:
@@ -863,7 +905,7 @@ def _inference(config):
                 else:
                     emb_np = np.array([emb], dtype=np.float32)
                 
-                scale = config.get("embedding_scale")
+                scale = _norm_default(config.get("embedding_scale"), 1.0)
                 if scale is not None: 
                     emb_np = (emb_np * scale).astype(np.float32)
 
