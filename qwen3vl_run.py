@@ -953,8 +953,7 @@ def unload_llama_model(gccollect, debug = False, target="all"):
         if cache["llm"] is not None:
             t_start = time.perf_counter()
             try:
-                if hasattr(cache["llm"], '_ctx') and cache["llm"]._ctx is not None:
-                    cache["llm"]._ctx.close()
+                cache["llm"].close()
             except Exception:
                 pass
             del cache["llm"]
