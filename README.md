@@ -15,6 +15,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
+- New design for LLM Config
 - **Added new configurator 🌐 LLM Config (Advanced)**
   
 The new advanced configurator brings a completely redesigned configuration experience with the following advantages:
@@ -26,7 +27,7 @@ The new advanced configurator brings a completely redesigned configuration exper
 3. Windows File Browser - For Windows users, dedicated Browse Model and Browse MMProj buttons allow selecting GGUF files from anywhere on your disk, not just ComfyUI's predefined folders. No more manual path typing!
 4. Flexible Widget Layout - The configurator now supports easy rearrangement and insertion of new (future) parameter. Previously, adding a new parameter to the middle would displace all the others, corrupting old saves. With the new approach, this problem no longer exists.
 
-<img width="734" height="825" alt="image" src="https://github.com/user-attachments/assets/f612508c-ef17-4fb1-b3be-0faf2aef2897" />
+<img width="843" height="648" alt="image" src="https://github.com/user-attachments/assets/400b62aa-0c9e-4d6d-9b65-8ece4577cbab" />
 
 - Added `words_to_ban` config (logit_bias).
 - Added `📸 Simple Gif Maker` node.
