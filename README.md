@@ -469,7 +469,7 @@ Possible model configurations that can be passed to the `config_override` input.
 
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
-| force_mmproj | bool | False | Load mmproj even without media inputs. Preserves template for enable_thinking. Uses VRAM unnecessarily if no media |
+| force_mmproj | bool | True | Load mmproj even without media inputs. Preserves template for enable_thinking. Uses VRAM unnecessarily if no media |
 | image_min_tokens | int | 0 | Minimum tokens for image embeddings. 0 = not set. Controls memory allocation |
 | image_max_tokens | int | 0 | Maximum tokens for image embeddings. 0 = not set. Prevents oversized image encodings |
 | max_images | int | 10 | Limit on total incoming images across image/image2/image3 inputs (batch mode can send many) | 
@@ -494,7 +494,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
 | verbose | bool | False | Enable verbose logging from llama.cpp. Prints detailed inference info to console |
-| debug | bool | False | Enable timing output for each stage. Shows [DEBUG] total time: 7.818s | 397 word (50.8 word/sec) |
+| debug | bool | True | Enable timing output for each stage in console. Shows metrics [DEBUG] inference 80.11 tok/sec 1812 tokens: 22.619s |
 | debug_output | bool | False | Print final LLM text output to console | 
 | raw_output | bool | False | Disable output.strip(). Keeps leading/trailing whitespaces in response | 
 | clearing_cache | bool | True | Clear cache to prevent execution freezing during heavy memory activity | 
