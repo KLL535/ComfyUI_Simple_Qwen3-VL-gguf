@@ -524,7 +524,7 @@ Parameters are rendered in a fixed order matching the Python node's INPUT_TYPES(
 Presets are saved to ComfyUI/user/SimpleQwenVL_configs/system_prompts_user.json. The file is created automatically on first use. 
 
 6. Multi-GPU Caveats
-cuda_device parameter may not work correctly in direct_clean and keep_vram modes, as ComfyUI itself may have already initialized CUDA with different settings. For multi-GPU, subprocess mode is recommended.
+cuda_device parameter may not work correctly in direct_clean and keep_vram modes, as ComfyUI itself may have already initialized CUDA with different settings.
 
 7. Vision ID Logic
 add_vision_id with auto mode calculates: True if (num_images != 1 or num_videos > 0) else False. This matches Qwen3/Qwen3.5 requirements for multi-image scenarios.
