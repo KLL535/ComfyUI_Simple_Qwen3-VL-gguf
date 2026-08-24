@@ -11,7 +11,7 @@ const GROUP_HEADERS = [
     "🎲 Sampling & Generation",
     "⚙️ Hardware & Acceleration",
     "💬 Chat, Prompts & Variables",
-    "💬 Prompt Template",
+    "📝 Prompt Template",
     "🖼️ Multimodal & Media",
     "🔢 Embeddings",
     "🛠️ Debug, System & Advanced"
@@ -23,7 +23,7 @@ const HEADER_COLORS = {
     "🎲 Sampling & Generation": "#f59e0b", // Янтарный/Оранжевый 
     "⚙️ Hardware & Acceleration": "#10b981", // Изумрудный 
     "💬 Chat, Prompts & Variables": "#f43f5e", // Розовый/Рубиновый 
-    "💬 Prompt Template":  "#d946ef", // Фуксия
+    "📝 Prompt Template":  "#d946ef", // Фуксия
     "🖼️ Multimodal & Media": "#06b6d4", // Циан/Бирюзовый 
     "🔢 Embeddings": "#6366f1", // Индиго 
     "🛠️ Debug, System & Advanced": "#71717a" // Цинк/Серый 
@@ -56,7 +56,7 @@ const GROUP_FIELDS = {
         "system_prompt_default", "system_preset_to_user_prompt", "user_prompt_after_content", 
         "enable_variables", "add_vision_id", "add_image_id", "add_frame_id", "add_audio_id"
     ],
-    "💬 Prompt Template": [
+    "📝 Prompt Template": [
         "raw_mode", "prompt_template", "stop"
     ],
     "🖼️ Multimodal & Media": [
@@ -133,7 +133,7 @@ const LEGACY_ORDER = [
     "add_frame_id",
     "add_audio_id",
     
-    "💬 Prompt Template",
+    "📝 Prompt Template",
     "raw_mode",
     "prompt_template",
     "stop",
@@ -254,18 +254,15 @@ app.registerExtension({
     name: "SimpleQwenVL.ConfiguratorUI",
 
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        // 1. ОТЛАДКА: Видим ли мы эту ноду вообще?
-        console.log("[Configurator] Проверяем ноду:", nodeData.name);
 
         if (nodeData.name !== TARGET_NODE) {
-            return; // Молча выходим, если это не наша нода
+            return; 
         }
 
-        console.log("[Configurator] ✅ Совпадение найдено:", TARGET_NODE);
+        console.log("[Configurator] Target node:", TARGET_NODE);
 
-        // 2. БЕЗОПАСНАЯ ПРОВЕРКА: Защита от падения, если структура nodeData изменилась
         if (!nodeData.input || !nodeData.input.required) {
-            console.warn("[Configurator] ⚠️ У ноды отсутствуют required inputs. Пропускаем.");
+            console.warn("[Configurator] Required inputs missing");
             return;
         }
 
@@ -275,59 +272,15 @@ app.registerExtension({
                 DEFAULTS[key] = def[1].default;
             }
         }    
-        
-        console.log("[Configurator] Извлечены значения по умолчанию:", DEFAULTS);
 
         const onNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
-            // 3. ОТЛАДКА: Срабатывает ли создание ноды?
-            console.log("[Configurator] 🛠️ Вызван onNodeCreated для:", this.title || this.type);
-            
+
             const ret = onNodeCreated?.apply(this, arguments);
             this._widgetDefaults = DEFAULTS;
 
             // ==========================================================
-            // 1. КНОПКИ SAVE / SAVE AS / DELETE PRESET
-            // ==========================================================
-            const presetCombo = this.widgets.find(w => w.name === "model_preset");
-            console.log("[Configurator] Найден model_preset:", !!presetCombo); // ОТЛАДКА
-            
-            if (presetCombo) {
-                const saveBtn = this.addWidget("button", "💾 Save", null, () => {
-                    onSavePreset(this, presetCombo);
-                });
-                const saveAsBtn = this.addWidget("button", "💾 Save As...", null, () => {
-                    onSaveAsPreset(this, presetCombo);
-                });
-                const renameBtn = this.addWidget("button", "✏️ Rename", null, () => {
-                    onRenamePreset(this, presetCombo);
-                });
-                const delBtn = this.addWidget("button", "🗑️ Delete", null, () => {
-                    onDeletePreset(this, presetCombo);
-                });
-                saveBtn.skipSerialize = true;
-                saveAsBtn.skipSerialize = true;
-                renameBtn.skipSerialize = true;
-                delBtn.skipSerialize = true;
-                
-                insertWidgetsAfter(this, presetCombo, [saveBtn, saveAsBtn, renameBtn, delBtn]);
-                
-                const origPresetCb = presetCombo.callback;
-                presetCombo.callback = async (value) => {
-                    origPresetCb?.call(presetCombo, value);
-                    if (value && value !== "None") {
-                        const cfg = await fetchPresetConfig(value);
-                        if (cfg) applyPreset(this, cfg);
-                    } else {
-                        applyPreset(this, null);
-                    }
-                };
-            } else {
-                console.warn("[Configurator] ⚠️ Виджет 'model_preset' не найден! Кнопки пресетов не добавлены.");
-            }
-
-            // ==========================================================
-            // 2. КНОПКИ BROWSE (model / mmproj)
+            // 1. КНОПКИ BROWSE (model / mmproj)
             // ==========================================================
             const modelPathWidget = this.widgets.find(w => w.name === "model_path");
             if (modelPathWidget) {
@@ -341,7 +294,7 @@ app.registerExtension({
                 browseModelBtn.skipSerialize = true;
                 insertWidgetsAfter(this, modelPathWidget, [browseModelBtn]);
             } else {
-                console.warn("[Configurator] ⚠️ Виджет 'model_path' не найден!");
+                console.warn("[Configurator] model_path missing");
             }
 
             const mmprojPathWidget = this.widgets.find(w => w.name === "mmproj_path");
@@ -356,17 +309,21 @@ app.registerExtension({
                 browseMmprojBtn.skipSerialize = true;
                 insertWidgetsAfter(this, mmprojPathWidget, [browseMmprojBtn]);
             } else {
-                console.warn("[Configurator] ⚠️ Виджет 'mmproj_path' не найден!");
+                console.warn("[Configurator] mmproj_path missing");
             }
 
             // ==========================================================
-            // 3. СВОРАЧИВАНИЕ ГРУПП
+            // 3. СВОРАЧИВАНИЕ ГРУПП (НАТИВНАЯ ОТРИСОВКА ЗАГОЛОВКОВ)
             // ==========================================================
             this.toggleGroup = (headerWidget, visible) => {
                 const widgets = this.widgets;
                 const headerIdx = widgets.indexOf(headerWidget);
                 if (headerIdx < 0) return;
+                
+                // 1. Скрываем или показываем САМ заголовок
+                headerWidget.hidden = !visible;
 
+                // 2. Находим следующий заголовок, чтобы знать границы группы
                 let nextHeaderIdx = widgets.length;
                 for (let i = headerIdx + 1; i < widgets.length; i++) {
                     if (GROUP_HEADERS.includes(widgets[i].name)) {
@@ -374,35 +331,92 @@ app.registerExtension({
                         break;
                     }
                 }
-
+                
+                // 3. Скрываем или показываем все виджеты внутри группы
                 for (let i = headerIdx + 1; i < nextHeaderIdx; i++) {
                     widgets[i].hidden = !visible;
                 }
-
+                
                 requestAnimationFrame(() => {
                     const newSize = this.computeSize();
                     this.setSize([this.size[0], newSize[1]]);
                     this.setDirtyCanvas(true, true);
                 });
             };
-
+            // Настраиваем заголовки групп
             GROUP_HEADERS.forEach(headerName => {
                 const widget = this.widgets.find(w => w.name === headerName);
                 if (!widget) return;
+
+                // 1. Патчим колбэк для сворачивания/разворачивания
                 const origCb = widget.callback;
                 widget.callback = (value) => {
                     this.toggleGroup(widget, !!value);
                     origCb?.(value);
+                    if (this._groupTogglePanel?.syncState) {
+                        this._groupTogglePanel.syncState();
+                    }
                 };
+
+                // 2. Заголовок
+                widget.draw = function(ctx, node, widget_width, y, H) {
+                    const color = HEADER_COLORS[this.name] || HEADER_DEFAULT_COLOR;
+                    
+                    ctx.save();
+                    
+                    // 1. Тонкая цветная полоска-акцент слева (3px шириной)
+                    ctx.fillStyle = color;
+                    ctx.fillRect(6, y + 4, 3, H - 8);
+                                    
+                    // 2. Рисуем текст 
+                    ctx.fillStyle = LiteGraph.NODE_TEXT_COLOR; 
+                    ctx.textAlign = "left";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(this.name, 14, y + H / 2 + 1);
+                    
+                    ctx.restore();
+                };
+
+                widget.hidden = false;
             });
 
             // ==========================================================
-            // 4. ПАТЧ СЕРИАЛИЗАЦИИ
+            // 4. СОЗДАНИЕ И ВСТАВКА DOM-ВИДЖЕТОВ (ОСТАВЛЯЕМ КАК БЫЛО, РАЗ РАБОТАЕТ)
+            // ==========================================================
+            const presetCombo = this.widgets.find(w => w.name === "model_preset");
+
+            if (presetCombo) {
+                // 1. Создаем виджет кнопок пресетов
+                const controlsWidget = createPresetControlsWidget(this, presetCombo);
+                
+                // 2. Создаем панель переключателей групп
+                this._groupTogglePanel = createGroupTogglePanel(this);
+
+                // 3. Вставляем ОБА виджета СРАЗУ одним вызовом! 
+                insertWidgetsAfter(this, presetCombo, [controlsWidget, this._groupTogglePanel]);
+
+                // 4. Оригинальный callback комбобокса
+                const origPresetCb = presetCombo.callback;
+                presetCombo.callback = async (value) => {
+                    origPresetCb?.call(presetCombo, value);
+                    if (value && value !== "None") {
+                        const cfg = await fetchPresetConfig(value);
+                        if (cfg) applyPreset(this, cfg);
+                    } else {
+                        applyPreset(this, null);
+                    }
+                };
+            } else {
+                console.warn("[Configurator] model_preset missing!");
+            }
+
+            // ==========================================================
+            // 5. ПАТЧ СЕРИАЛИЗАЦИИ
             // ==========================================================
             patchServiceWidgets(this);
 
             // ==========================================================
-            // 5. ПЕРВИЧНОЕ ПРИМЕНЕНИЕ СОСТОЯНИЙ ГРУПП
+            // 6. ПЕРВИЧНОЕ ПРИМЕНЕНИЕ СОСТОЯНИЙ
             // ==========================================================
             setTimeout(() => {
                 GROUP_HEADERS.forEach(headerName => {
@@ -411,62 +425,13 @@ app.registerExtension({
                         this.toggleGroup(widget, !!widget.value);
                     }
                 });
+                
+                const newSize = this.computeSize();
+                this.setSize([this.size[0], newSize[1]]);
+                this.setDirtyCanvas(true, true);
             }, 100);
 
-            this.setSize(this.computeSize());
             return ret;
-        };
-
-        // ---- Перехват отрисовки виджетов ноды ----
-        const origDrawForeground = nodeType.prototype.onDrawForeground;
-        nodeType.prototype.onDrawForeground = function (ctx) {
-            // Сначала стандартная отрисовка
-            if (origDrawForeground) origDrawForeground.apply(this, arguments);
-
-            // При сильном отдалении или свёрнутой ноде виджеты не видны
-            if (this.flags?.collapsed) return;
-            if (!app.canvas || app.canvas.ds?.scale < 0.2) return;
-
-            for (const w of this.widgets || []) {
-                if (w.hidden || !GROUP_HEADERS.includes(w.name)) continue;
-                if (w.y === undefined) continue;
-
-                const h = w.height || LiteGraph.NODE_WIDGET_HEIGHT || 20;
-                const x = 6;
-                const width = this.size[0] - 12;
-                const base = HEADER_COLORS[w.name] || HEADER_DEFAULT_COLOR;
-
-                ctx.save();
-
-                // Фон заголовка (непрозрачный — закрывает стандартный toggle)
-                ctx.fillStyle = base;
-                ctx.beginPath();
-                if (ctx.roundRect) ctx.roundRect(x, w.y, width, h, 5);
-                else ctx.rect(x, w.y-2, width, h+4);
-                ctx.fill();
-
-                // Левая полоска-акцент (ярче, когда группа открыта)
-                //ctx.fillStyle = w.value ? "#ffffff" : "rgba(255,255,255,0.35)";
-                //ctx.fillRect(x, w.y, 3, h);
-
-                // Название группы
-                //ctx.fillStyle = "#fff";
-                //ctx.font = "bold 12px 'Segoe UI', sans-serif";
-                //ctx.textAlign = "left";
-                //ctx.textBaseline = "middle";
-                //ctx.fillText(w.name, x + 8, w.y + h / 2 + 1);
-
-                // Мини-индикатор on/off справа
-                //ctx.beginPath();
-                //ctx.arc(x + width - 12, w.y + h / 2, 6, 0, Math.PI * 2);
-                //ctx.fillStyle = w.value ? "#9f9" : "rgba(0,0,0,0.4)";
-                //ctx.fill();
-                //ctx.strokeStyle = "rgba(255,255,255,0.8)";
-                //ctx.lineWidth = 1;
-                //ctx.stroke();
-
-                ctx.restore();
-            }
         };
     },
 });
@@ -554,6 +519,11 @@ function patchServiceWidgets(node) {
                 }
             }
         }
+
+        // Синхронизируем панель переключателей групп после восстановления значений
+        if (this._groupTogglePanel?.syncState) {
+            setTimeout(() => this._groupTogglePanel.syncState(), 50);
+        }
     };
 }
 
@@ -576,6 +546,8 @@ function collectNodeConfig(node) {
         if (w.skipSerialize) continue;
         if (w.name === "model_preset") continue;
         if (w.name === "preset_name") continue;
+        if (w.name === "preset_controls") continue;
+        if (w.name === "group_toggle_panel") continue;
         if (GROUP_HEADERS.includes(w.name)) continue;
 
         // extra обрабатываем отдельно в конце
@@ -618,8 +590,7 @@ function collectNodeConfig(node) {
     }
 
     // ==========================================================
-    // РАСПАКОВКА extra: добавляем его содержимое
-    // в верхний уровень JSON как отдельные поля
+    // extra 
     // ==========================================================
     const extraWidget = node.widgets.find(w => w.name === "extra");
     if (extraWidget && extraWidget.value && typeof extraWidget.value === "string" && extraWidget.value.trim()) {
@@ -761,6 +732,58 @@ async function onDeletePreset(node, combo) {
     }
 }
 
+function repairJson(text) {
+    // Заглушка. 
+    return text;
+}
+
+async function onImportJson(node, combo) {
+    showMultilineDialog(
+        '📥 Import JSON Configuration',
+        '',
+        (text, showError) => {
+            try {
+                let config = null;
+                let presetName = null;
+                
+                const parsed = JSON.parse(text);
+                
+                if (typeof parsed === 'object' && parsed !== null) {
+                    const keys = Object.keys(parsed);
+                    // Эвристика: если это объект с одним ключом, и его значение - тоже объект, 
+                    // считаем, что ключ - это имя пресета (формат экспорта)
+                    if (keys.length === 1 && typeof parsed[keys[0]] === 'object' && !Array.isArray(parsed[keys[0]])) {
+                        presetName = keys[0];
+                        config = parsed[keys[0]];
+                    } else {
+                        config = parsed;
+                    }
+                }
+                
+                if (!config || typeof config !== 'object') {
+                    showError('Invalid JSON structure: root must be an object {}');
+                    return false; // Не закрываем диалог
+                }
+                
+                // Применяем конфиг
+                applyPreset(node, config);
+                
+                console.log('[Configurator] JSON imported successfully');
+                if (presetName) {
+                    console.log(`[Configurator] Preset name detected: "${presetName}" (use Save As to save it)`);
+                }
+                
+                return true; // Закрываем диалог при успехе
+                
+            } catch (e) {
+                // Показываем ошибку парсинга от браузера 
+                showError(`JSON Parse Error:\n${e.message}`);
+                return false; // Не закрываем диалог
+            }
+        }
+    );
+}
+
 async function fetchPresetConfig(name) {
     try {
         const resp = await fetch(`/simpleqwenvl/presets/get?name=${encodeURIComponent(name)}`);
@@ -808,9 +831,6 @@ function applyPreset(node, cfg) {
     }
 
     // 4. Обрабатываем extra:
-    //    - Если в пресете был extra (как строка JSON) — парсим и объединяем
-    //    - Добавляем неучтенные поля
-    //    - Записываем итоговый JSON в виджет для удобства редактирования
     const extraWidget = node.widgets.find(w => w.name === "extra");
     if (extraWidget) {
         let currentExtra = {};
@@ -892,4 +912,352 @@ function convertValue(fieldName, value, widget) {
         default:
             return value;
     }
+}
+
+function showMultilineDialog(title, defaultValue, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5); z-index: 10000;
+        display: flex; align-items: center; justify-content: center;
+    `;
+    
+    const dialog = document.createElement('div');
+    dialog.style.cssText = `
+        background: #2a2a2a; border: 1px solid #555; border-radius: 8px;
+        padding: 20px; min-width: 500px; max-width: 800px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    `;
+    
+    const titleEl = document.createElement('h3');
+    titleEl.textContent = title;
+    titleEl.style.cssText = 'margin: 0 0 15px 0; color: #fff; font-size: 16px;';
+    
+    const textarea = document.createElement('textarea');
+    textarea.value = defaultValue || '';
+    textarea.style.cssText = `
+        width: 100%; height: 400px; background: #1a1a1a; color: #fff;
+        border: 1px solid #444; border-radius: 4px; padding: 10px;
+        font-family: 'Consolas', 'Monaco', monospace; font-size: 13px;
+        resize: vertical; box-sizing: border-box;
+    `;
+    
+    // Сообщение об ошибке
+    const errorMsg = document.createElement('div');
+    errorMsg.style.cssText = `
+        margin-top: 10px; padding: 10px; background: #7f1d1d; color: #fca5a5;
+        border-radius: 4px; font-size: 13px; display: none;
+        font-family: 'Consolas', 'Monaco', monospace;
+        white-space: pre-wrap; word-break: break-word;
+    `;
+    
+    const buttonRow = document.createElement('div');
+    buttonRow.style.cssText = 'margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;';
+    
+    const okBtn = document.createElement('button');
+    okBtn.textContent = '✓ Apply';
+    okBtn.style.cssText = `
+        padding: 8px 20px; background: #3b82f6; color: #fff;
+        border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+    `;
+    okBtn.onmouseover = () => okBtn.style.background = '#2563eb';
+    okBtn.onmouseout = () => okBtn.style.background = '#3b82f6';
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = '✗ Cancel';
+    cancelBtn.style.cssText = `
+        padding: 8px 20px; background: #555; color: #fff;
+        border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+    `;
+    cancelBtn.onmouseover = () => cancelBtn.style.background = '#666';
+    cancelBtn.onmouseout = () => cancelBtn.style.background = '#555';
+    
+    buttonRow.appendChild(cancelBtn);
+    buttonRow.appendChild(okBtn);
+    
+    dialog.appendChild(titleEl);
+    dialog.appendChild(textarea);
+    dialog.appendChild(errorMsg);
+    dialog.appendChild(buttonRow);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    
+    textarea.focus();
+    textarea.select();
+    
+    const close = () => document.body.removeChild(overlay);
+    
+    const showError = (msg) => {
+        errorMsg.textContent = '❌ ' + msg;
+        errorMsg.style.display = 'block';
+    };
+    
+    const hideError = () => {
+        errorMsg.style.display = 'none';
+    };
+    
+    okBtn.onclick = () => {
+        const text = textarea.value.trim();
+        if (!text) {
+            showError('Text is empty');
+            return;
+        }
+        hideError();
+        
+        // Вызываем callback, передавая функцию showError
+        // Если callback вернёт false — диалог НЕ закрывается
+        const result = onConfirm(text, showError);
+        
+        // Если result !== false — закрываем
+        if (result !== false) {
+            close();
+        }
+    };
+    
+    cancelBtn.onclick = close;
+    
+    overlay.onclick = (e) => {
+        if (e.target === overlay) {
+            // Проверяем, есть ли выделение текста
+            const selection = window.getSelection();
+            if (selection && selection.toString().length > 0) {
+                // Есть выделение — не закрываем
+                return;
+            }
+            close();
+        }
+    };
+    
+    textarea.onkeydown = (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            okBtn.click();
+        } else if (e.key === 'Escape') {
+            close();
+        }
+    };
+}
+
+// === PRESET CONTROLS WIDGET ===
+function createPresetControlsWidget(hostNode, presetCombo) {
+    const element = document.createElement("div");
+    element.style.cssText = `
+        display: flex;
+        flex-direction: row;
+        gap: 4px;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100%;
+        height: 24px !important;
+        box-sizing: border-box;
+        overflow: hidden;
+        vertical-align: top;
+    `;
+
+    const buttons = [
+        { label: "💾 Save", action: () => onSavePreset(hostNode, presetCombo) },
+        { label: "💾 Save As", action: () => onSaveAsPreset(hostNode, presetCombo) },
+        { label: "✏️ Rename", action: () => onRenamePreset(hostNode, presetCombo) },
+        { label: "🗑️ Delete", action: () => onDeletePreset(hostNode, presetCombo) },
+        { label: "📥 Import", action: () => onImportJson(hostNode, presetCombo) },
+    ];
+
+    buttons.forEach(btn => {
+        const button = document.createElement("button");
+        button.textContent = btn.label;
+        button.style.cssText = `
+            flex: 1;
+            height: 22px !important;
+            margin-top: 1px;
+            background: #2a2a2a;
+            color: #cccccc;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 0 !important;
+            cursor: pointer;
+            font-size: 11px;
+            font-family: sans-serif;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            line-height: 1 !important;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            outline: none;
+        `;
+        
+        button.addEventListener("mouseenter", () => {
+            button.style.background = "#4a90e2";
+            button.style.color = "#ffffff";
+            button.style.borderColor = "#4a90e2";
+        });
+        
+        button.addEventListener("mouseleave", () => {
+            button.style.background = "#2a2a2a";
+            button.style.color = "#cccccc";
+            button.style.borderColor = "#444";
+        });
+        
+        button.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            button.style.opacity = "0.7";
+        });
+        
+        button.addEventListener("mouseup", () => {
+            button.style.opacity = "1";
+        });
+
+        button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            btn.action();
+        });
+
+        element.appendChild(button);
+    });
+
+    const controlsWidget = hostNode.addDOMWidget("preset_controls", "vf_preset_controls", element, {
+        serialize: false,
+        hideOnZoom: false,
+    });
+
+    controlsWidget.skipSerialize = true; 
+    
+    controlsWidget.computeSize = function(width) {
+        return [width, 25];
+    };
+
+    return controlsWidget;
+}
+
+// === GROUP TOGGLE PANEL ===
+function createGroupTogglePanel(hostNode) {
+    const element = document.createElement("div");
+    element.style.cssText = `
+        display: flex;
+        flex-direction: row;
+        gap: 3px;
+        margin: 0 !important;
+        padding: 2px 0 !important;
+        width: 100%;
+        height: 24px !important;
+        box-sizing: border-box;
+        overflow: hidden;
+    `;
+
+    // Группы: иконка, имя toggle-виджета, tooltip
+    const groups = [
+        { icon: "📁", name: "📁 Model & Paths",        title: "Model & Paths" },
+        { icon: "🗄️", name: "🗄️ Memory & Context",    title: "Memory & Context" },
+        { icon: "🎲", name: "🎲 Sampling & Generation",title: "Sampling & Generation" },
+        { icon: "⚙️", name: "⚙️ Hardware & Acceleration", title: "Hardware & Acceleration" },
+        { icon: "💬", name: "💬 Chat, Prompts & Variables", title: "Chat, Prompts & Variables" },
+        { icon: "📝", name: "📝 Prompt Template",      title: "Prompt Template" },
+        { icon: "🖼️", name: "🖼️ Multimodal & Media",  title: "Multimodal & Media" },
+        { icon: "🔢", name: "🔢 Embeddings",           title: "Embeddings" },
+        { icon: "🛠️", name: "🛠️ Debug, System & Advanced", title: "Debug, System & Advanced" },
+    ];
+
+    const buttons = [];
+
+    groups.forEach((grp) => {
+        const button = document.createElement("button");
+        button.textContent = grp.icon;
+        button.title = grp.title;
+        button.dataset.groupName = grp.name;
+
+        // Начальное состояние читаем из toggle-виджета
+        const toggleWidget = hostNode.widgets.find(w => w.name === grp.name);
+        const isActive = toggleWidget ? !!toggleWidget.value : false;
+
+        const applyStyle = (active) => {
+            button.style.background = active ? "#4a90e2" : "#2a2a2a";
+            button.style.color = active ? "#ffffff" : "#cccccc";
+            button.style.borderColor = active ? "#4a90e2" : "#444";
+        };
+
+        button.style.cssText = `
+            flex: 1;
+            height: 22px !important;
+            margin-top: 1px;
+            background: #2a2a2a;
+            color: #cccccc;
+            border: 1px solid #444;
+            border-radius: 3px;
+            padding: 0 !important;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            line-height: 1 !important;
+            outline: none;
+            transition: all 0.15s;
+        `;
+        applyStyle(isActive);
+        button._isActive = isActive;
+
+        button.addEventListener("mouseenter", () => {
+            if (!button._isActive) {
+                button.style.background = "#3a3a3a";
+            }
+        });
+
+        button.addEventListener("mouseleave", () => {
+            applyStyle(button._isActive);
+        });
+
+        button.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+        });
+
+        button.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const toggleWidget = hostNode.widgets.find(w => w.name === grp.name);
+            if (!toggleWidget) return;
+
+            // Инвертируем состояние
+            const newValue = !toggleWidget.value;
+            toggleWidget.value = newValue;
+
+            // Вызываем callback toggle-виджета (он управляет скрытием группы)
+            toggleWidget.callback?.(newValue);
+
+            // Обновляем стиль кнопки
+            button._isActive = newValue;
+            applyStyle(newValue);
+        });
+
+        buttons.push(button);
+        element.appendChild(button);
+    });
+
+    const panelWidget = hostNode.addDOMWidget("group_toggle_panel", "vf_group_toggle_panel", element, {
+        serialize: false,
+        hideOnZoom: false,
+    });
+
+    panelWidget.skipSerialize = true;
+
+    panelWidget.computeSize = function(width) {
+        return [width, 40];
+    };
+
+    // Метод синхронизации состояния кнопок с toggle-виджетами
+    panelWidget.syncState = () => {
+        buttons.forEach((btn, i) => {
+            const grp = groups[i];
+            const toggleWidget = hostNode.widgets.find(w => w.name === grp.name);
+            if (!toggleWidget) return;
+            const isActive = !!toggleWidget.value;
+            btn._isActive = isActive;
+            const applyStyle = (active) => {
+                btn.style.background = active ? "#4a90e2" : "#2a2a2a";
+                btn.style.color = active ? "#ffffff" : "#cccccc";
+                btn.style.borderColor = active ? "#4a90e2" : "#444";
+            };
+            applyStyle(isActive);
+        });
+    };
+
+    return panelWidget;
 }

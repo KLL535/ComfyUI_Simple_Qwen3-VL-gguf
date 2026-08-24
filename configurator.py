@@ -515,7 +515,7 @@ class Qwen3VL_AdvancedConfig:
                 # ==================================================
                 # GROUP 6: PROMPT TEMPLATE
                 # ==================================================
-                "💬 Prompt Template": ("BOOLEAN", {
+                "📝 Prompt Template": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Show/hide group: custom raw prompt templates and stop sequences.",
                 }),
