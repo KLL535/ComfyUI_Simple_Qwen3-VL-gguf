@@ -263,7 +263,7 @@ def _inference(config):
     """Внутренняя функция, выполняющая инференс с кешированием модели."""
 
     try:
-        debug = config.get("debug", False)
+        debug = config.get("debug", True)
         verbose = config.get("verbose", False)
 
         chat_handler_type = _norm_str(config.get("chat_handler"))
@@ -336,7 +336,7 @@ def _inference(config):
         mmproj_path = config.get("mmproj_path", "").strip()
         is_vision_model = bool(num_content > 0 and mmproj_path and extract_embedding == False)
 
-        if config.get("force_mmproj"):
+        if config.get("force_mmproj",True):
             is_vision_model = True
 
         if need_new_model:
@@ -1049,7 +1049,7 @@ def main():
                 pickle.dump(data_type, f)
                 data_path = f.name    
             result["data_file"] = data_path
-            debug = config.get("debug", False)
+            debug = config.get("debug", True)
             _debug_print(debug, "save data", t_save_data, file=sys.stderr)
    
         restore_dup()

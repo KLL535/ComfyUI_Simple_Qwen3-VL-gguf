@@ -514,7 +514,7 @@ def run_script_subprocess(script_name, config, timeout=300):
 
         if result.returncode == 0:
 
-            debug = config.get("debug", False)
+            debug = config.get("debug", True)
             if debug: 
                 if result.stderr:
                     print(f"{result.stderr}")
@@ -596,8 +596,8 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
             conditioning = None
             if data_type == 1 and data is not None:
 
-                convert_emb_to_cond = config.get("convert_emb_to_cond")
-                if convert_emb_to_cond is not None:
+                convert_emb_to_cond = config.get("convert_emb_to_cond", False)
+                if convert_emb_to_cond:
                     hidden_states = torch.from_numpy(data).unsqueeze(0)
                     #  Формируем conditioning
                     seq_len = hidden_states.shape[1]
@@ -862,8 +862,8 @@ class SimpleQwen3VL_GGUF_Node:
                     raise ValueError(e)         
 
             # Получаем имя скрипта
-            script_name = config.get("script", None)
-            debug = config.get("debug", False)
+            script_name = config.get("script", "qwen3vl_run.py")
+            debug = config.get("debug", True)
             gccollect_start = config.get("force_gc_start", False)
             gccollect = config.get("force_gc_unload", False)
 

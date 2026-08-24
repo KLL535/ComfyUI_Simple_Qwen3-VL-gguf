@@ -12,6 +12,89 @@ from typing import Optional, Union, Dict, Any
 # -- LISTS --
 # -----------
 
+_ADVANCED_DEFAULTS = {
+    # model / paths
+    "model_path": "",
+    "mmproj_path": "",
+    # memory / context
+    "n_ctx": 8192,
+    "n_batch": 2048,
+    "n_ubatch": 512,
+    "n_keep": 256,
+    "logits_all": False,
+    "offload_kqv": True,
+    "use_mmap": False,
+    "use_mlock": False,
+    "pool_size": 4194304,
+    "swa_full": False,
+    "type_k": 1,          # "1=F16" -> 1
+    "type_v": 1,
+    "ctx_checkpoints": 0,
+    # sampling
+    "max_tokens": 2048,
+    "temperature": 0.7,
+    "top_p": 0.92,
+    "min_p": 0.05,
+    "top_k": 0,
+    "repeat_penalty": 1.1,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "words_to_ban": "",
+    "enable_thinking": False,
+    "force_reasoning": False,
+    # gpu / offload / multi-gpu
+    "n_gpu_layers": -1,
+    "n_cpu_moe": 0,
+    "cpu_moe": False,
+    "n_threads": 8,
+    "flash_attn_type": -1,   # "-1=AUTO" -> -1
+    "split_mode": 0,         # "0-NONE" -> 0
+    "main_gpu": 0,
+    "cuda_device": "",
+    "tensor_split": [],
+    # chat format
+    "chat_handler": "none",
+    "chat_format": "none",
+    "chat_format_from_gguf": False,
+    "system_prompt_default": "",
+    "system_preset_to_user_prompt": False,
+    "user_prompt_after_content": True,
+    "add_vision_id": "auto",
+    # templates
+    "raw_mode": False,
+    "prompt_template": "",
+    "stop": [],
+    # multimodal / media
+    "force_mmproj": True,
+    "image_min_tokens": 0,
+    "image_max_tokens": 0,
+    "max_images": 10,
+    "max_frames": 24,
+    "max_audios": 3,
+    "audio_sample_rate": 0,
+    "image_quality": 95,
+    "frame_quality": 75,
+    # embeddings
+    "extract_embedding": False,
+    "pooling_type": 0,
+    "tokenizer_path": "",
+    "embedding_scale": 1.0,
+    "convert_emb_to_cond": False,
+    # variables / ids
+    "enable_variables": False,
+    "add_image_id": "",
+    "add_frame_id": "",
+    "add_audio_id": "",
+    # debug / system
+    "verbose": False,
+    "debug": True,
+    "debug_output": False,
+    "raw_output": False,
+    "clearing_cache": True,
+    "force_gc_start": False,
+    "force_gc_unload": False,
+}
+
 GGML_TYPES = {
     "0=F32": 0,
     "1=F16": 1,
@@ -123,14 +206,14 @@ def _parse_stop_sequences(value):
     """
     Parse stop sequences from widget string.
     Accepts JSON list '["a","b"]' or comma-separated 'a,b'.
-    Returns list or None.
+    Returns list (empty list if no value).
     """
     if value is None:
-        return None
+        return []  
     s = str(value).strip()
     if not s:
-        return None
-
+        return []  
+    
     # try JSON list first
     if s.startswith("["):
         try:
@@ -140,7 +223,6 @@ def _parse_stop_sequences(value):
             return [str(parsed)]
         except Exception:
             pass
-
     # fallback: comma-separated
     return [x.strip() for x in s.split(",") if x.strip()]
 
@@ -148,11 +230,11 @@ def _parse_stop_sequences(value):
 def _parse_float_list(value):
     """Parse tensor_split-like list: '[0.7,0.3]' or '0.7,0.3'."""
     if value is None:
-        return None
+        return []  
     s = str(value).strip()
     if not s:
-        return None
-
+        return []  
+        
     if s.startswith("["):
         try:
             parsed = json.loads(s)
@@ -160,15 +242,13 @@ def _parse_float_list(value):
                 return [float(x) for x in parsed]
         except Exception:
             pass
-
     try:
         return [float(x) for x in s.split(",") if x.strip()]
     except Exception:
-        return None
+        return [] 
 
-
-def _parse_json_dict(value):
-    """Parse JSON dict for extra_override. Returns dict or None."""
+def _parse_extra(value):
+    """Parse JSON dict for extra. Returns dict or None."""
     if value is None:
         return None
     s = str(value).strip()
@@ -542,7 +622,7 @@ class Qwen3VL_AdvancedConfig:
                     "tooltip": "Show/hide group: image/audio/video limits and quality.",
                 }),
                 "force_mmproj": ("BOOLEAN", {
-                    "default": False,
+                    "default": True,
                     "tooltip": "Load mmproj even without media inputs (preserves template for enable_thinking).",
                 }),
                 "image_min_tokens": ("INT", {
@@ -648,7 +728,7 @@ class Qwen3VL_AdvancedConfig:
                     "tooltip": "Enables verbose logging from llama.cpp.",
                 }),
                 "debug": ("BOOLEAN", {
-                    "default": False,
+                    "default": True,
                     "tooltip": "Enables timing output for each stage to the console.",
                 }),
                 "debug_output": ("BOOLEAN", {
@@ -691,8 +771,8 @@ class Qwen3VL_AdvancedConfig:
             },
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("config",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("config", "diff_config")
     FUNCTION = "build_config"
     CATEGORY = CATEGORY_NAME
     OUTPUT_NODE = False
@@ -787,7 +867,7 @@ class Qwen3VL_AdvancedConfig:
         stop = _parse_stop_sequences(g("stop", ""))
 
         # multimodal / media
-        force_mmproj = g("force_mmproj", False)
+        force_mmproj = g("force_mmproj", True)
         image_min_tokens = g("image_min_tokens", 0)
         image_max_tokens = g("image_max_tokens", 0)
         max_images = g("max_images", 10)
@@ -812,7 +892,7 @@ class Qwen3VL_AdvancedConfig:
 
         # debug / system
         verbose = g("verbose", False)
-        debug = g("debug", False)
+        debug = g("debug", True)
         debug_output = g("debug_output", False)
         clearing_cache = g("clearing_cache", True)
         force_gc_start = g("force_gc_start", False)
@@ -926,16 +1006,36 @@ class Qwen3VL_AdvancedConfig:
                 config[k] = v
 
         # --------------------------------------------------------------
+        # 4b. build diff_config — только параметры, отличающиеся от дефолта
+        # --------------------------------------------------------------
+        diff_config = {}
+        for k, v in local_params.items():
+            # Пропускаем служебные/отсутствующие в дефолтах ключи
+            if k not in _ADVANCED_DEFAULTS:
+                continue
+            default_v = _ADVANCED_DEFAULTS[k]
+            # Особая обработка для списков (stop, tensor_split) — сравниваем содержимое
+            if isinstance(v, list) and isinstance(default_v, list):
+                if v != default_v:
+                    diff_config[k] = v
+            elif v != default_v:
+                # Для float — учитываем погрешность округления виджетов
+                if isinstance(v, float) and isinstance(default_v, float):
+                    if abs(v - default_v) > 1e-6:
+                        diff_config[k] = v
+                else:
+                    diff_config[k] = v
+
+        # --------------------------------------------------------------
         # 5. apply extra passthrough
         # --------------------------------------------------------------
-        extra_dict = _parse_json_dict(extra_raw)
+        extra_dict = _parse_extra(extra_raw)
         if extra_dict:
             config.update(extra_dict)
+            diff_config.update(extra_dict)
 
         # --------------------------------------------------------------
         # 6. apply stacked config_override (highest priority)
-        #    Accepts either a dict (from another configurator) or
-        #    a JSON/plain string.
         # --------------------------------------------------------------
         config_override = kwargs.get("config_override", None)
         if config_override:
@@ -954,8 +1054,9 @@ class Qwen3VL_AdvancedConfig:
             if override_dict:
                 override_dict = old_names_patch(override_dict)
                 config.update(override_dict)
+                diff_config.update(override_dict)
 
-        return (config,)
+        return (config, diff_config)
 
 from server import PromptServer
 from aiohttp import web
@@ -1334,7 +1435,7 @@ class Qwen3VL_ModelConfig:
                     "tooltip": "Context size: image_tokens + input_tokens + output_tokens <= n_ctx"
                 }),
                 "n_batch": ("INT", {
-                    "default": 512, "min": 32, "max": 8192, "step": 32,
+                    "default": 2048, "min": 32, "max": 8192, "step": 32,
                     "tooltip": "Prompt processing batch. Lower = less VRAM, higher = faster."
                 }),
                 "n_ubatch": ("INT", {
@@ -1376,7 +1477,7 @@ class Qwen3VL_ModelConfig:
                     "tooltip": "Chat format for text-only models."
                 }),
                 "force_mmproj": ("BOOLEAN", {
-                    "default": False,
+                    "default": True,
                     "tooltip": "Force load mmproj even without images (preserves template for enable_thinking)."
                 }),
                 "enable_thinking": ("BOOLEAN", {
@@ -1413,10 +1514,10 @@ class Qwen3VL_ModelConfig:
                      offload_kqv: bool = True,
                      chat_handler: str = "none",
                      chat_format: str = "none",
-                     force_mmproj: bool = False,
+                     force_mmproj: bool = True,
                      enable_thinking: bool = False,
                      verbose: bool = False,
-                     debug: bool = False,
+                     debug: bool = True,
                      config_override: str = None,
                      type_k = "F16",
                      type_v = "F16"):
@@ -1487,7 +1588,7 @@ class Qwen3VL_SamplingConfig:
                     "tooltip": "0.1=focused, 0.7=balanced, 1.2+=creative. Lower = more deterministic."
                 }),
                 "top_p": ("FLOAT", {
-                    "default": 0.95, "min": 0.0, "max": 1.0, "step": 0.01,
+                    "default": 0.92, "min": 0.0, "max": 1.0, "step": 0.01,
                     "tooltip": "Nucleus sampling: cumulative probability cutoff. Lower = more focused."
                 }),
                 "min_p": ("FLOAT", {
@@ -1495,7 +1596,7 @@ class Qwen3VL_SamplingConfig:
                     "tooltip": "Cut off tokens with prob < min_p * (top_token_prob). Great for reducing garbage."
                 }),
                 "top_k": ("INT", {
-                    "default": 40, "min": 0, "max": 500, "step": 1,
+                    "default": 0, "min": 0, "max": 500, "step": 1,
                     "tooltip": "Limit to top-K tokens. 0 = disabled. Good for strict output."
                 }),
                 
