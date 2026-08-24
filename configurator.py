@@ -740,7 +740,7 @@ class Qwen3VL_AdvancedConfig:
         n_keep = g("n_keep", 256)
         logits_all = g("logits_all", False)
         offload_kqv = g("offload_kqv", True)
-        use_mmap = g("use_mmap", True)
+        use_mmap = g("use_mmap", False)
         use_mlock = g("use_mlock", False)
         pool_size = g("pool_size", 4194304)
         swa_full = g("swa_full", False)
@@ -1354,7 +1354,7 @@ class Qwen3VL_ModelConfig:
                     "tooltip": "CPU threads for inference. Match physical cores."
                 }),
                 "use_mmap": ("BOOLEAN", {
-                    "default": True,
+                    "default": False,
                     "tooltip": "Memory mapping. set True if faster model loading."
                 }),
                 "use_mlock": ("BOOLEAN", {
@@ -1408,7 +1408,7 @@ class Qwen3VL_ModelConfig:
                      n_gpu_layers: int = -1,
                      n_cpu_moe: int = 0,
                      n_threads: int = 8,
-                     use_mmap: bool = True,
+                     use_mmap: bool = False,
                      use_mlock: bool = False,
                      offload_kqv: bool = True,
                      chat_handler: str = "none",
