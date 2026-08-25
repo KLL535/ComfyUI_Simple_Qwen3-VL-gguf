@@ -531,8 +531,9 @@ def _inference(config):
                     "offload_kqv": config.get("offload_kqv", True),
                 }
 
-                if (tensor_split := _norm_default(config.get("tensor_split", []), [])) is not None:
-                    llm_kwargs["tensor_split"] = tensor_split     
+                tensor_split = config.get("tensor_split")
+                if tensor_split:
+                    llm_kwargs["tensor_split"] = tensor_split
 
                 if (type_k := _norm_default(config.get("type_k"), 1)) is not None:
                     llm_kwargs["type_k"] = type_k     
@@ -653,8 +654,8 @@ def _inference(config):
                 "top_k": config.get("top_k", 0),
             }
 
-            custom_stop = _norm_default(config.get("stop",[]),[])
-            if custom_stop is not None:
+            custom_stop = config.get("stop")
+            if custom_stop:
                 completion_kwargs["stop"] = custom_stop
 
             # Нежелательные слова 
@@ -959,7 +960,10 @@ def unload_llama_model(gccollect, debug = False, target="all"):
             del cache["llm"]
             cache["llm"] = None
             cache["hash"] = None
-            _debug_print(debug, f"unload_llama_model ({key})", t_start, file=sys.stderr)
+            if key == "keep_vram":
+                _debug_print(debug, f"unload_llama_model", t_start, file=sys.stderr)
+            else:
+                _debug_print(debug, f"unload_llama_model ({key})", t_start, file=sys.stderr)
             cleared = True
             
     if cleared and gccollect:
