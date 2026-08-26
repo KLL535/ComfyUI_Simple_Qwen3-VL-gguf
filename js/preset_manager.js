@@ -724,6 +724,10 @@ async function onDeletePreset(node, combo) {
         if (data.success && data.presets) {
             combo.options.values = data.presets.length > 0 ? data.presets : ["None"];
             combo.value = combo.options.values[0];
+
+            // Явно вызываем callback, чтобы обновить виджеты
+            combo.callback?.(combo.value);
+            
             app.graph.setDirtyCanvas(true, true);
         }
     } catch (e) {
