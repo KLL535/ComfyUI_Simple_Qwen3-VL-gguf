@@ -16,7 +16,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 **Nightly (tests)**
 
 - New design for LLM Config
-- **Added new configurator 🌐 LLM Config (Advanced)**
+- **Added new configurator 🌐 LLM Config and 🌐 LLM Prompt Preset**
   
 The new advanced configurator brings a completely redesigned configuration experience with the following advantages:
 
@@ -27,7 +27,7 @@ The new advanced configurator brings a completely redesigned configuration exper
 3. Windows File Browser - For Windows users, dedicated Browse Model and Browse MMProj buttons allow selecting GGUF files from anywhere on your disk, not just ComfyUI's predefined folders. No more manual path typing!
 4. Flexible Widget Layout - The configurator now supports easy rearrangement and insertion of new (future) parameter. Previously, adding a new parameter to the middle would displace all the others, corrupting old saves. With the new approach, this problem no longer exists.
 
-<img width="843" height="648" alt="image" src="https://github.com/user-attachments/assets/400b62aa-0c9e-4d6d-9b65-8ece4577cbab" />
+<img width="1180" height="619" alt="image" src="https://github.com/user-attachments/assets/43a89831-71c1-472e-8a61-5d61d87eed6a" />
 
 - Added `words_to_ban` config (logit_bias).
 - Added `📸 Simple Gif Maker` node.
@@ -632,6 +632,31 @@ Allows select a user prompt from templates:
 # Models (for example):
 
 <img width="2048" height="448" alt="03522-929995336568847" src="https://github.com/user-attachments/assets/0dc6c148-c049-4fc4-9363-eedb04db2785" />
+
+<details>
+
+<summary>Qwen3.8-27B</summary>
+
+- https://huggingface.co/Blackfrost-AI/Qwen3.8-27B-ABLITERATED-GGUF
+
+For example (for 16 Gb VRAM):
+`Qwen3.8-27B-ABLITERATED-Q3_K_S.gguf` + `mmproj-BF16.gguf`
+
+```json
+{
+    "model_path": "I:\\LLM\\qwen\\Qwen3.8-27B\\Qwen3.8-27B-ABLITERATED-Q3_K_S.gguf",
+    "mmproj_path": "I:\\LLM\\qwen\\Qwen3.8-27B\\mmproj-BF16.gguf",
+    "n_batch": 4096,
+    "top_p": 0.8,
+    "top_k": 20,
+    "repeat_penalty": 1.05,
+    "chat_handler": "qwen35",
+    "image_min_tokens": 512,
+    "image_max_tokens": 1536
+}
+```
+
+</details>
 
 <details>
 
