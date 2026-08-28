@@ -650,7 +650,9 @@ For example (for 16 Gb VRAM):
     "top_p": 0.8,
     "top_k": 20,
     "repeat_penalty": 1.05,
-    "chat_handler": "qwen35"
+    "chat_handler": "qwen35",
+    "image_min_tokens": 512,
+    "image_max_tokens": 1536
 }
 ```
 
