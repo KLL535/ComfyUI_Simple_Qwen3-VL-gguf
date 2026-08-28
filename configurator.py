@@ -1,12 +1,14 @@
 #configurator.py
 
-from .qwen3vl_node import old_names_patch, config_override_repair, load_cached_section, invalidate_cache, get_config_files, _user_config_file, CATEGORY_NAME, NODE_USER_DIR_NAME
+from .qwen3vl_node import old_names_patch, config_override_repair, load_cached_section, load_unbanned_section, invalidate_cache, get_config_files, _user_config_file, CATEGORY_NAME, NODE_USER_DIR_NAME
 
 import os
 import json
 import hashlib
 import folder_paths
-from typing import Optional, Union, Dict, Any
+from typing import List, Optional, Union, Dict, Any
+from server import PromptServer
+from aiohttp import web
 
 # -----------
 # -- LISTS --
@@ -48,10 +50,10 @@ _ADVANCED_DEFAULTS = {
     "cpu_moe": False,
     "n_threads": 8,
     "flash_attn_type": -1,   # "-1=AUTO" -> -1
-    "split_mode": 0,         # "0-NONE" -> 0
+    "split_mode": 0,         # "0=NONE" -> 0
     "main_gpu": 0,
     "cuda_device": "",
-    "tensor_split": [],
+    "tensor_split": "",
     # chat format
     "chat_handler": "none",
     "chat_format": "none",
@@ -63,7 +65,7 @@ _ADVANCED_DEFAULTS = {
     # templates
     "raw_mode": False,
     "prompt_template": "",
-    "stop": [],
+    "stop": "",
     # multimodal / media
     "force_mmproj": True,
     "image_min_tokens": 0,
@@ -199,54 +201,6 @@ FLASH_ATTN_TYPES = {
 
 ADD_ID_MODES = ["auto", "true", "false"]
 
-# ---------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------
-def _parse_stop_sequences(value):
-    """
-    Parse stop sequences from widget string.
-    Accepts JSON list '["a","b"]' or comma-separated 'a,b'.
-    Returns list (empty list if no value).
-    """
-    if value is None:
-        return []  
-    s = str(value).strip()
-    if not s:
-        return []  
-    
-    # try JSON list first
-    if s.startswith("["):
-        try:
-            parsed = json.loads(s)
-            if isinstance(parsed, list):
-                return [str(x) for x in parsed]
-            return [str(parsed)]
-        except Exception:
-            pass
-    # fallback: comma-separated
-    return [x.strip() for x in s.split(",") if x.strip()]
-
-
-def _parse_float_list(value):
-    """Parse tensor_split-like list: '[0.7,0.3]' or '0.7,0.3'."""
-    if value is None:
-        return []  
-    s = str(value).strip()
-    if not s:
-        return []  
-        
-    if s.startswith("["):
-        try:
-            parsed = json.loads(s)
-            if isinstance(parsed, list):
-                return [float(x) for x in parsed]
-        except Exception:
-            pass
-    try:
-        return [float(x) for x in s.split(",") if x.strip()]
-    except Exception:
-        return [] 
-
 def _parse_extra(value):
     """Parse JSON dict for extra. Returns dict or None."""
     if value is None:
@@ -283,8 +237,8 @@ class Qwen3VL_AdvancedConfig:
     def INPUT_TYPES(s):
 
         try:
-            model_presets = load_cached_section('_model_presets')
-            model_presets_names = sorted(model_presets.keys()) or ["None"]
+            model_presets = load_unbanned_section('_model_presets')
+            model_presets_names = ["None"] + sorted(model_presets.keys())
         except:
             model_presets_names = ["None"]
 
@@ -515,7 +469,7 @@ class Qwen3VL_AdvancedConfig:
                     "tooltip": "Flash Attention backend for llama.cpp. Requires a compatible build.",
                 }),
                 "split_mode": (list(SPLIT_MODES.keys()), {
-                    "default": "0-NONE",
+                    "default": "0=NONE",
                     "tooltip": "GPU splitting mode: 0=NONE, 1=LAYER, 2=ROW.",
                 }),
                 "main_gpu": ("INT", {
@@ -694,7 +648,7 @@ class Qwen3VL_AdvancedConfig:
                     "tooltip": "Switch node to embedding mode. Uses LlamaEmbedding. Text output is replaced by a CONDITIONING tensor.",
                 }),
                 "pooling_type": (list(POOLING_TYPES.keys()), {
-                    "default": "0-NONE",
+                    "default": "0=NONE",
                     "tooltip": "Pooling strategy for LlamaEmbedding. NONE = no pooling (per-token embeddings), MEAN = average pool, CLS = use [CLS] token, LAST = use last token.",
                 }),
                 "tokenizer_path": ("STRING", {
@@ -845,10 +799,10 @@ class Qwen3VL_AdvancedConfig:
         cpu_moe = g("cpu_moe", False)
         n_threads = g("n_threads", 8)
         flash_attn_type = FLASH_ATTN_TYPES.get(g("flash_attn_type", "-1=AUTO"), -1)
-        split_mode = SPLIT_MODES.get(g("split_mode", "0-NONE"), 0)
+        split_mode = SPLIT_MODES.get(g("split_mode", "0=NONE"), 0)
         main_gpu = g("main_gpu", 0)
         cuda_device = g("cuda_device", "")
-        tensor_split = _parse_float_list(g("tensor_split", ""))
+        tensor_split = g("tensor_split", "")
 
         # chat format
         chat_handler = g("chat_handler", "none")
@@ -864,7 +818,7 @@ class Qwen3VL_AdvancedConfig:
         # templates 
         raw_mode = g("raw_mode", False)
         prompt_template = g("prompt_template", "")
-        stop = _parse_stop_sequences(g("stop", ""))
+        stop = g("stop", "")
 
         # multimodal / media
         force_mmproj = g("force_mmproj", True)
@@ -879,7 +833,7 @@ class Qwen3VL_AdvancedConfig:
 
         # embeddings
         extract_embedding = g("extract_embedding", False)
-        pooling_type = POOLING_TYPES.get(g("pooling_type", "0-NONE"), 0)
+        pooling_type = POOLING_TYPES.get(g("pooling_type", "0=NONE"), 0)
         tokenizer_path = g("tokenizer_path", "")
         embedding_scale = g("embedding_scale", 1.0)
         convert_emb_to_cond = g("convert_emb_to_cond", False)
@@ -1010,21 +964,16 @@ class Qwen3VL_AdvancedConfig:
         # --------------------------------------------------------------
         diff_config = {}
         for k, v in local_params.items():
-            # Пропускаем служебные/отсутствующие в дефолтах ключи
             if k not in _ADVANCED_DEFAULTS:
                 continue
             default_v = _ADVANCED_DEFAULTS[k]
-            # Особая обработка для списков (stop, tensor_split) — сравниваем содержимое
-            if isinstance(v, list) and isinstance(default_v, list):
-                if v != default_v:
+            
+            # Для float — учитываем погрешность округления виджетов
+            if isinstance(v, float) and isinstance(default_v, float):
+                if abs(v - default_v) > 1e-6:
                     diff_config[k] = v
             elif v != default_v:
-                # Для float — учитываем погрешность округления виджетов
-                if isinstance(v, float) and isinstance(default_v, float):
-                    if abs(v - default_v) > 1e-6:
-                        diff_config[k] = v
-                else:
-                    diff_config[k] = v
+                diff_config[k] = v
 
         # --------------------------------------------------------------
         # 5. apply extra passthrough
@@ -1056,227 +1005,305 @@ class Qwen3VL_AdvancedConfig:
                 config.update(override_dict)
                 diff_config.update(override_dict)
 
-        return (config, diff_config)
+        #return (config, diff_config)
+        return (
+            json.dumps(config, indent=4, ensure_ascii=False),
+            json.dumps(diff_config, indent=4, ensure_ascii=False)
+        )
 
-from server import PromptServer
-from aiohttp import web
+
+class Qwen3VL_PromptPresetConfig:
+    """
+    Node for managing System Prompt and User Prompt Template presets.
+    """
+    @classmethod
+    def INPUT_TYPES(s):
+        try:
+            system_presets = load_unbanned_section('_system_prompts')
+            system_prompts_names = ["None"] + list(system_presets.keys())
+        except Exception:
+            system_prompts_names = ["None"]
+            
+        return {
+            "required": {
+                "system_preset": (system_prompts_names, {
+                    "default": system_prompts_names[0],
+                    "tooltip": "Select a prompt preset to load",
+                }),
+                "📝 System Prompt": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Show/hide System Prompt group",
+                }),
+                "system_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Main system prompt. Will be combined with system_prompt_opt if provided.",
+                }),
+                "📝 User Prompt Template": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Show/hide User Prompt Template group",
+                }),
+                "user_prompt_template": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "placeholder": "{user_prompt}",
+                    "tooltip": "Template for user prompt. Can use {variables}. Will be combined with user_prompt_opt.",
+                }),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("system_prompt", "user_prompt_template")
+    FUNCTION = "build_prompts"
+    CATEGORY = CATEGORY_NAME
+    OUTPUT_NODE = False
+
+    def build_prompts(self, system_preset, **kwargs):    
+        # Берем текущие значения виджетов
+        widget_sys = kwargs.get("system_prompt", "").strip()
+        widget_usr = kwargs.get("user_prompt_template", "").strip()
+    
+        return (widget_sys, widget_usr)
+
+# ------------------------------------------------------------------
+# СЕРВЕР ДЛЯ JS ЧАСТИ
+# ЭНДПОИНТЫ ПРЕСЕТОВ
+# ------------------------------------------------------------------
+
+def get_preset_value(section_name: str, name: str) -> Optional[Any]:
+    """Возвращает значение пресета."""
+    raw = load_cached_section(section_name)
+    val = raw.get(name)
+    return None if val == "BANNED" else val
+
+def _read_user_file() -> Dict:
+    """Читает пользовательский файл. Возвращает {} при отсутствии или ошибке."""
+    if not _user_config_file or not os.path.exists(_user_config_file):
+        return {}
+    try:
+        with open(_user_config_file, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[SimpleQwenVL] Warning: Failed to read user config file '{_user_config_file}': {e}")
+        return {}
+
+def _write_user_file(data: Dict) -> None:
+    """Записывает словарь в пользовательский файл."""
+    if not _user_config_file:
+        raise RuntimeError("User config file path is not set")
+    try:
+        os.makedirs(os.path.dirname(_user_config_file), exist_ok=True)
+        with open(_user_config_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"[SimpleQwenVL] ERROR: Failed to write user config file: {e}")
+        raise
+
+def _get_sections(preset_type: str) -> List[str]:
+    """Возвращает список секций в зависимости от типа пресета."""
+    if preset_type == "prompt":
+        return ["_system_prompts", "_user_prompt_template"]
+    return ["_model_presets"]
+
+def _get_primary_section(preset_type: str) -> str:
+    """Возвращает основную секцию для получения списка имен."""
+    return _get_sections(preset_type)[0]
+
+def _format_preset_names(merged_dict: dict, preset_type: str) -> list:
+    """Формирует список имен. Сортирует только модели, промпты оставляет в порядке добавления."""
+    keys = list(merged_dict.keys())
+    if preset_type == "model":
+        keys = sorted(keys)
+    return ["None"] + keys
+
+def _save_unified_preset(name: str, section_values: Dict[str, Any]) -> None:
+    """Явно сохраняет значения в указанные секции."""
+    if not _user_config_file:
+        raise RuntimeError("User config file path is not set")
+    
+    # _read_user_file уже безопасно вернет {}, если файла нет или он битый
+    user_data = _read_user_file()
+    
+    for section, value in section_values.items():
+        if section not in user_data:
+            user_data[section] = {}
+        user_data[section][name] = value  # Перезаписываем или создаем
+        
+    _write_user_file(user_data)
+    invalidate_cache()
+
+def _delete_unified_preset(name: str, section_names: List[str], main_file: Optional[str] = None) -> bool:
+    """Удаляет пресет или ставит BANNED, если он есть в main файле."""
+    if not _user_config_file or not os.path.exists(_user_config_file):
+        return False
+
+    is_in_main = False
+    if main_file and os.path.exists(main_file):
+        try:
+            with open(main_file, 'r', encoding='utf-8') as f:
+                main_data = json.load(f)
+            for sec in section_names:
+                if name in main_data.get(sec, {}):
+                    is_in_main = True
+                    break
+        except Exception:
+            pass
+
+    user_data = _read_user_file()
+    modified = False
+
+    if is_in_main:
+        for sec in section_names:
+            if sec not in user_data:
+                user_data[sec] = {}
+            user_data[sec][name] = "BANNED"
+        modified = True
+    else:
+        for sec in section_names:
+            if sec in user_data and name in user_data[sec]:
+                del user_data[sec][name]
+                modified = True
+
+    if modified:
+        _write_user_file(user_data)
+        invalidate_cache()
+        return True
+    return False
 
 @PromptServer.instance.routes.get("/simpleqwenvl/presets/list")
 async def list_presets(request):
+    preset_type = request.query.get("type", "model")
+    section = _get_primary_section(preset_type)
     try:
-        model_presets = load_cached_section('_model_presets')
-        names = sorted(model_presets.keys()) or ["None"]
+        merged = load_unbanned_section(section)
+        names = _format_preset_names(merged, preset_type) # <-- ЗАМЕНЕНО
     except Exception:
-        names = []
+        names = ["None"]
     return web.json_response({"presets": names})
 
 @PromptServer.instance.routes.get("/simpleqwenvl/presets/get")
-async def get_preset_endpoint(request):
+async def get_preset(request):
     name = request.query.get("name", "")
+    preset_type = request.query.get("type", "model")
+    sections = _get_sections(preset_type)
+    
+    config = {}
     try:
-        model_presets = load_cached_section('_model_presets')
+        if preset_type == "prompt":
+            config["system_prompt"] = get_preset_value(sections[0], name) or ""
+            config["user_prompt_template"] = get_preset_value(sections[1], name) or ""
+        else:
+            config = get_preset_value(sections[0], name) or {}
     except Exception:
-        model_presets = {}
-    cfg = model_presets.get(name, {})
-    return web.json_response({"name": name, "config": cfg})
+        pass
+        
+    return web.json_response({"name": name, "config": config})
 
 @PromptServer.instance.routes.post("/simpleqwenvl/presets/save")
-async def save_preset(request):
+async def save_preset_endpoint(request):
     try:
         data = await request.json()
         name = data.get("name", "").strip()
+        preset_type = data.get("type", "model")
         config = data.get("config", {})
         
         if not name:
             return web.json_response({"error": "Preset name cannot be empty"}, status=400)
 
-        target_file = _user_config_file
-        if not target_file:
-            return web.json_response({"error": "User config file path is invalid"}, status=500)
+        # ЯВНОЕ сопоставление: что и куда сохранять
+        if preset_type == "prompt":
+            values_to_save = {
+                "_system_prompts": config.get("system_prompt", ""),
+                "_user_prompt_template": config.get("user_prompt_template", "")
+            }
+        else:
+            values_to_save = {
+                "_model_presets": config
+            }
 
-        # 1. Читаем текущий пользовательский файл
-        with open(target_file, 'r', encoding='utf-8') as f:
-            user_data = json.load(f)
+        _save_unified_preset(name, values_to_save)
 
-        # 2. Гарантируем наличие секции
-        if "_model_presets" not in user_data:
-            user_data["_model_presets"] = {}
-
-        # 3. Сохраняем или обновляем пресет (словарь перезапишет старое значение по ключу)
-        user_data["_model_presets"][name] = config
-
-        # 4. Записываем обратно
-        with open(target_file, 'w', encoding='utf-8') as f:
-            json.dump(user_data, f, indent=2, ensure_ascii=False)
-
-        # 5. Очищаем кэш, чтобы изменения вступили в силу немедленно
-        invalidate_cache()
-
-        # 6. Возвращаем обновленный список всех пресетов для фронтенда
-        model_presets = load_cached_section('_model_presets')
-        names = sorted(list(model_presets.keys())) # Сортируем для удобства
-
+        merged = load_unbanned_section(_get_primary_section(preset_type))
+        names = _format_preset_names(merged, preset_type)
         return web.json_response({"success": True, "presets": names})
-        
     except Exception as e:
         print(f"[SimpleQwenVL] Save preset error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 @PromptServer.instance.routes.post("/simpleqwenvl/presets/delete")
-async def delete_preset(request):
+async def delete_preset_endpoint(request):
     try:
         data = await request.json()
         name = data.get("name", "").strip()
+        preset_type = data.get("type", "model")
         
         if not name:
             return web.json_response({"error": "Preset name cannot be empty"}, status=400)
 
-        deleted_from_any = False
+        sections = _get_sections(preset_type)
+        main_file = get_config_files().get('main')
         
-        # Получаем ВСЕ файлы конфигурации
-        files_to_check = []
-        user_file = _user_config_file
-        if user_file and os.path.exists(user_file):
-            files_to_check.append(user_file)
-        
-        # Добавляем остальные файлы (main, user_legacy)
-        for key, path in get_config_files().items():
-            if path and os.path.exists(path) and path != user_file:
-                files_to_check.append(path)
+        deleted = _delete_unified_preset(name, sections, main_file)
+        if not deleted:
+            return web.json_response({"error": "Preset not found or already deleted"}, status=404)
 
-        # Пытаемся удалить из КАЖДОГО файла
-        for file_path in files_to_check:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    file_data = json.load(f)
-                
-                if "_model_presets" in file_data and name in file_data["_model_presets"]:
-                    del file_data["_model_presets"][name]
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        json.dump(file_data, f, indent=2, ensure_ascii=False)
-                    deleted_from_any = True
-                    print(f"[SimpleQwenVL] Deleted preset '{name}' from {file_path}")
-                    
-            except PermissionError:
-                print(f"[SimpleQwenVL] Permission denied: cannot delete from {file_path}")
-                continue
-            except Exception as e:
-                print(f"[SimpleQwenVL] Error processing {file_path}: {e}")
-                continue
-
-        if not deleted_from_any:
-            return web.json_response({"error": "Preset not found in any config file"}, status=404)
-
-        invalidate_cache()
-        
-        model_presets = load_cached_section('_model_presets')
-        names = sorted(list(model_presets.keys()))
-
+        merged = load_unbanned_section(_get_primary_section(preset_type))
+        names = _format_preset_names(merged, preset_type)
         return web.json_response({"success": True, "presets": names})
-        
     except Exception as e:
         print(f"[SimpleQwenVL] Delete preset error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 @PromptServer.instance.routes.post("/simpleqwenvl/presets/rename")
-async def rename_preset(request):
+async def rename_preset_endpoint(request):
     try:
         data = await request.json()
-        old_name = (data.get("old_name") or "").strip()
-        new_name = (data.get("new_name") or "").strip()
+        old_name = data.get("old_name", "").strip()
+        new_name = data.get("new_name", "").strip()
+        preset_type = data.get("type", "model")
+        config = data.get("config", {})
 
         if not old_name or not new_name:
             return web.json_response({"error": "old_name and new_name are required"}, status=400)
         if old_name == new_name:
-            # Ничего не делаем, просто возвращаем список
-            model_presets = load_cached_section('_model_presets')
-            return web.json_response({"success": True, "presets": sorted(list(model_presets.keys()))})
+            merged = load_unbanned_section(_get_primary_section(preset_type))
+            names = _format_preset_names(merged, preset_type)
+            return web.json_response({"success": True, "presets": names})
 
-        target_file = _user_config_file
-        if not target_file:
-            return web.json_response({"error": "User config file path is invalid"}, status=500)
+        sections = _get_sections(preset_type)
+        main_file = get_config_files().get('main')
+        
+        # Проверяем, не занято ли новое имя
+        for sec in sections:
+            existing = get_preset_value(sec, new_name)
+            if existing is not None:
+                return web.json_response({"error": f"Preset '{new_name}' already exists"}, status=409)
 
-        # -----------------------------------------------------------
-        # ШАГ 1 (как в delete): ищем старый пресет во ВСЕХ файлах
-        # и удаляем его оттуда. Одновременно запоминаем config,
-        # чтобы перенести его в user_file под новым именем.
-        # -----------------------------------------------------------
-        files_to_check = []
-        user_file = _user_config_file
-        if user_file and os.path.exists(user_file):
-            files_to_check.append(user_file)
-        for key, path in get_config_files().items():
-            if path and os.path.exists(path) and path != user_file:
-                files_to_check.append(path)
+        # 1. Удаляем старый (или баним)
+        _delete_unified_preset(old_name, sections, main_file)
 
-        found_config = None
-        deleted_from_any = False
+        # 2. Сохраняем новый с теми же данными
+        if preset_type == "prompt":
+            values_to_save = {
+                "_system_prompts": config.get("system_prompt", ""),
+                "_user_prompt_template": config.get("user_prompt_template", "")
+            }
+        else:
+            values_to_save = {
+                "_model_presets": config
+            }
+        
+        _save_unified_preset(new_name, values_to_save)
 
-        for file_path in files_to_check:
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    file_data = json.load(f)
-
-                if "_model_presets" in file_data and old_name in file_data["_model_presets"]:
-                    # Запоминаем конфиг (один раз достаточно — они идентичны)
-                    if found_config is None:
-                        found_config = file_data["_model_presets"][old_name]
-
-                    # Удаляем старое имя
-                    del file_data["_model_presets"][old_name]
-                    with open(file_path, 'w', encoding='utf-8') as f:
-                        json.dump(file_data, f, indent=2, ensure_ascii=False)
-                    deleted_from_any = True
-                    print(f"[SimpleQwenVL] Rename: removed '{old_name}' from {file_path}")
-
-            except PermissionError:
-                print(f"[SimpleQwenVL] Permission denied: cannot modify {file_path}")
-                continue
-            except Exception as e:
-                print(f"[SimpleQwenVL] Error processing {file_path}: {e}")
-                continue
-
-        if not deleted_from_any:
-            return web.json_response({"error": f"Preset '{old_name}' not found"}, status=404)
-
-        # -----------------------------------------------------------
-        # ШАГ 2 (как в save): кладём конфиг в user_file под новым именем
-        # -----------------------------------------------------------
-        with open(target_file, 'r', encoding='utf-8') as f:
-            user_data = json.load(f)
-
-        if "_model_presets" not in user_data:
-            user_data["_model_presets"] = {}
-
-        # Проверка: если пресет с новым именем уже есть — отказываемся,
-        # чтобы не затереть чужую работу. (Если хотите перезапись — уберите эту проверку.)
-        if new_name in user_data["_model_presets"]:
-            return web.json_response(
-                {"error": f"Preset '{new_name}' already exists"},
-                status=409
-            )
-
-        user_data["_model_presets"][new_name] = found_config
-
-        with open(target_file, 'w', encoding='utf-8') as f:
-            json.dump(user_data, f, indent=2, ensure_ascii=False)
-
-        # -----------------------------------------------------------
-        # ШАГ 3: общий финал (как у вас в save/delete)
-        # -----------------------------------------------------------
-        invalidate_cache()
-
-        model_presets = load_cached_section('_model_presets')
-        names = sorted(list(model_presets.keys()))
-
+        merged = load_unbanned_section(_get_primary_section(preset_type))
+        names = _format_preset_names(merged, preset_type)
         return web.json_response({"success": True, "presets": names})
-
     except Exception as e:
         print(f"[SimpleQwenVL] Rename preset error: {e}")
         return web.json_response({"error": str(e)}, status=500)
 
 # ------------------------------------------------------------------
-# Заглушка для не-Windows систем
+# Заглушка open_file_dialog для не-Windows систем
 # ------------------------------------------------------------------
 def open_file_dialog(title="Select File", initial_dir="", filter_str=None):
     print("[SimpleQwenVL] File dialog is only supported on Windows.")
@@ -1365,9 +1392,9 @@ async def open_file_dialog_endpoint(request):
         print(f"[SimpleQwenVL] File selection error ({kind}): {e}")
         return web.json_response({"path": None, "error": str(e)})
 
-##########################
-## Старый конфигуратор! ##
-##########################
+# ------------------------------------------------------------------
+# Старый конфигуратор (legacy)
+# ------------------------------------------------------------------
 
 GGML_TYPES_OLD = {
     "F32": 0,

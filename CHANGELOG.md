@@ -1,4 +1,6 @@
 # Nightly
+- Fix bugs
+- Added new configurator `🌐 System Preset Config (Advanced)`
 - Fix default value
 - New design for `🌐 LLM Config (Advanced)`
 - Added new configurator `🌐 LLM Config (Advanced)`

@@ -98,7 +98,6 @@ def get_config_files():
     files['main'] = os.path.join(current_dir, "system_prompts.json")
     files['user_legacy'] = os.path.join(current_dir, "system_prompts_user.json")
     
-    # Теперь _user_config_file гарантированно содержит путь (или None, если была ошибка)
     if _user_config_file and os.path.exists(_user_config_file):
         files['user'] = _user_config_file
     
@@ -165,6 +164,11 @@ def _update_cache_if_needed():
 def load_cached_section(section_name: str) -> Dict:
     cache = _update_cache_if_needed()
     return cache.get(section_name, {}).copy()
+
+def load_unbanned_section(section_name: str) -> dict:
+    """Возвращает объединённую секцию из кэша, исключая записи "BANNED"."""
+    raw = load_cached_section(section_name)
+    return {k: v for k, v in raw.items() if v != "BANNED"}
 
 # ========== Вспомогательные функции ==========
 def clear_memory(gccollect = False, debug = False):
@@ -784,15 +788,17 @@ class SimpleQwen3VL_GGUF_Node:
     @classmethod
     def INPUT_TYPES(cls):
         try:
-            model_presets = ["None"] + list(load_cached_section('_model_presets').keys())
-            system_presets = ["None"] + list(load_cached_section('_system_prompts').keys())
+            model_presets = load_unbanned_section('_model_presets')
+            model_presets_names = ["None"] + sorted(model_presets.keys())
+            system_presets = load_unbanned_section('_system_prompts')
+            system_prompts_names = ["None"] + list(system_presets.keys())
         except:
-            model_presets = ["None"]
-            system_presets = ["None"]
+            model_presets_names = ["None"]
+            system_prompts_names = ["None"]
         return {
             "required": {
-                "model_preset": (model_presets, {"default": model_presets[0]}),
-                "system_preset": (system_presets, {"default": system_presets[0]}),
+                "model_preset": (model_presets_names, {"default": model_presets_names[0]}),
+                "system_preset": (system_prompts_names, {"default": system_prompts_names[0]}),
                 "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
                 "seed": ("INT", {"default": 42}),
                 "unload_all_models": ("BOOLEAN", {"default": False}),

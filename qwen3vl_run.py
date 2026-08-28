@@ -10,6 +10,7 @@ import numpy as np
 import tempfile
 import traceback
 from PIL import Image
+from typing import List, Optional, Any
 
 from pathlib import Path
 current_dir = str(Path(__file__).parent)
@@ -25,6 +26,10 @@ _model_caches = {
     "save2":      {"llm": None, "hash": None},
     "save3":      {"llm": None, "hash": None},
 }
+
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
 
 def _norm_str(value, none_is_empty=True):
     """
@@ -64,6 +69,89 @@ def _norm_default(value, default):
     except Exception:
         pass
     return value
+
+def _parse_strings_list(value):
+    """
+    Parse stop sequences from widget string.
+    Accepts:
+      - JSON list with double quotes: '["a","b"]'
+      - JSON-like with single quotes:  "['a','b']"
+      - Comma-separated:               'a,b' or '"a","b"' or "'a','b'"
+    Returns list of clean strings (empty list if no value).
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(x).strip().strip('\'"') for x in value if str(x).strip()]
+        
+    s = str(value).strip()
+    if not s:
+        return []
+    
+    # Попытка 1: Валидный JSON с двойными кавычками
+    if s.startswith("["):
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, list):
+                return [str(x).strip().strip('\'"') for x in parsed if str(x).strip()]
+            return [str(parsed).strip().strip('\'"')]
+        except Exception:
+            pass
+            
+        # Попытка 2: JSON-подобный с одинарными кавычками ['a','b']
+        try:
+            fixed = s.replace("'", '"')
+            parsed = json.loads(fixed)
+            if isinstance(parsed, list):
+                return [str(x).strip() for x in parsed if str(x).strip()]
+        except Exception:
+            pass
+            
+        # Попытка 3: Убираем внешние скобки и парсим как CSV
+        if s.startswith("[") and s.endswith("]"):
+            s = s[1:-1].strip()
+            if not s:
+                return []
+    
+    # Fallback: CSV с очисткой от кавычек и пробелов
+    return [x.strip().strip('\'"') for x in s.split(",") if x.strip().strip('\'"')]
+
+def _parse_float_list(value):
+    """
+    Parse tensor_split-like list.
+    Accepts: '[0.7,0.3]' or '0.7,0.3'
+    """
+    if value is None:
+        return []
+    if isinstance(value, list):
+        try:
+            return [float(x) for x in value]
+        except (ValueError, TypeError):
+            return []
+            
+    s = str(value).strip()
+    if not s:
+        return []
+        
+    if s.startswith("["):
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, list):
+                return [float(x) for x in parsed]
+        except Exception:
+            pass
+            
+        # Убираем внешние скобки
+        if s.startswith("[") and s.endswith("]"):
+            s = s[1:-1].strip()
+            if not s:
+                return []
+    
+    # CSV
+    try:
+        return [float(x.strip()) for x in s.split(",") if x.strip()]
+    except (ValueError, TypeError):
+        return []
 
 def build_prompt(template: str, system: str, user: str):
     # 1. Заменяем плейсхолдеры через .replace() (безопасно для { в токенах)
@@ -531,7 +619,7 @@ def _inference(config):
                     "offload_kqv": config.get("offload_kqv", True),
                 }
 
-                tensor_split = config.get("tensor_split")
+                tensor_split = _parse_float_list(config.get("tensor_split"))
                 if tensor_split:
                     llm_kwargs["tensor_split"] = tensor_split
 
@@ -654,41 +742,38 @@ def _inference(config):
                 "top_k": config.get("top_k", 0),
             }
 
-            custom_stop = config.get("stop")
+            custom_stop = _parse_strings_list(config.get("stop"))
             if custom_stop:
                 completion_kwargs["stop"] = custom_stop
 
             # Нежелательные слова 
-            words_to_ban = config.get("words_to_ban", "")
-            if words_to_ban and isinstance(words_to_ban, str):
+            words_to_ban = _parse_strings_list(config.get("words_to_ban"))
+            if words_to_ban:
+                banned_token_ids = []
+                llm = current_cache["llm"]
                 
-                # Разбиваем по запятой
-                words_list = [word.strip() for word in words_to_ban.split(",") if word.strip()]
-                
-                if words_list:
-                    banned_token_ids = []
-                    llm = current_cache["llm"]
-                    
-                    for word in words_list:
-                        # Токенизаторы часто кодируют слово с пробелом в начале как отдельный токен, добавляем оба варианта
-                        variants = [word, " " + word]
+                for word in words_to_ban:
+                    # Убираем лишние пробелы по краям самого слова, чтобы избежать "  hello"
+                    word = word.strip()
+                    if not word:
+                        continue
                         
-                        for variant in variants:
-                            try:
-                                tokens = llm.tokenize(variant.encode('utf-8'), add_bos=False)
-                                banned_token_ids.extend(tokens)
-                            except Exception as e:
-                                print(f"[LogitBias Warning] Failed to tokenize '{variant}': {e}")
+                    # Уникальные варианты для токенизации
+                    variants = {word}
+                    variants.add(" " + word)  # Пробел для BPE
+                    
+                    for variant in variants:
+                        try:
+                            tokens = llm.tokenize(variant.encode('utf-8'), add_bos=False)
+                            banned_token_ids.extend(tokens)
+                        except Exception as e:
+                            print(f"[LogitBias Warning] Failed to tokenize '{variant}': {e}")
 
-                    # Удаляем дубликаты и убеждаемся, что ключи - это целые числа (int)
-                    unique_banned_ids = list(set(banned_token_ids))
-                    
-                    # Создаем словарь logit_bias, -100.0 в llama.cpp интерпретируется как полный запрет
-                    logit_bias_dict = {int(token_id): -100.0 for token_id in unique_banned_ids}
-                    
-                    if logit_bias_dict:
-                        completion_kwargs["logit_bias"] = logit_bias_dict
-                        #print(f"[LogitBias] Tokens are banned: {logit_bias_dict}") 
+                unique_banned_ids = list(set(banned_token_ids))
+                logit_bias_dict = {int(token_id): -100.0 for token_id in unique_banned_ids}
+                
+                if logit_bias_dict:
+                    completion_kwargs["logit_bias"] = logit_bias_dict
 
             #present_penalty/presence_penalty issue
             present_penalty = config.get("presence_penalty", config.get("present_penalty", 0.0))

@@ -11,7 +11,7 @@ from PIL import Image, ImageFilter
 from PIL.PngImagePlugin import PngInfo 
 import folder_paths
 
-from .qwen3vl_node import load_cached_section,unload_model,CATEGORY_NAME
+from .qwen3vl_node import load_cached_section,load_unbanned_section,unload_model,CATEGORY_NAME
 
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
@@ -22,13 +22,13 @@ class MasterPromptLoader:
     @classmethod
     def INPUT_TYPES(cls):
         try:
-            system_prompts = load_cached_section('_system_prompts')
-            system_preset_names = list(system_prompts.keys()) or ["None"]
+            system_presets = load_unbanned_section('_system_prompts')
+            system_prompts_names = ["None"] + list(system_presets.keys())
         except:
-            system_preset_names = ["None"]
+            system_prompts_names = ["None"]
         return {
             "required": {
-                "system_preset": (system_preset_names, {"default": system_preset_names[0]}),
+                "system_preset": (system_prompts_names, {"default": system_prompts_names[0]}),
             },
             "optional": {
                 "system_prompt_opt": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
