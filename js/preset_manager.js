@@ -373,7 +373,7 @@ function convertValue(fieldName, value, widget) {
     if (Array.isArray(value)) {
         return JSON.stringify(value);
     }
-    
+
     switch (fieldName) {
         case "split_mode":
             if (typeof value === "number" && SPLIT_MODE_REVERSE[value]) return SPLIT_MODE_REVERSE[value];
@@ -622,10 +622,31 @@ async function onImportJson(node, combo) {
                 return false;
             }
 
-            // 1. Применяем конфиг, но ЗАПРЕЩАЕМ обновлять baseline
+            // Сбрасываем все виджеты в дефолтные значения
+            const defaults = node._widgetDefaults || {};
+            for (const w of node.widgets) {
+                // Пропускаем служебные виджеты и заголовки групп
+                if (w.skipSerialize) continue;
+                if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
+                if (GROUP_HEADERS.includes(w.name)) continue;
+                if (w.type === "button") continue;
+                
+                if (w.name === "extra") {
+                    w.value = "";
+                    continue;
+                }
+
+                // Сбрасываем значение в дефолт
+                if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
+                    w.value = convertValue(w.name, defaults[w.name], w);
+                }
+            }
+            // =====================================================================
+
+            // 2. Применяем импортированный конфиг поверх сброшенных дефолтов
             applyPreset(node, config, false);
-             
-            // 2. Cравниваем виджеты с текущим baseline
+
+            // 3. Cравниваем виджеты с текущим baseline (логика dirty state)
             const currentPresetName = node.widgets.find(w => w.name === "model_preset")?.value;
             if (currentPresetName && currentPresetName !== "None") {
                 node._dirty = node.widgets.some(w =>
@@ -638,7 +659,6 @@ async function onImportJson(node, combo) {
                 );
                 if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
             }
-            
             console.log('[Configurator] JSON imported successfully, dirty state:', node._dirty);
             return true;
         } catch (e) {
