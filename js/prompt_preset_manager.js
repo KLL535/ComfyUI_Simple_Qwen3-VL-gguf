@@ -110,9 +110,10 @@ app.registerExtension({
                     this._saveButton = saveButton;
                     this._updateSaveButtonStyle = () => {
                         if (this._saveButton) {
-                            this._saveButton.style.background = this._dirty ? "#e74c3c" : "#2a2a2a";
-                            this._saveButton.style.color = this._dirty ? "#ffffff" : "#cccccc";
-                            this._saveButton.style.borderColor = this._dirty ? "#e74c3c" : "#444";
+                            // Если есть изменения (dirty) — красный, иначе — цвета виджетов ComfyUI
+                            this._saveButton.style.background = this._dirty ? "#e74c3c" : "var(--comfy-input-bg)";
+                            this._saveButton.style.color = this._dirty ? "#ffffff" : "var(--input-text)";
+                            this._saveButton.style.borderColor = this._dirty ? "#e74c3c" : "var(--border-color)";
                         }
                     };
                     this._updateSaveButtonStyle();
@@ -444,30 +445,38 @@ function createPresetControlsWidget(hostNode, presetCombo) {
         button.textContent = btn.label;
         if (btn.dataAction) button.dataset.action = btn.dataAction;
         button.style.cssText = `
-            flex: 1; height: 22px !important; margin-top: 1px; background: #2a2a2a;
-            color: #cccccc; border: 1px solid #444; border-radius: 3px; padding: 0 !important;
+            flex: 1; height: 22px !important; margin-top: 1px; background: var(--comfy-input-bg);
+            color: var(--input-text); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 !important;
             cursor: pointer; font-size: 11px; font-family: sans-serif; display: flex !important;
             align-items: center !important; justify-content: center !important; line-height: 1 !important;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none;
         `;
+        
+        // Hover эффект — все кнопки становятся синими, КРОМЕ Save в состоянии dirty
         button.addEventListener("mouseenter", () => { 
-            if (btn.dataAction !== SAVE_BUTTON_ACTION) {
-                button.style.background = "#4a90e2"; 
-                button.style.color = "#ffffff"; 
-                button.style.borderColor = "#4a90e2"; 
-            }
+            // Если это Save и она красная (dirty) — не меняем
+            if (btn.dataAction === SAVE_BUTTON_ACTION && hostNode._dirty) return;
+            // Иначе все кнопки становятся синими при hover
+            button.style.background = "#4a90e2"; 
+            button.style.color = "#ffffff"; 
+            button.style.borderColor = "#4a90e2"; 
         });
+        
+        // Возврат к исходному состоянию
         button.addEventListener("mouseleave", () => {
             if (btn.dataAction === SAVE_BUTTON_ACTION && hostNode._dirty) {
+                // Save в состоянии dirty — красная
                 button.style.background = "#e74c3c";
                 button.style.color = "#ffffff";
                 button.style.borderColor = "#e74c3c";
             } else {
-                button.style.background = "#2a2a2a";
-                button.style.color = "#cccccc";
-                button.style.borderColor = "#444";
+                // Все остальные (включая Save без dirty) — стандартный цвет
+                button.style.background = "var(--comfy-input-bg)";
+                button.style.color = "var(--input-text)";
+                button.style.borderColor = "var(--border-color)";
             }
         });
+        
         button.addEventListener("mousedown", (e) => { e.preventDefault(); button.style.opacity = "0.7"; });
         button.addEventListener("mouseup", () => { button.style.opacity = "1"; });
         button.addEventListener("click", (e) => { e.stopPropagation(); btn.action(); });
@@ -481,10 +490,10 @@ function createPresetControlsWidget(hostNode, presetCombo) {
 
 function createGroupTogglePanel(hostNode) {
     const element = document.createElement("div");
-    element.style.cssText = `display: flex; flex-direction: row; gap: 3px; margin: 0 !important; padding: 2px 0 !important; width: 100%; height: 24px !important; box-sizing: border-box; overflow: hidden;`;
+    element.style.cssText = `display: flex; flex-direction: row; gap: 4px; margin: 0 !important; padding: 0 !important; width: 100%; height: 24px !important; box-sizing: border-box; overflow: hidden;`;
     const groups = [
-        { icon: "📝", name: "📝 System Prompt", title: "System Prompt" },
-        { icon: "📝", name: "📝 User Prompt Template", title: "User Prompt Template" },
+        { icon: "📝 System", name: "📝 System Prompt", title: "System Prompt" },
+        { icon: "📝 User", name: "📝 User Prompt Template", title: "User Prompt Template" },
     ];
     const buttons = [];
     groups.forEach((grp) => {
@@ -494,22 +503,29 @@ function createGroupTogglePanel(hostNode) {
         button.dataset.groupName = grp.name;
         const toggleWidget = hostNode.widgets.find(w => w.name === grp.name);
         const isActive = toggleWidget ? !!toggleWidget.value : false;
+        
+        // Функция применения стилей
         const applyStyle = (active) => {
-            button.style.background = active ? "#4a90e2" : "#2a2a2a";
-            button.style.color = active ? "#ffffff" : "#cccccc";
-            button.style.borderColor = active ? "#4a90e2" : "#444";
+            // active=true: синий фон (#4a90e2), белый текст (#ffffff), синий бордер (#4a90e2) — НЕ МЕНЯЕМ
+            // active=false: фон ComfyUI, текст ComfyUI, бордер ComfyUI
+            button.style.background = active ? "#4a90e2" : "var(--comfy-input-bg)";
+            button.style.color = active ? "#ffffff" : "var(--input-text)";
+            button.style.borderColor = active ? "#4a90e2" : "var(--border-color)";
         };
+        
+        // Базовые стили кнопки
         button.style.cssText = `
-            flex: 1; height: 22px !important; margin-top: 1px; 
-            background: #2a2a2a;
-            color: #cccccc; border: 1px solid #444; border-radius: 3px; padding: 0 !important;
-            cursor: pointer; font-size: 13px; font-family: sans-serif; display: flex !important;
+            flex: 1; height: 22px !important; margin-top: 1px; background: var(--comfy-input-bg);
+            color: var(--input-text); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 !important;
+            cursor: pointer; font-size: 11px; font-family: sans-serif; display: flex !important;
             align-items: center !important; justify-content: center !important; line-height: 1 !important;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none; transition: all 0.15s;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none;
         `;
         applyStyle(isActive);
         button._isActive = isActive;
-        button.addEventListener("mouseenter", () => { if (!button._isActive) button.style.background = "#3a3a3a"; });
+        
+        // Hover эффект — при наведении на неактивную кнопку
+        button.addEventListener("mouseenter", () => { if (!button._isActive) { button.style.background = "var(--border-color)"; } });
         button.addEventListener("mouseleave", () => { applyStyle(button._isActive); });
         button.addEventListener("mousedown", (e) => { e.preventDefault(); });
         button.addEventListener("click", (e) => {
@@ -525,9 +541,12 @@ function createGroupTogglePanel(hostNode) {
         buttons.push(button);
         element.appendChild(button);
     });
+    
     const panelWidget = hostNode.addDOMWidget("group_toggle_panel", "vf_group_toggle_panel", element, { serialize: false, hideOnZoom: true });
     panelWidget.skipSerialize = true;
     panelWidget.computeSize = function(width) { return [width, 40]; };
+    
+    // Синхронизация состояния кнопок
     panelWidget.syncState = () => {
         buttons.forEach((btn, i) => {
             const grp = groups[i];
@@ -535,9 +554,11 @@ function createGroupTogglePanel(hostNode) {
             if (!tw) return;
             btn._isActive = !!tw.value;
             const applyStyle = (active) => {
-                btn.style.background = active ? "#4a90e2" : "#2a2a2a";
-                btn.style.color = active ? "#ffffff" : "#cccccc";
-                btn.style.borderColor = active ? "#4a90e2" : "#444";
+                // active=true: синий (#4a90e2), белый (#ffffff), синий (#4a90e2) — НЕ МЕНЯЕМ
+                // active=false: фон ComfyUI, текст ComfyUI, бордер ComfyUI
+                btn.style.background = active ? "#4a90e2" : "var(--comfy-input-bg)";
+                btn.style.color = active ? "#ffffff" : "var(--input-text)";
+                btn.style.borderColor = active ? "#4a90e2" : "var(--border-color)";
             };
             applyStyle(btn._isActive);
         });
