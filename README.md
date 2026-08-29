@@ -642,6 +642,8 @@ Allows select a user prompt from templates:
 For example (for 16 Gb VRAM):
 `Qwen3.8-27B-ABLITERATED-Q3_K_S.gguf` + `mmproj-BF16.gguf`
 
+> 💡 **WARNING:** Parameters not specified in this list have **default** values. See `Model Configs` sections.
+
 ```json
 {
     "model_path": "I:\\LLM\\qwen\\Qwen3.8-27B\\Qwen3.8-27B-ABLITERATED-Q3_K_S.gguf",
@@ -679,29 +681,21 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
 > 💡 **TIP:** The result will only be in Chinese.
 
 ```json
-        "Ernie-Image-Prompt-Enhancer": {
-            "model_path": "H:\\LLM3\\ernie\\Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM3\\ernie\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 1024,
-            "ctx": 4096,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "gpu_layers": -1,
-            "temperature": 0.8,
-            "top_p": 0.8,
-            "min_p": 0.05,
-            "top_k": 64,
-            "repeat_penalty": 1.05,
-            "chat_handler": "llava15", 
-            "script": "qwen3vl_run.py",
-            "raw_mode": true,
-            "prompt_template": "[SYSTEM_PROMPT]{system}[/SYSTEM_PROMPT][INST]{user}{images}[/INST]",
-            "stop": ["</s>", "[INST]", "[/INST]"],
-            "debug": true,
-            "verbose": false
-        },
+{
+    "model_path": "H:\\LLM3\\ernie\\Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf",
+    "mmproj_path": "H:\\LLM3\\ernie\\mmproj-BF16.gguf",
+    "n_ctx": 4096,
+    "temperature": 0.8,
+    "top_p": 0.8,
+    "top_k": 64,
+    "repeat_penalty": 1.05,
+    "chat_handler": "llava15",
+    "raw_mode": true,
+    "prompt_template": "[SYSTEM_PROMPT]{system}[/SYSTEM_PROMPT][INST]{user}{images}[/INST]",
+    "stop": "[\"</s>\",\"[INST]\",\"[/INST]\"]",
+    "image_min_tokens": 1024,
+    "image_max_tokens": 1024
+}
 ```
 
 </details>
@@ -713,29 +707,18 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
 - https://huggingface.co/lmstudio-community/gemma-4-12B-it-QAT-GGUF
 
 ```json
-        "Gemma-4-12B": {
-            "model_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-QAT-Q4_0.gguf",
-            "mmproj_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\mmproj-gemma-4-12B-it-QAT-BF16.gguf",
-            "max_tokens": 10240,
-            "n_ctx": 12288,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "split_mode": 0,
-            "temperature": 0.5,
-            "top_p": 0.9,
-            "min_p": 0.05,
-            "repeat_penalty": 1.05,
-            "presence_penalty": 0.0,
-            "top_k": 20,
-            "chat_handler": "gemma4",
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "enable_thinking": true,
-            "force_mmproj": false,
-            "verbose": false
-        },
+{
+    "model_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-QAT-Q4_0.gguf",
+    "mmproj_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\mmproj-gemma-4-12B-it-QAT-BF16.gguf",
+    "n_ctx": 12288,
+    "max_tokens": 10240,
+    "temperature": 0.5,
+    "top_p": 0.9,
+    "top_k": 20,
+    "repeat_penalty": 1.05,
+    "chat_handler": "gemma4",
+    "enable_thinking": true
+}
 ```
 
 > 💡 **TIP:** It works well for ideogram4 json. 
@@ -757,30 +740,19 @@ For example: `Hy-MT2-1.8B-Q4_K_M.gguf`
 > 💡 **WARNING:** The model is highly specialized and understands only strictly defined tasks.
 
 ```json
-        "HY-1.8B (translate)": {
-            "model_path": "H:\\LLM3\\Hy-MT2-1.8B-Q4_K_M.gguf",
-            "raw_mode": true,
-            "prompt_template": "<｜hy_begin▁of▁sentence｜>Translate the following segment into {system}, without additional explanation.<｜hy_place▁holder▁no▁3｜><｜hy_User｜>{user}<｜hy_Assistant｜>",
-            "stop": [ "<｜hy_place▁holder▁no▁2｜>" ],
-            "system_prompt_default": "Russian",
-            "max_tokens": 2048,
-            "top_k": 20,
-            "top_p": 0.6,
-            "temperature": 0.7,   
-            "repeat_penalty": 1.05,
-            "min_p": 0.05,   
-            "script": "qwen3vl_run.py",
-            "n_ctx": 4096,
-            "n_batch": 4096,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "use_mmap": true,
-            "use_mlock": false,
-            "offload_kqv": true,
-            "verbose": false,
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM3\\Hy-MT2-1.8B-Q4_K_M.gguf",
+    "n_ctx": 4096,
+    "n_batch": 4096,
+    "use_mmap": true,
+    "top_p": 0.6,
+    "top_k": 20,
+    "repeat_penalty": 1.05,
+    "system_prompt_default": "Russian",
+    "raw_mode": true,
+    "prompt_template": "<｜hy_begin▁of▁sentence｜>Translate the following segment into {system}, without additional explanation.<｜hy_place▁holder▁no▁3｜><｜hy_User｜>{user}<｜hy_Assistant｜>",
+    "stop": "[\"<｜hy_place▁holder▁no▁2｜>\"]"
+}
 ```
 
 - https://huggingface.co/tencent/Hy-MT2-7B-GGUF
@@ -788,30 +760,19 @@ For example: `Hy-MT2-1.8B-Q4_K_M.gguf`
 For example: `Hy-MT2-7B-Q4_K_M.gguf`
 
 ```
-"HY-7B (translate)": {
-            "model_path": "H:\\LLM3\\Hy-MT2-7B-Q4_K_M.gguf",
-            "raw_mode": true,
-            "prompt_template": "<|startoftext|>Translate the following segment into {system}, without additional explanation.<|extra_4|>{user}<|extra_0|>",
-            "stop": [ "<|eos|>" ],
-            "system_prompt_default": "Russian",
-            "max_tokens": 2048,
-            "top_k": 20,
-            "top_p": 0.6,
-            "temperature": 0.7,   
-            "repeat_penalty": 1.05,
-            "min_p": 0.05,   
-            "script": "qwen3vl_run.py",
-            "n_ctx": 4096,
-            "n_batch": 4096,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "use_mmap": true,
-            "use_mlock": false,
-            "offload_kqv": true,
-            "verbose": false,
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM3\\Hy-MT2-7B-Q4_K_M.gguf",
+    "n_ctx": 4096,
+    "n_batch": 4096,
+    "use_mmap": true,
+    "top_p": 0.6,
+    "top_k": 20,
+    "repeat_penalty": 1.05,
+    "system_prompt_default": "Russian",
+    "raw_mode": true,
+    "prompt_template": "<|startoftext|>Translate the following segment into {system}, without additional explanation.<|extra_4|>{user}<|extra_0|>",
+    "stop": "[\"<|eos|>\"]"
+}
 ```
 
 - https://huggingface.co/mradermacher/Hy-MT2-30B-A3B-GGUF
@@ -821,31 +782,20 @@ For example: `Hy-MT2-30B-A3B.Q4_K_M.gguf`
 > 💡 **TIP:** "n_cpu_moe": 12 to 16G VRAM
 
 ```
-"HY-30B-A3B (translate)": {
+{
     "model_path": "H:\\LLM3\\Hy-MT2-30B-A3B-Q4_K_M.gguf",
-    "raw_mode": true,
-    "prompt_template": "<|start_header_id|>user<|end_header_id|>\\n\\nTranslate the following segment into {system}, without additional explanation.\\n\\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\\n\\n",
-    "stop": [ "<|eot_id|>", "<|start_header_id|>" ],
-    "system_prompt_default": "Russian",
-    "max_tokens": 2048,
-    "top_k": 20,
-    "top_p": 0.6,
-    "temperature": 0.3,
-    "repeat_penalty": 1.05,
-    "min_p": 0.05,   
-    "script": "qwen3vl_run.py",
     "n_ctx": 4096,
     "n_batch": 4096,
-    "n_ubatch": 512,
-    "n_gpu_layers": -1,
+    "temperature": 0.3,
+    "top_p": 0.6,
+    "top_k": 20,
+    "repeat_penalty": 1.05,
     "n_cpu_moe": 12,
-    "n_threads": 8,
-    "use_mmap": false,
-    "use_mlock": false,
-    "offload_kqv": true,
-    "verbose": false,
-    "debug": true
-},
+    "system_prompt_default": "Russian",
+    "raw_mode": true,
+    "prompt_template": "<|start_header_id|>user<|end_header_id|>\\n\\nTranslate the following segment into {system}, without additional explanation.\\n\\n{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\\n\\n",
+    "stop": "[\"<|eot_id|>\",\"<|start_header_id|>\"]"
+}
 ```
 
 </details>
@@ -884,90 +834,54 @@ Settings for `n_cpu_moe` offloading:
 > 💡 **Tip:** `split_mode = 0` - Provides better speed on a single GPU, eliminating performance drops after launch.
 
 ```json
-        "Qwen3.6-35B-A3B-Q4_K_M": {
-            "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\Qwen3.6-35B-A3B-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\mmproj-Qwen3.6-35B-A3B-BF16.gguf",
-            "max_tokens": 4096,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "n_cpu_moe": 20,
-            "use_mmap": true,
-            "split_mode": 0,
-            "temperature": 0.8,
-            "top_p": 0.95,
-            "min_p": 0.05,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "top_k": 40,
-            "chat_handler": "qwen35",
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false
-        },
+{
+    "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\Qwen3.6-35B-A3B-Q4_K_M.gguf",
+    "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-35B-A3B-GGUF\\mmproj-Qwen3.6-35B-A3B-BF16.gguf",
+    "use_mmap": true,
+    "max_tokens": 4096,
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "top_k": 40,
+    "n_cpu_moe": 20,
+    "chat_handler": "qwen35",
+    "enable_thinking": true,
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 ```json
-        "Qwen3.6-35B-A3B-UD-IQ4_XS": {
-            "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
-            "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\mmproj-BF16.gguf",
-            "max_tokens": 4096,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "n_cpu_moe": 16,
-            "use_mmap": true,
-            "split_mode": 0,
-            "temperature": 0.8,
-            "top_p": 0.95,
-            "min_p": 0.05,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "top_k": 40,
-            "chat_handler": "qwen35",
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false
-        },
+{
+    "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\Qwen3.6-35B-A3B-UD-IQ4_XS.gguf",
+    "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-UD\\mmproj-BF16.gguf",
+    "use_mmap": true,
+    "max_tokens": 4096,
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "top_k": 40,
+    "n_cpu_moe": 16,
+    "chat_handler": "qwen35",
+    "enable_thinking": true,
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 ```json
-        "Qwen3.6-35B-A3B-APEX-I-Quality": {
-            "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\Qwen3.6-35B-A3B-APEX-I-Quality.gguf",
-            "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\mmproj.gguf",
-            "max_tokens": 4096,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "n_cpu_moe": 20,
-            "use_mmap": true,
-            "split_mode": 0,
-            "temperature": 0.8,
-            "top_p": 0.95,
-            "min_p": 0.05,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "top_k": 40,
-            "chat_handler": "qwen35",
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false
-        },
+{
+    "model_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\Qwen3.6-35B-A3B-APEX-I-Quality.gguf",
+    "mmproj_path": "H:\\LLM2\\qwen\\Qwen3.6-35B-A3B-APEX\\mmproj.gguf",
+    "use_mmap": true,
+    "max_tokens": 4096,
+    "temperature": 0.8,
+    "top_p": 0.95,
+    "top_k": 40,
+    "n_cpu_moe": 20,
+    "chat_handler": "qwen35",
+    "enable_thinking": true,
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 </details>
@@ -984,29 +898,16 @@ For example:
 Fit in 16 Gb VRAM:
 
 ```json
-        "Qwen3.6-27B-UD-IQ3_XXS": {
-            "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-27B-GGUF\\Qwen3.6-27B-UD-IQ3_XXS.gguf",
-            "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-27B-GGUF\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "split_mode": 0,
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "min_p": 0.05,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "top_k": 40,
-            "chat_handler": "qwen35",
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false
-        },
+{
+    "model_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-27B-GGUF\\Qwen3.6-27B-UD-IQ3_XXS.gguf",
+    "mmproj_path": "H:\\LLM\\lmstudio-community\\Qwen3.6-27B-GGUF\\mmproj-BF16.gguf",
+    "top_p": 0.95,
+    "top_k": 40,
+    "chat_handler": "qwen35",
+    "enable_thinking": true,
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 </details>
@@ -1023,29 +924,18 @@ For example:
 Not fit in 16 Gb VRAM -> Use `n_cpu_moe = 24`:
 
 ```json
-        "NVIDIA-Nemotron-3-Nano-Omni-30B": {
-            "model_path": "H:\\LLM2\\nemotron\\NVIDIA-Nemotron-3-Nano-Omni-30B\\NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_NL.gguf",
-            "mmproj_path": "H:\\LLM2\\nemotron\\NVIDIA-Nemotron-3-Nano-Omni-30B\\mmproj-BF16.gguf",
-            "max_tokens": 4096,
-            "n_ctx": 8192,
-            "n_batch": 8192,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "n_cpu_moe": 24,
-            "split_mode": 0,
-            "temperature": 0.6,
-            "top_p": 0.95,
-            "min_p": 0.05,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "top_k": 40,
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false,
-            "chat_handler": "qwen35"
-        },
+{
+    "model_path": "H:\\LLM2\\nemotron\\NVIDIA-Nemotron-3-Nano-Omni-30B\\NVIDIA-Nemotron-3-Nano-Omni-30B-A3B-Reasoning-UD-IQ4_NL.gguf",
+    "mmproj_path": "H:\\LLM2\\nemotron\\NVIDIA-Nemotron-3-Nano-Omni-30B\\mmproj-BF16.gguf",
+    "n_batch": 8192,
+    "max_tokens": 4096,
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 40,
+    "n_cpu_moe": 24,
+    "chat_handler": "qwen35",
+    "enable_thinking": true
+}
 ```
 
 > 💡 **WARNING:** Chat handler `qwen35` is not compatible with this model. The model will work, but the quality may deteriorate.
@@ -1054,20 +944,20 @@ There is an alternative solution: override the chat template.
 If you only need to process text and/or images, you can use this template overrides:
 Thinking version (add these lines):
 
-```
-            "chat_handler": "llava15",
-            "raw_mode": true,
-            "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n<think>\\n",
-            "stop": ["<|endoftext|>"]
+```json
+    "chat_handler": "llava15",
+    "raw_mode": true,
+    "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n<think>\\n",
+    "stop": "<|endoftext|>"
 ```
 
 Non-thinking version (add these lines):
 
-```
-            "chat_handler": "llava15",
-            "raw_mode": true,
-            "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n",
-            "stop": ["<|endoftext|>"]
+```json
+    "chat_handler": "llava15",
+    "raw_mode": true,
+    "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n",
+    "stop": "<|endoftext|>"
 ```
 
 </details>
@@ -1084,30 +974,17 @@ For example:
 Not fit in 16 Gb VRAM -> set `n_cpu_moe`.
 
 ```json
-        "gemma-4-26B-A4B": {
-            "model_path": "H:\\LLM2\\gemma\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE.gguf",
-            "mmproj_path": "H:\\LLM2\\gemma\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE\\mmproj-BF16.gguf",
-            "max_tokens": 4096,
-            "n_ctx": 4096,
-            "n_batch": 512,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "split_mode": 0,
-            "n_cpu_moe": 10,
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "min_p": 0.05,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "top_k": 40,
-            "chat_handler": "gemma4",
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "enable_thinking": false,
-            "force_mmproj": true,
-            "verbose": false,
-        },
+{
+    "model_path": "H:\\LLM2\\gemma\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE.gguf",
+    "mmproj_path": "H:\\LLM2\\gemma\\Huihui-gemma-4-26B-A4B-it-abliterated-MXFP4_MOE\\mmproj-BF16.gguf",
+    "n_ctx": 4096,
+    "n_batch": 512,
+    "max_tokens": 4096,
+    "top_p": 0.95,
+    "top_k": 40,
+    "n_cpu_moe": 10,
+    "chat_handler": "gemma4"
+}
 ```
 
 </details>
@@ -1126,52 +1003,37 @@ For example:
 Option appeared `enable_thinking": false`, but he doesn't turn off thinking :).
 
 ```json
-        "Gemma4-E4B-IQ4_XS": {
-            "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
-            "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "n_ctx": 8192, 
-            "n_batch": 2048,
-            "n_ubatch": 2048,
-            "n_gpu_layers": -1,
-            "temperature": 1.0, 
-            "top_p": 0.95, 
-            "min_p": 0.01,
-            "repeat_penalty": 1.0,
-            "top_k": 64, 
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false,
-            "enable_thinking": false,
-            "chat_handler": "gemma4" 
-         },
+{
+    "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
+    "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
+    "n_ubatch": 2048,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "min_p": 0.01,
+    "top_k": 64,
+    "repeat_penalty": 1.0,
+    "chat_handler": "gemma4"
+}
 ```
 
 You can write custom `prompt template` and then thinking will turn off.
 
 ```json
-        "Gemma4-E4B-IQ4_XS-custom_template": {
-            "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
-            "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "n_ctx": 8192, 
-            "n_batch": 2048,
-            "n_ubatch": 2048,
-            "n_gpu_layers": -1,
-            "temperature": 1.0, 
-            "top_p": 0.95, 
-            "min_p": 0.01,
-            "repeat_penalty": 1.0,
-            "top_k": 64, 
-            "chat_handler": "gemma4", 
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "raw_mode": true, 
-            "prompt_template": "<|turn>system\n{system}<turn|>\n<|turn>user\n{images}\n{user}<turn|>\n<|turn>model\n",
-            "stop": ["<turn|>", "<eos>", "<|end_of_turn|>"]
-         },
+{
+    "model_path": "H:\\LLM2\\gemma4\\gemma-4-E4B-it-IQ4_XS.gguf",
+    "mmproj_path": "H:\\LLM2\\gemma4\\mmproj-BF16.gguf",
+    "n_ubatch": 2048,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "min_p": 0.01,
+    "top_k": 64,
+    "repeat_penalty": 1.0,
+    "chat_handler": "gemma4",
+    "raw_mode": true,
+    "prompt_template": "<|turn>system\n{system}<turn|>\n<|turn>user\n{images}\n{user}<turn|>\n<|turn>model\n",
+    "stop": "[\"<turn|>\",\"<eos>\",\"<|end_of_turn|>\"]"
+}
 ```
-
 
 </details>
 
@@ -1194,35 +1056,21 @@ An interesting uncensored fine-tuned model for LTX 2.3.
 system_prompt: `none` or `LTX I2V` or `LTX T2V` or `enhance this for video generation`
 
 ```json
-        "sulphur_prompt_enhancer": {
-            "model_path": "H:\\LLM2\\sulphur\\sulphur_prompt_enhancer_model-q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\sulphur\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "temperature": 0.8,
-            "top_p": 0.9,
-            "min_p": 0.05,
-            "top_k": 40,
-            "repeat_penalty": 1.1,
-            "script": "qwen3vl_run.py",
-            "n_ctx": 8192,
-            "n_gpu_layers": -1,
-            "n_threads": 8,
-            "n_batch": 4096,
-            "n_ubatch": 512,
-            "use_mmap": true,
-            "use_mlock": false,
-            "offload_kqv": true,
-            "n_cpu_moe": 0,
-            "chat_handler": "qwen35",
-            "enable_thinking": false,
-            "force_mmproj": false,
-            "verbose": false,
-            "debug": true,
-            "user_prompt_after_content": false,
-            "system_preset_to_user_prompt": true
-        },
+{
+    "model_path": "H:\\LLM2\\sulphur\\sulphur_prompt_enhancer_model-q8_0.gguf",
+    "mmproj_path": "H:\\LLM2\\sulphur\\mmproj-BF16.gguf",
+    "n_batch": 4096,
+    "use_mmap": true,
+    "temperature": 0.8,
+    "top_p": 0.9,
+    "top_k": 40,
+    "chat_handler": "qwen35",
+    "system_preset_to_user_prompt": true,
+    "user_prompt_after_content": false,
+    "force_mmproj": false,
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 </details>
@@ -1247,27 +1095,17 @@ For example:
 > 💡 **Warning:** I couldn't find a compatible chat handler, so I'm using a custom one. 
 
 ```json
-        "Cydonia-24B": {
-            "model_path": "H:\\LLM2\\Cydonia_24b\\Cydonia-24B-v4.3-absolute-heresy.IQ4_XS.gguf",
-            "mmproj_path": "H:\\LLM2\\Cydonia_24b\\mmproj-Mistral-Small-3.1-24B-Instruct-2503-f16.gguf",
-            "max_tokens": 2048,
-            "n_ctx": 8192, 
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7, 
-            "top_p": 0.9,
-            "min_p": 0.02,
-            "repeat_penalty": 1.1,
-            "top_k": 40, 
-            "script": "qwen3vl_run.py",
-            "debug": true,
-            "verbose": false,
-            "chat_handler": "llava15",
-            "raw_mode": true,
-            "prompt_template": "[SYSTEM_PROMPT]{system}[/SYSTEM_PROMPT][INST]{images}{user}[/INST]",
-            "stop": ["</s>", "[INST]", "[SYSTEM_PROMPT]"]
-        },
+{
+    "model_path": "H:\\LLM2\\Cydonia_24b\\Cydonia-24B-v4.3-absolute-heresy.IQ4_XS.gguf",
+    "mmproj_path": "H:\\LLM2\\Cydonia_24b\\mmproj-Mistral-Small-3.1-24B-Instruct-2503-f16.gguf",
+    "top_p": 0.9,
+    "min_p": 0.02,
+    "top_k": 40,
+    "chat_handler": "llava15",
+    "raw_mode": true,
+    "prompt_template": "[SYSTEM_PROMPT]{system}[/SYSTEM_PROMPT][INST]{images}{user}[/INST]",
+    "stop": "[\"</s>\",\"[INST]\",\"[SYSTEM_PROMPT]\"]"
+}
 ```
 
 </details>
@@ -1290,28 +1128,17 @@ And a new option appeared `enable_thinking": true`, - If you want the model to t
 Other parameters should be selected based on recommendations, based on the task, or empirically, as you prefer.
 
 ```json
-        "Qwen3.5-9B-Q4_K_M": {
-            "model_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\Qwen3.5-9B-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3.5-9B-Q4_K_M\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.8,
-            "min_p": 0.05,
-            "repeat_penalty": 1.0,
-            "presence_penalty": 1.5,
-            "top_k": 20,
-            "pool_size": 4194304,
-            "chat_handler": "qwen35",
-            "enable_thinking": true,
-            "script": "qwen3vl_run.py",
-            "debug": true
-        },
+{
+    "model_path": "I:\\LLM\\qwen\\qwen35-9b\\Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "mmproj_path": "I:\\LLM\\qwen\\qwen35-9b\\mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
+    "temperature": 0.5,
+    "top_p": 0.8,
+    "top_k": 20,
+    "repeat_penalty": 1.0,
+    "chat_handler": "qwen35",
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 </details>
@@ -1327,26 +1154,15 @@ For example:
 `Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf` + `Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf`
 
 ```json
-        "Qwen3-VL-8B": {
-            "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 2048,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 40,
-            "repeat_penalty": 1.1,
-            "pool_size": 4194304,
-            "chat_handler": "qwen3",
-            "script": "qwen3vl_run.py",
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.Q8_0.gguf",
+    "mmproj_path": "H:\\LLM2\\Qwen3-VL-8B-Instruct-abliterated-v2.0.mmproj-Q8_0.gguf",
+    "min_p": 0.01,
+    "top_k": 40,
+    "chat_handler": "qwen3",
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
+}
 ```
 
 </details>
@@ -1360,28 +1176,17 @@ For example:
 For example: `gemma-3-12b-it-Q4_K_M.gguf` + `mmproj-BF16.gguf`
 
 ```json
-        "Gemma3-12B-Q4": {
-            "model_path": "H:\\LLM2\\gemma3_12b\\gemma-3-12b-it-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM2\\gemma3_12b\\mmproj-BF16.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 256,
-            "image_max_tokens": 256,
-            "n_ctx": 8192,
-            "n_batch": 4096,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.95,
-            "min_p": 0.01,
-            "top_k": 0,
-            "repeat_penalty": 1.0,
-            "presence_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_handler": "gemma3",
-            "script": "qwen3vl_run.py",
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM2\\gemma3_12b\\gemma-3-12b-it-Q4_K_M.gguf",
+    "mmproj_path": "H:\\LLM2\\gemma3_12b\\mmproj-BF16.gguf",
+    "n_batch": 4096,
+    "top_p": 0.95,
+    "min_p": 0.01,
+    "repeat_penalty": 1.0,
+    "chat_handler": "gemma3",
+    "image_min_tokens": 256,
+    "image_max_tokens": 256
+}
 ```
 
 </details>
@@ -1398,33 +1203,24 @@ For example:
 > 💡 **Tip:** This model likes it when the task is written in `user_prompt`, so we use the option `"system_preset_to_user_prompt": true`. The system prompt is always the same `"system_prompt_default": "You are a helpful image captioner."` - set this text as the default value. The model requires a special prompt template. So, enable `"raw_mode": true`. This will set the new `prompt_template` and `stop` words for this model. With these parameters, the model will stop sticking, communicating with itself (with the assistant) and will strictly follow the prompt.
 
 ```json
-        "Joycaption-Beta": {
-            "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
-            "mmproj_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
-            "max_tokens": 512,
-            "image_min_tokens": 10,
-            "image_max_tokens": 512,
-            "n_ctx": 2048,
-            "n_batch": 1024,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.6,
-            "top_p": 0.9,
-            "min_p": 0.01,
-            "top_k": 40,
-            "repeat_penalty": 1.2,
-            "presence_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_handler": "llava15",
-            "script": "qwen3vl_run.py",
-            "raw_mode": true,
-            "system_preset_to_user_prompt": true,
-            "system_prompt_default": "You are a helpful image captioner.",
-            "prompt_template": "<|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{images}{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
-            "stop": ["<|eot_id|>", "<|end_of_text|>"],
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-hf-llava-q8_0.gguf",
+    "mmproj_path": "H:\\LLM2\\joycaption-beta\\llama-joycaption-beta-one-llava-mmproj-model-f16.gguf",
+    "n_ctx": 2048,
+    "n_batch": 1024,
+    "max_tokens": 512,
+    "temperature": 0.6,
+    "top_p": 0.9,
+    "min_p": 0.01,
+    "top_k": 40,
+    "repeat_penalty": 1.2,
+    "chat_handler": "llava15",
+    "system_prompt_default": "You are a helpful image captioner.",
+    "system_preset_to_user_prompt": true,
+    "raw_mode": true,
+    "prompt_template": "<|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{images}{user}<|eot_id|><|start_header_id|>assistant<|end_header_id|>",
+    "stop": "[\"<|eot_id|>\",\"<|end_of_text|>\"]"
+}
 ```
 
 </details>
@@ -1439,31 +1235,19 @@ For example:
 `Ministral-3-14B-Instruct-2512-Q4_K_M.gguf` + `Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf`
 
 ```json
-        "Ministral-3-14B": {
-            "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
-            "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
-            "max_tokens": 2048,
-            "image_min_tokens": 1024,
-            "image_max_tokens": 1024,
-            "n_ctx": 8192,
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.3,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 40,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_handler": "llava15", 
-            "script": "qwen3vl_run.py",
-            "raw_mode": true,
-            "prompt_template": "[INST]{system}\\n\\n{images}{user}[/INST]",
-            "stop": ["</s>", "[INST]", "[/INST]"],
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-Q4_K_M.gguf",
+    "mmproj_path": "H:\\LLM2\\Ministral-3-14B-Instruct-2512-BF16-mmproj.gguf",
+    "temperature": 0.3,
+    "min_p": 0.01,
+    "top_k": 40,
+    "chat_handler": "llava15",
+    "raw_mode": true,
+    "prompt_template": "[INST]{system}\\n\\n{images}{user}[/INST]",
+    "stop": "[\"</s>\",\"[INST]\",\"[/INST]\"]",
+    "image_min_tokens": 1024,
+    "image_max_tokens": 1024
+}
 ```
 
 </details>
@@ -1477,25 +1261,15 @@ For example:
 For example: `Mistral-Nemo-Instruct-2407-Q8_0.gguf`
 
 ```json
-        "Mistral-Nemo-Instruct-2407-Q8(text)": {
-            "model_path": "H:\\LLM2\\Mistral-Nemo-Instruct-2407-Q8_0.gguf",
-            "max_tokens": 1536,
-            "n_ctx": 8192,                      
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.3,       
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 40,
-            "repeat_penalty": 1.1,
-            "presence_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_format": "mistral-instruct",   
-            "script": "qwen3vl_run.py",
-            "debug": true
-        },
+{
+    "model_path": "H:\\LLM2\\Mistral-Nemo-Instruct-2407-Q8_0.gguf",
+    "max_tokens": 1536,
+    "temperature": 0.3,
+    "min_p": 0.01,
+    "top_k": 40,
+    "chat_format": "mistral-instruct",
+    "force_mmproj": false
+}
 ```
 
 </details>
@@ -1509,25 +1283,13 @@ For example: `Mistral-Nemo-Instruct-2407-Q8_0.gguf`
 For example: `Qwen3-4b-Z-Engineer-V2.gguf`
 
 ```json
-        "Qwen3-4b-Z-Engineer-V2(text)": {
-            "model_path": "H:\\LLM2\\Qwen3-4b-Z-Engineer-V2.gguf",
-            "max_tokens": 2048,
-            "n_ctx": 4096,                     
-            "n_batch": 2048,
-            "n_ubatch": 512,
-            "n_gpu_layers": -1,
-            "temperature": 0.7,
-            "top_p": 0.92,
-            "min_p": 0.01,
-            "top_k": 0,
-            "repeat_penalty": 1.1,          
-            "presence_penalty": 0.0,
-            "frequency_penalty": 0.0,
-            "pool_size": 4194304,
-            "chat_format": "qwen3",
-            "script": "qwen3vl_run.py",        
-            "debug": true
-        },
+{
+    "model_path": "I:\\LLM\\qwen\\Qwen3-4b-Z-Engineer-V2.gguf",
+    "n_ctx": 4096,
+    "min_p": 0.01,
+    "chat_format": "qwen",
+    "force_mmproj": false
+}
 ```
 
 </details>
@@ -1543,16 +1305,13 @@ A fast encoder that allows you to obtain text embeddings that can then be used f
 For example: `bge-m3-q4_k_m.gguf`
 
 ```json
-        "BGE-M3-Q4_K_M (encoder)": {
-            "model_path": "H:\\LLM2\\bge\\bge-m3-q4_k_m.gguf",
-            "extract_embedding": true,
-            "pooling_type": 1,
-            "n_ctx": 2048,
-            "n_batch": 2048,
-            "n_gpu_layers": -1,
-            "script": "qwen3vl_run.py",
-            "debug": true
-        },
+{
+    "model_path": "I:\\LLM\\encoder\\bge\\bge-m3-q4_k_m.gguf",
+    "n_ctx": 2048,
+    "force_mmproj": false,
+    "extract_embedding": true,
+    "pooling_type": 1
+}
 ```
 
 </details>
@@ -1571,20 +1330,16 @@ For example: `Qwen_3_4b-Q8_0.gguf`
 https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer. 
 
 ```json
-        "Z-Qwen_3_4b-Q8_0 (encoder)": {
-            "model_path": "H:\\webui_forge_cu121_torch231\\webui\\models\\text_encoder\\Qwen_3_4b-Q8_0.gguf",
-            "tokenizer_path": "H:\\LLM2\\Z-Image-Turbo-HF\\tokenizer",
-            "prompt_template": "<|im_start|>user\\n{user}<|im_end|>\\n<|im_start|>assistant\\n"
-            "extract_embedding": true,
-            "convert_emb_to_cond": true,
-            "pooling_type": 0,
-            "embedding_scale": 100,
-            "n_ctx": 2048,
-            "n_batch": 2048,
-            "n_gpu_layers": -1,
-            "script": "qwen3vl_run.py",
-            "debug": true
-        },
+{
+    "model_path": "H:\\Stable_Diffusion\\text_encoders\\Z\\Qwen_3_4b-Q8_0.gguf",
+    "n_ctx": 2048,
+    "prompt_template": "<|im_start|>user\\n{user}<|im_end|>\\n<|im_start|>assistant\\n",
+    "force_mmproj": false,
+    "extract_embedding": true,
+    "tokenizer_path": "I:\\LLM\\encoder\\Z-Image-Turbo-HF\\tokenizer",
+    "embedding_scale": 100.0,
+    "convert_emb_to_cond": true
+}
 ```
 
 </details>
