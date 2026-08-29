@@ -29,6 +29,8 @@ The new advanced configurator brings a completely redesigned configuration exper
 
 <img width="1122" height="590" alt="image" src="https://github.com/user-attachments/assets/c960ccd4-c400-448e-8def-45cbb301a327" />
 
+> 💡 **TIP:** If you need to move preset lists to the top level of the subgraph, use widgets of the LLM Inference node — they work in the classic Comfi-UI way.
+
 - Added `words_to_ban` config (logit_bias).
 - Added `📸 Simple Gif Maker` node.
 - Added `📸 Load Video Fragment` node. What makes this node different from others? It can download a file of any size, but it does NOT copy it to the input folder. At the same time it has browse button, crop, resize and timeline.
