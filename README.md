@@ -27,7 +27,7 @@ The new advanced configurator brings a completely redesigned configuration exper
 3. Windows File Browser - For Windows users, dedicated Browse Model and Browse MMProj buttons allow selecting GGUF files from anywhere on your disk, not just ComfyUI's predefined folders. No more manual path typing!
 4. Flexible Widget Layout - The configurator now supports easy rearrangement and insertion of new (future) parameter. Previously, adding a new parameter to the middle would displace all the others, corrupting old saves. With the new approach, this problem no longer exists.
 
-<img width="1180" height="619" alt="image" src="https://github.com/user-attachments/assets/43a89831-71c1-472e-8a61-5d61d87eed6a" />
+<img width="1122" height="590" alt="image" src="https://github.com/user-attachments/assets/c960ccd4-c400-448e-8def-45cbb301a327" />
 
 - Added `words_to_ban` config (logit_bias).
 - Added `📸 Simple Gif Maker` node.
