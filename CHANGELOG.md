@@ -1,4 +1,9 @@
 # Nightly
+- Add dynamic image, audio, video input
+- Add "user_prompt_template" input
+- Add "bypass" input
+- Add "Fix Batch Images" node
+- Add "remove_thinking" config
 - Fix bugs
 - Added new configurator `🌐 System Preset Config (Advanced)`
 - Fix default value

@@ -803,21 +803,21 @@ class SimpleQwen3VL_GGUF_Node:
                 "seed": ("INT", {"default": 42}),
                 "unload_all_models": ("BOOLEAN", {"default": False}),
                 "mode": (["subprocess", "direct_clean", "keep_vram", "save1", "save2", "save3"], {"default": "subprocess"}),
+                "bypass": ("BOOLEAN", {"default": False}),
             },
             "optional": {
+                "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
+                "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
+                "user_prompt_template": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
+                "variables": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
                 "image": ("IMAGE",),
-                "image2": ("IMAGE",),
-                "image3": ("IMAGE",),
                 "audio": ("AUDIO",),
                 "video": ("*",),
-                "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
-                "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
-                "variables": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
             }
         }
 
-    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING" )
-    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt" )
+    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING")
+    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt")
     FUNCTION = "run"
     CATEGORY = CATEGORY_NAME
 
@@ -828,14 +828,15 @@ class SimpleQwen3VL_GGUF_Node:
             seed,
             unload_all_models,
             mode="subprocess",
-            image=None,
-            image2=None,
-            image3=None,
-            audio=None,
-            video=None,
+            bypass=False,
             system_prompt_override=None,
             config_override=None,
-            variables=None):
+            variables=None,
+            user_prompt_template=None,
+            **kwargs):
+
+        if bypass:
+            return (user_prompt, None, "", "")
 
         t_total0 = time.perf_counter()
         temp_paths = []
@@ -877,8 +878,35 @@ class SimpleQwen3VL_GGUF_Node:
  
             # Очистка моделей
             if unload_all_models:
-                clear_memory(gccollect_start, debug = debug)
+                clear_memory(gccollect_start, debug=debug)
 
+            # Собираем все входы
+            input_images = []
+            input_audios = []
+            input_videos = []
+
+            # Legacy входы
+            if kwargs.get("image") is not None:
+                input_images.append(kwargs["image"])
+            if kwargs.get("audio") is not None:
+                input_audios.append(kwargs["audio"])
+            if kwargs.get("video") is not None:
+                input_videos.append(kwargs["video"])
+
+            # Динамические входы (image2, image3, ..., audio2, audio3, ..., video2, video3, ...)
+            for key in sorted(kwargs.keys()):
+                if key in ["image", "audio", "video"]:
+                    continue  # Уже обработаны выше
+                
+                if key.startswith("image") and key[5:].isdigit():
+                    if kwargs[key] is not None:
+                        input_images.append(kwargs[key])
+                elif key.startswith("audio") and key[5:].isdigit():
+                    if kwargs[key] is not None:
+                        input_audios.append(kwargs[key])
+                elif key.startswith("video") and key[5:].isdigit():
+                    if kwargs[key] is not None:
+                        input_videos.append(kwargs[key])
 
             # Обработка изображений и аудио
             file_mode = (mode == "subprocess")
@@ -887,30 +915,30 @@ class SimpleQwen3VL_GGUF_Node:
             video_value = []
 
             # Изображения
-            input_images = [img for img in (image, image2, image3) if img is not None]
             if input_images:
                 t_process_images = time.perf_counter()
-                max_images = config.get("max_images",10)
+                max_images = config.get("max_images", 10)
                 images_value = process_images(input_images, file_mode=file_mode, max_images=max_images)
                 if file_mode:
                     temp_paths += images_value
                 _debug_print(debug, "process_images", t_process_images)
 
             # Аудио
-            if audio is not None:
+            if input_audios:
                 t_process_audios = time.perf_counter()
                 target_sr = _norm_default(config.get("audio_sample_rate", 0), 0) #0 - disable resample
-                max_audios = config.get("max_audios",3)
-                audio_value = process_audios([audio], file_mode=file_mode, target_sr=target_sr, max_audios=max_audios)
+                max_audios = config.get("max_audios", 3)
+                audio_value = process_audios(input_audios, file_mode=file_mode, target_sr=target_sr, max_audios=max_audios)
                 if file_mode:
                     temp_paths += audio_value
                 _debug_print(debug, "process_audios", t_process_audios)
 
             # Видео 
-            if video is not None:
+            if input_videos:
                 t_process_videos = time.perf_counter()
-                video_value, vid_config = process_videos([video], config)
+                video_value, vid_config = process_videos(input_videos, config)
                 config.update(vid_config)
+                # file_mode unsopported
                 _debug_print(debug, "process_videos", t_process_videos)
 
             # Неподдерживаемые сценарии
@@ -918,7 +946,7 @@ class SimpleQwen3VL_GGUF_Node:
                 for val in video_value:
                     # Если в подпроцесс пытаются передать не путь (строку), а numpy массив
                     if not isinstance(val, str):
-                        raise ValueError("Subprocess mode is not possible with videos in VideoFromComponents and Raw Tensor formats. Use direct_clean/keep_vram mode.")
+                        raise ValueError("Subprocess mode unsopported with videos in VideoFromComponents and Raw Tensor formats. Use direct_clean/keep_vram mode.")
 
             if (len(images_value) + len(audio_value) + len(video_value)) == 0:
                 config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша
@@ -954,11 +982,11 @@ class SimpleQwen3VL_GGUF_Node:
                 if preset_text:
                     raw_user_prompt = (preset_text + "\n" + raw_user_prompt).strip()
 
-            # 3. Читаем шаблон для user_prompt, если он есть (для bernini и подобных)
-            user_prompt_template = None
-            if system_preset != "None":
-                user_prompt_templates = load_cached_section('_user_prompt_template')
-                user_prompt_template = user_prompt_templates.get(system_preset, None)
+            # 3. Читаем шаблон для user_prompt, если он есть
+            if user_prompt_template is None:
+                if system_preset != "None":
+                    user_prompt_templates = load_cached_section('_user_prompt_template')
+                    user_prompt_template = user_prompt_templates.get(system_preset, None)
 
             # Если выключатель выключен, просто возвращаем то, что собрали
             if enable_placeholders or len(user_vars) > 0 or user_prompt_template:

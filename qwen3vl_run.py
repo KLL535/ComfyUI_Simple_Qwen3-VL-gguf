@@ -9,6 +9,7 @@ import gc
 import numpy as np
 import tempfile
 import traceback
+import re
 from PIL import Image
 from typing import List, Optional, Any
 
@@ -944,6 +945,19 @@ def _inference(config):
                 output = result["choices"][0]["message"]["content"]
 
             if not config.get("raw_output", False):
+                if config.get("remove_thinking", False):
+                    # 1. Удаляем think-блоки
+                    output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL)
+                    output = output.split('</think>')[-1]
+                        
+                    # 2. Удаляем channel-блоки
+                    output = re.sub(r'<\|channel>.*?<channel\|>', '', output, flags=re.DOTALL)
+                    output = output.split('<channel|>')[-1]
+
+                    # 3. Схлопываем множественные пустые строки в одну
+                    output = re.sub(r'\n\s*\n+', '\n\n', output)    
+
+                # 4. Удаляем пустые строки в начале и конце
                 output = output.strip()
 
             if config.get("debug_output", False):

@@ -30,7 +30,7 @@ const HEADER_DEFAULT_COLOR = "#3a6ea5";
 const GROUP_FIELDS = {
     "📁 Model & Paths": ["model_path", "mmproj_path"],
     "🗄️ Memory & Context": ["n_ctx", "n_batch", "n_ubatch", "n_keep", "offload_kqv", "type_k", "type_v", "use_mmap", "use_mlock", "pool_size", "logits_all", "ctx_checkpoints", "swa_full"],
-    "🎲 Sampling & Generation": ["max_tokens", "temperature", "top_p", "min_p", "top_k", "repeat_penalty", "presence_penalty", "frequency_penalty", "enable_thinking", "force_reasoning", "words_to_ban"],
+    "🎲 Sampling & Generation": ["max_tokens", "temperature", "top_p", "min_p", "top_k", "repeat_penalty", "presence_penalty", "frequency_penalty", "enable_thinking", "remove_thinking", "force_reasoning", "words_to_ban"],
     "⚙️ Hardware & Acceleration": ["n_gpu_layers", "n_cpu_moe", "cpu_moe", "n_threads", "flash_attn_type", "split_mode", "main_gpu", "cuda_device", "tensor_split"],
     "💬 Chat, Prompts & Variables": ["chat_handler", "chat_format", "chat_format_from_gguf", "system_prompt_default", "system_preset_to_user_prompt", "user_prompt_after_content", "enable_variables", "add_vision_id", "add_image_id", "add_frame_id", "add_audio_id"],
     "📝 Prompt Template": ["raw_mode", "prompt_template", "stop"],

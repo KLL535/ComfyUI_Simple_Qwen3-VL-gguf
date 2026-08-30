@@ -43,6 +43,7 @@ _ADVANCED_DEFAULTS = {
     "frequency_penalty": 0.0,
     "words_to_ban": "",
     "enable_thinking": False,
+    "remove_thinking": False,
     "force_reasoning": False,
     # gpu / offload / multi-gpu
     "n_gpu_layers": -1,
@@ -420,6 +421,10 @@ class Qwen3VL_AdvancedConfig:
                 "enable_thinking": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Enable thinking/reasoning process (for Gemma, Qwen, MiniCPM, GLM, etc.).",
+                }),
+                "remove_thinking": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Remove <think>...</think> or <|channel>...<channel|> section in text",
                 }),
                 "force_reasoning": ("BOOLEAN", {
                     "default": False,
@@ -809,6 +814,7 @@ class Qwen3VL_AdvancedConfig:
         chat_format = g("chat_format", "none")
         chat_format_from_gguf = g("chat_format_from_gguf", False)
         enable_thinking = g("enable_thinking", False)
+        remove_thinking = g("remove_thinking", False)
         force_reasoning = g("force_reasoning", False)
         system_prompt_default = g("system_prompt_default", "")
         system_preset_to_user_prompt = g("system_preset_to_user_prompt", False)
@@ -907,6 +913,7 @@ class Qwen3VL_AdvancedConfig:
             "chat_format": chat_format,
             "chat_format_from_gguf": chat_format_from_gguf,
             "enable_thinking": enable_thinking,
+            "remove_thinking": remove_thinking,
             "force_reasoning": force_reasoning,
             "system_prompt_default": system_prompt_default,
             "system_preset_to_user_prompt": system_preset_to_user_prompt,

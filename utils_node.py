@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image, ImageFilter
 from PIL.PngImagePlugin import PngInfo 
 import folder_paths
+import torch
+import torch.nn.functional as F
 
 from .qwen3vl_node import load_cached_section,load_unbanned_section,unload_model,CATEGORY_NAME
 
@@ -254,36 +256,6 @@ class TextToBatchNode:
         
         return (chunks,)
 
-class SimpleJoinStringsNode:
-    CATEGORY = CATEGORY_NAME
-    RETURN_TYPES = ("STRING",)
-    FUNCTION = "join_strings"
-    DESCRIPTION = "Combines up to 10 strings into one"
-
-    """Combines up to 10 strings into one, skipping empty or None values."""
-
-    @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "delimiter": ("STRING", {"default": " "}),
-            },
-            "optional": {
-                **{f"text{i}": ("STRING", {"multiline": True, "default": "", "forceInput": True}) 
-                    for i in range(1, 11)}
-            }
-        }
-
-    def join_strings(self, delimiter = " ", **kwargs):
-        delimiter = delimiter.replace('\\n', '\n') \
-                             .replace('\\t', '\t') \
-                             .replace('\\r', '\r')
-
-        texts = [kwargs.get(f"text{i}") for i in range(1, 11)]
-        # Фильтрация пустых и None значений
-        filtered = [str(t).strip() for t in texts if t is not None and str(t).strip() != ""]
-        return (delimiter.join(filtered), )  
-
 class SimpleTextReplaceNode:
     def __init__(self):
         pass
@@ -514,3 +486,169 @@ class SimpleGifMaker:
             }
         ]
         return {"ui": {"images": previews}}
+
+class SimpleJoinStringsNode:
+    CATEGORY = CATEGORY_NAME
+    RETURN_TYPES = ("STRING",)
+    FUNCTION = "join_strings"
+    DESCRIPTION = "Combines strings into one, skipping empty or None values. Dynamic inputs!"
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "delimiter": ("STRING", {"default": " "}),
+            },
+            "optional": {
+                "text1": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
+                "text2": ("STRING", {"multiline": True, "default": "", "forceInput": True}),
+            }
+        }
+
+    def join_strings(self, delimiter=" ", **kwargs):
+        delimiter = delimiter.replace('\\n', '\n') \
+                             .replace('\\t', '\t') \
+                             .replace('\\r', '\r')
+
+        filtered = []
+        
+        text_keys = [key for key in kwargs.keys() if key.startswith("text")]    
+        
+        for key in text_keys:
+            t = kwargs[key]
+            if t is not None and str(t).strip() != "":
+                filtered.append(str(t).strip())
+
+        return (delimiter.join(filtered),)
+
+class FixBatchImages:
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "resize_mode": (["stretch", "crop", "pad_black", "ignore"], {
+                    "default": "crop"
+                }),
+                "fallback_mode": (["none", "empty_batch", "black_1x1", "black_64x64"], {
+                    "default": "black_64x64"
+                }),
+            },
+            "optional": {
+                "image1": ("IMAGE",),
+                "image2": ("IMAGE",),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE", "BOOLEAN")
+    RETURN_NAMES = ("batched_images", "exists")
+    FUNCTION = "batch_images"
+    CATEGORY = CATEGORY_NAME 
+    DESCRIPTION = "Collects images into a batch. Resizes to the size of the first image. Ignores empty images."
+
+    def batch_images(self, resize_mode="stretch", fallback_mode="empty_batch", **kwargs):
+        valid_images = []
+        target_shape = None
+        
+        image_keys = [key for key in kwargs.keys() if key.startswith("image")]
+        
+        for key in image_keys:
+            img = kwargs[key]
+            
+            if img is not None and isinstance(img, torch.Tensor):
+                if target_shape is None:
+                    target_shape = img.shape[1:3]
+                
+                current_shape = img.shape[1:3]
+                
+                if current_shape == target_shape:
+                    valid_images.append(img)
+                else:
+                    if resize_mode == "ignore":
+                        continue
+                    elif resize_mode == "stretch":
+                        img = self._resize_stretch(img, target_shape)
+                        valid_images.append(img)
+                    elif resize_mode == "crop":
+                        img = self._resize_crop(img, target_shape)
+                        valid_images.append(img)
+                    elif resize_mode == "pad_black":
+                        img = self._resize_letterbox(img, target_shape)
+                        valid_images.append(img)
+
+        if not valid_images:
+            h, w = target_shape if target_shape else (64, 64)
+            
+            fallback = None
+
+            if fallback_mode == "empty_batch":
+                fallback = torch.zeros((0, h, w, 3), dtype=torch.float32)
+            elif fallback_mode == "black_1x1":
+                fallback = torch.zeros((1, 1, 1, 3), dtype=torch.float32)
+            elif fallback_mode == "black_64x64":
+                fallback = torch.zeros((1, 64, 64, 3), dtype=torch.float32)
+            
+            return (fallback, False)
+
+        batched_image = torch.cat(valid_images, dim=0)
+        return (batched_image, True)
+
+    def _resize_stretch(self, img, target_shape):
+        """Растянуть без сохранения пропорций"""
+        # img: [B, H, W, C]
+        img_permuted = img.permute(0, 3, 1, 2)  # -> [B, C, H, W]
+        img_resized = F.interpolate(img_permuted, size=target_shape, mode="bilinear", align_corners=False)
+        return img_resized.permute(0, 2, 3, 1).contiguous()  # -> [B, H, W, C]
+
+    def _resize_crop(self, img, target_shape):
+        """Центрированная обрезка до нужного соотношения сторон, потом resize"""
+        target_h, target_w = target_shape
+        current_h, current_w = img.shape[1:3]
+        
+        # Вычисляем целевое соотношение сторон
+        target_ratio = target_w / target_h
+        current_ratio = current_w / current_h
+        
+        # Определяем, какую сторону обрезать
+        if current_ratio > target_ratio:
+            # Текущее изображение шире — обрезаем по ширине
+            new_w = int(current_h * target_ratio)
+            offset_w = (current_w - new_w) // 2
+            img = img[:, :, offset_w:offset_w + new_w, :]
+        else:
+            # Текущее изображение выше — обрезаем по высоте
+            new_h = int(current_w / target_ratio)
+            offset_h = (current_h - new_h) // 2
+            img = img[:, offset_h:offset_h + new_h, :, :]
+        
+        # Теперь растягиваем до целевого размера
+        return self._resize_stretch(img, target_shape)
+
+    def _resize_letterbox(self, img, target_shape):
+        """Сохранить пропорции, добавить чёрные полосы по бокам"""
+        target_h, target_w = target_shape
+        current_h, current_w = img.shape[1:3]
+        
+        # Вычисляем масштаб для сохранения пропорций
+        scale = min(target_w / current_w, target_h / current_h)
+        new_w = int(current_w * scale)
+        new_h = int(current_h * scale)
+        
+        # Ресайзим с сохранением пропорций
+        img_permuted = img.permute(0, 3, 1, 2)  # -> [B, C, H, W]
+        img_resized = F.interpolate(img_permuted, size=(new_h, new_w), mode="bilinear", align_corners=False)
+        img_resized = img_resized.permute(0, 2, 3, 1).contiguous()  # -> [B, H, W, C]
+        
+        # Создаём чёрный фон целевого размера
+        batch_size = img.shape[0]
+        channels = img.shape[3]
+        canvas = torch.zeros((batch_size, target_h, target_w, channels), dtype=img.dtype, device=img.device)
+        
+        # Вычисляем отступы для центрирования
+        pad_h = (target_h - new_h) // 2
+        pad_w = (target_w - new_w) // 2
+        
+        # Вставляем ресайзенное изображение в центр канваса
+        canvas[:, pad_h:pad_h + new_h, pad_w:pad_w + new_w, :] = img_resized
+        
+        return canvas

@@ -2,7 +2,7 @@
 #__init__.py
 
 from .qwen3vl_node import SimpleQwen3VL_GGUF_Node
-from .utils_node import MasterPromptLoader,SimpleStyleSelector,SimpleCameraSelector,UnloadQwenModel,SimpleRemoveThinkNode,SimpleTriggerNode,TextToBatchNode,SimpleTextInsertNode,SimpleTextReplaceNode,SimpleJoinStringsNode,SimpleGifMaker
+from .utils_node import MasterPromptLoader,SimpleStyleSelector,SimpleCameraSelector,UnloadQwenModel,SimpleRemoveThinkNode,SimpleTriggerNode,TextToBatchNode,SimpleTextInsertNode,SimpleTextReplaceNode,SimpleJoinStringsNode,SimpleGifMaker,FixBatchImages
 from .deprecated_node import Qwen3VL_GGUF_Node
 from .configurator import Qwen3VL_AdvancedConfig, Qwen3VL_PromptPresetConfig, Qwen3VL_ModelConfig, Qwen3VL_SamplingConfig
 from .ideogram4 import Ideogram4JsonPreviewOnImage, Ideogram4JsonSwapCoordinates
@@ -27,6 +27,7 @@ NODE_CLASS_MAPPINGS = {
     "SimpleTextInsertNode": SimpleTextInsertNode,
     "SimpleTextReplaceNode": SimpleTextReplaceNode,
     "SimpleJoinStringsNode": SimpleJoinStringsNode,
+    "FixBatchImages": FixBatchImages,
 
     #video
     "SimpleLoadVideoFragment": SimpleLoadVideoFragment,
@@ -59,6 +60,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SimpleTextInsertNode": "Simple Text Insert",
     "SimpleTextReplaceNode": "Simple Text Replace",
     "SimpleJoinStringsNode": "Simple Join Strings",
+    "FixBatchImages": "Fix Batch Images",
     
     #video
     "SimpleLoadVideoFragment": "📸 Load Video Fragment",
