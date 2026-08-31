@@ -15,6 +15,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
+- Add dynamic image, audio, video input, Add "user_prompt_template" input, Add "bypass" input
 - New design for LLM Config
 - **Added new configurator 🌐 LLM Config and 🌐 LLM Prompt Preset**
   
@@ -309,6 +310,7 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 - **Simple Join Strings** - Concatenates up to 10 strings using a specified separator.
 - **Ideogram 4 JSON Preview** - Visualizes bounding boxes from Ideogram 4 JSON output directly on the image.
 - **Ideogram 4 JSON Swap XY Coordinates** - Fixes coordinate swapping (Y/X) for models like Qwen-9B that stubbornly ignore system instructions, preventing rotated bounding boxes.
+- **Fix Batch Images** - Allows you to correctly assemble images into a batch even if some/all images are None.
 
 📸 Video Utils
 - **📸 Load Video Fragment** *(NEW)* - Extracts and processes a specific time-coded fragment from a large video file.
@@ -329,27 +331,30 @@ A universal version. The model and its parameters mast be passed to the `config_
 <summary>Parameters</summary>
 
 ### Parameters:
-- `image`, `image2`, `image3`: *IMAGE* - analyzed images, you can use up to 3+ images. For example, you can instruct Qwen to combine all the images into one scene, and it will do so. You can also not include any images and use the model simply as a text LLM. Batch is supported.
-- `audio`: *AUDIO* - analyzed audio from `Load Audio`. See Example. 💡 The model must support this (eg gemma4) and llama.cpp **must** be newest. See `audio_sample_rate` parameter. Batch is supported.
-- `video`: *VIDEO* - analyzed video from `Load Video`. It is transmitted as reduced set of frames (see `max_frames` parameter). See Example. 💡 Requires increased context (n_ctx) 💡 Need the new version of comfy-ui, which transfers video as a file. I haven't implemented support for the older version comfy-ui, which transfers video as tensors.
-- `model preset`: *LIST* - allows you to select a model from templates from `system_prompts_user.json`. 
-- `system preset`: *LIST* - allows you to select a system prompt from templates
-- `system prompt override`: *STRING*, default: "" - If you supply text to this input, this text will be a system prompt, and **system_preset will be ignored**.
-- `user prompt`: *STRING*, default: "Describe this image" - specific case + input data + variable wishes.
+- `image`, `image2`, `image3`... (dynamic added inputs): *IMAGE* - The images to be analyzed. Batch processing is supported.
+- `audio`, `audio2`, `audio3`... (dynamic added inputs): *AUDIO* - The audio files to be analyzed (loaded via Load Audio). 💡 Note: The model must support audio (e.g., Gemma4-12B). See the audio_sample_rate parameter.
+- `video`, `video2`, `video3`... (dynamic added inputs): *** - VIDEO — The video files to be analyzed (loaded via Load Video) or an image batch (loaded via Load Video 🎥🅥🅗🅢). The video is processed as a reduced set of frames (see the max_frames parameter). 💡 Requires an increased context window (n_ctx). 💡 A large number of frames/files increases context length, which consumes more VRAM; smaller models may lose details. A balance must be struck based on your hardware. 💡 Due to the large file size involved in data transfer, this feature is incompatible with `subprocess` mode.
+- `model preset`: *LIST* - Selects a model based on templates defined in `system_prompts_user.json`.
+- `system preset`: *LIST* - Selects a system prompt from predefined templates.
+- `user prompt`: *STRING*, default: "Describe this image" - The specific prompt for the task, which can include input data and variable placeholders.
 - `seed`: *INT*, default: 42
-- `unload_all_models`: *BOOLEAN*, default: false - If Trie clear memory before start, code from `ComfyUI-Unload-Model`
-- `mode`: *LIST*, default: "subprocess" - operating mode:
-`subprocess` - Allows you to isolate llama_cpp - no memory leaks, after completing one inference the model is completely cleared from memory, no crashes of comfi-ui in case of critical errors.
-`direct-clean` - A new mode that also unloads the model but works directly avoids the overhead of calling a subprocess.
-`keep-vram` - A new mode that doesn't unload the model and keeps it in memory until a node with a different mode or the `Simple Qwen Unload` node appears again. This is useful for batch to avoid unnecessary model unloading and loading if LLM tasks follow one another.
-- `config override`: *STRING*, default: "" - Allows you to redefine some fields in `model preset` template or completely set a new model configuration if `model preset` is `None`.
-- `variables`: *STRING*, default: "" - Allows set any user placeholders in {} in the system and user prompts. This feature is disabled by default. See below.
-
+- `unload_all_models`: *BOOLEAN*, default: false - If True, clears the memory before starting.
+- `mode`: *LIST*, default: "subprocess" - The operating mode:
+`subprocess` — Isolates llama.cpp to prevent memory leaks. The model is completely unloaded from memory after each inference, preventing ComfyUI crashes in case of critical errors.
+`direct-clean` — Unloads the model after inference but operates directly, avoiding the overhead of calling a subprocess.
+`keep-vram` — Does not unload the model; keeps it in VRAM until another node with a different mode or the Simple Qwen Unload node is executed. This is highly useful for batch processing to avoid unnecessary model loading/unloading when executing consecutive LLM tasks.
+`save1, save2, save3` — Auxiliary modes for long-term storage of models in VRAM.
+- `config override`: *STRING*, default: None - Overrides specific fields in the model preset template, or defines an entirely new model configuration if model preset is set to None.
+- `system prompt override`: *STRING*, default: None - If text is provided here, it will be used as the system prompt, and the **system preset will be ignored**.
+- `user_prompt_template`: *STRING*, default: None - Allows you to set a custom user prompt template using {user_prompt} and other placeholders. When provided, automatic placeholder replacement is enabled.
+- `variables`: *STRING*, default: None - Allows you to define custom user placeholders enclosed in curly braces {} for use in the system and user prompts. When provided, automatic placeholder replacement is enabled.
+- `bypass`: *BOOLEAN*, default: false - If set to True, the node skips processing and passes the `user_prompt` directly to the output `text` without modification.
+  
 ### Output:
 - `text`: *STRING* - generated text
 - `conditioning`: *CONDITIONING* - For embedding mode only
 - `system preset`: *STRING* - Current system prompt (if you want to keep it)
-- `user preset`: *STRING* - Current user prompt (same as input)
+- `user preset`: *STRING* - Current user prompt (if you want to keep it)
 
 </details>
 
@@ -426,6 +431,7 @@ Possible model configurations that can be passed to the `config_override` input.
 | presence_penalty | float | 0.0 | Penalty based on token presence. Positive values encourage new topics, negative favor repetition |
 | frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce repetition of common words |
 | enable_thinking | bool | False | Enable thinking/reasoning process for Gemma, Qwen, MiniCPM, GLM models. Requires more output tokens |
+| remove_thinking | bool | False | Cleans model output by removing `<think>...</think>` or <|channel>...<channel|> sections. |
 | force_reasoning | bool | False | For Qwen3: force reasoning mode even on simple queries. Makes model always "think" before answering |
 | words_to_ban | string | "" | Comma-separated list of banned words. Applies logit_bias of -100 to their tokens. Example: woman,Woman,man,Man |
 
@@ -710,8 +716,8 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
 
 ```json
 {
-    "model_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-QAT-Q4_0.gguf",
-    "mmproj_path": "H:\\LLM2\\lmstudio-community\\gemma-4-12B-it-QAT-GGUF\\mmproj-gemma-4-12B-it-QAT-BF16.gguf",
+    "model_path": "I:\\LLM\\gemma\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-qat-uncensored-heretic-UDmerge-Q4_K_XXL.gguf",
+    "mmproj_path": "I:\\LLM\\gemma\\gemma-4-12B-it-QAT-GGUF\\mmproj-gemma-4-12B-it-QAT-BF16.gguf",
     "n_ctx": 12288,
     "max_tokens": 10240,
     "temperature": 0.5,
@@ -723,9 +729,24 @@ For example: `Ernie-Image-Prompt-Enhancer-Ministral-3.8B-Q4_K_M.gguf` + `mmproj-
 }
 ```
 
-> 💡 **TIP:** It works well for ideogram4 json. 
-
-<img width="719" height="813" alt="image" src="https://github.com/user-attachments/assets/275815ba-3b26-4082-8cd5-4ea2a71bcd3e" />
+For Audio/Video:
+```json
+{
+    "model_path": "I:\\LLM\\gemma\\gemma-4-12B-it-QAT-GGUF\\gemma-4-12B-it-qat-uncensored-heretic-UDmerge-Q4_K_XXL.gguf",
+    "mmproj_path": "I:\\LLM\\gemma\\gemma-4-12B-it-QAT-GGUF\\mmproj-gemma-4-12B-it-QAT-BF16.gguf",
+    "n_ctx": 80384,
+    "n_batch": 512,
+    "max_tokens": 10240,
+    "temperature": 0.5,
+    "top_p": 0.9,
+    "top_k": 20,
+    "repeat_penalty": 1.05,
+    "chat_handler": "gemma4",
+    "enable_thinking": true,
+    "max_frames": 120,
+    "audio_sample_rate": 16000
+}
+```
 
 </details>
 
