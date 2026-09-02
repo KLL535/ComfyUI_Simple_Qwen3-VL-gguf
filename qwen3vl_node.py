@@ -797,23 +797,83 @@ class SimpleQwen3VL_GGUF_Node:
             system_prompts_names = ["None"]
         return {
             "required": {
-                "model_preset": (model_presets_names, {"default": model_presets_names[0]}),
-                "system_preset": (system_prompts_names, {"default": system_prompts_names[0]}),
-                "user_prompt": ("STRING", {"multiline": True, "default": "Describe this image."}),
-                "seed": ("INT", {"default": 42}),
-                "unload_all_models": ("BOOLEAN", {"default": False}),
-                "mode": (["subprocess", "direct_clean", "keep_vram", "save1", "save2", "save3"], {"default": "subprocess"}),
-                "bypass": ("BOOLEAN", {"default": False}),
+                "model_preset": (model_presets_names, {
+                    "default": model_presets_names[0],
+                    "tooltip": "Select a model configuration preset from templates defined in system_prompts_user.json.",
+                }),
+                "system_preset": (system_prompts_names, {
+                    "default": system_prompts_names[0],
+                    "tooltip": "Select a system prompt from predefined templates.",
+                }),
+                "user_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "Describe this image.",
+                    "tooltip": "The specific prompt for the task. Can include input data and {variable} placeholders (auto-replaced when 'variables' or 'user_prompt_template' is provided).",
+                }),
+                "seed": ("INT", {
+                    "default": 42,
+                    "tooltip": "Random seed for reproducible generation.",
+                }),
+                "unload_all_models": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "If True, clears VRAM/RAM before starting inference to prevent OOM errors.",
+                }),
+                "mode": (["subprocess", "direct_clean", "keep_vram", "save1", "save2", "save3"], {
+                    "default": "subprocess",
+                    "tooltip": (
+                        "Execution mode:\n"
+                        "• subprocess — isolates llama.cpp, prevents memory leaks and ComfyUI crashes (INCOMPATIBLE with video inputs).\n"
+                        "• direct_clean — unloads model after inference, no subprocess overhead.\n"
+                        "• keep_vram — keeps model in VRAM for fast sequential batch processing.\n"
+                        "• save1/save2/save3 — auxiliary slots for long-term model storage in VRAM."
+                    ),
+                }),
+                "bypass": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "If True, the node skips processing and passes the 'user_prompt' directly to the output 'text' without modification.",
+                }),
             },
             "optional": {
-                "config_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
-                "system_prompt_override": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
-                "user_prompt_template": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
-                "variables": ("STRING", {"multiline": True, "default": None, "forceInput": True}),
-                "image": ("IMAGE",),
-                "audio": ("AUDIO",),
-                "video": ("*",),
-            }
+                "config_override": ("STRING", {
+                    "multiline": True,
+                    "default": None,
+                    "forceInput": True,
+                    "tooltip": "Overrides specific fields in the model preset template, or defines an entirely new model configuration if 'model_preset' is set to None.",
+                }),
+                "system_prompt_override": ("STRING", {
+                    "multiline": True,
+                    "default": None,
+                    "forceInput": True,
+                    "tooltip": "If text is provided here, it becomes the system prompt and the selected 'system_preset' is completely ignored.",
+                }),
+                "user_prompt_template": ("STRING", {
+                    "multiline": True,
+                    "default": None,
+                    "forceInput": True,
+                    "tooltip": "Custom user prompt template using {user_prompt} and other placeholders. When provided, automatic placeholder replacement is enabled.",
+                }),
+                "variables": ("STRING", {
+                    "multiline": True,
+                    "default": None,
+                    "forceInput": True,
+                    "tooltip": "Custom user placeholders in {} for use in system and user prompts. When provided, automatic placeholder replacement is enabled.",
+                }),
+                "image": ("IMAGE", {
+                    "tooltip": "Input image(s) to be analyzed. Additional dynamic inputs (image2, image3...) can be added. Batch processing is supported.",
+                }),
+                "audio": ("AUDIO", {
+                    "tooltip": "Input audio to be analyzed (loaded via Load Audio). The model must support audio (e.g., Gemma4-12B). See 'audio_sample_rate' parameter.",
+                }),
+                "video": ("*", {
+                    "tooltip": (
+                        "Input video (Load Video) or image batch. "
+                        "Processed as a reduced set of frames (see 'max_frames'). "
+                        "💡 Requires increased 'n_ctx'. "
+                        "💡 Many frames/files consume more VRAM; smaller models may lose details. "
+                        "⚠️ INCOMPATIBLE with 'subprocess' mode due to large data transfer size."
+                    ),
+                }),
+            },
         }
 
     RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING")

@@ -24,4 +24,10 @@ def _debug_print(debug, stage, start_time, message = "", text = "", file = sys.s
     elapsed = time.perf_counter() - start_time
     print(f"{Fore.MAGENTA}[DEBUG]{Style.RESET_ALL} {stage} {Style.BRIGHT}{Fore.GREEN}{text}{Style.RESET_ALL}: {Fore.YELLOW}{elapsed:.3f}s{Style.RESET_ALL} {message}", file=file)
 
+def _debug_info(debug, stage, text = "", file = sys.stdout):
+    if not debug:
+        return
+
+    print(f"{Fore.MAGENTA}[DEBUG]{Style.RESET_ALL} {stage}: {Style.BRIGHT}{Fore.GREEN}{text}{Style.RESET_ALL}", file=file)
+
 

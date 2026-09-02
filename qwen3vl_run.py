@@ -18,7 +18,7 @@ current_dir = str(Path(__file__).parent)
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-from debug_print import _debug_print
+from debug_print import _debug_print, _debug_info
 
 # Глобальный кеш для модели (чтобы сохранять между прямыми вызовами)
 _model_caches = {
@@ -362,6 +362,7 @@ def _inference(config):
         image_min_tokens = _norm_default(config.get("image_min_tokens"), 0)
         image_max_tokens = _norm_default(config.get("image_max_tokens"), 0)
         extract_embedding = config.get("extract_embedding", False)
+        speculative_enabled = config.get("speculative_enabled", False)
         extract_tts = config.get("extract_tts", False)
         raw_mode = config.get("raw_mode", False)
 
@@ -413,13 +414,23 @@ def _inference(config):
         if num_content:
             content_text = f"(with {num_images}/{num_audios}/{num_videos} image/audio/video)"        
 
+        ### IMPORT ###
+
         t0 = time.perf_counter()
-        
+
         if extract_embedding:
             from llama_cpp.llama_embedding import LlamaEmbedding, LLAMA_POOLING_TYPE_NONE
         else: 
             from llama_cpp import Llama
-            
+
+        if speculative_enabled:
+            try:
+                from llama_cpp.llama_speculative import SpecConfig, SpeculativeType
+            except ImportError:
+                SpecConfig = None
+                SpeculativeType = None
+                speculative_enabled = False
+
         _debug_print(debug, "import llama_cpp", t0, file=sys.stderr)
 
         mmproj_path = config.get("mmproj_path", "").strip()
@@ -612,6 +623,7 @@ def _inference(config):
                     "split_mode": config.get("split_mode", 0),
                     "main_gpu": config.get("main_gpu", 0),
                     "ctx_checkpoints": config.get("ctx_checkpoints", 0),   
+                    "checkpoint_on_device": config.get("checkpoint_on_device", False),   
                     "logits_all": config.get("logits_all", False),
                     "n_cpu_moe": config.get("n_cpu_moe", 0),
                     "cpu_moe": config.get("cpu_moe", False),
@@ -637,6 +649,59 @@ def _inference(config):
                     if key.startswith("extra_llama_"):
                         new_key = key[len("extra_llama_"):]
                         llm_kwargs[new_key] = value
+
+                ### SPECULATIVE ###
+                # 0=NONE - no speculative decoding
+                #
+                # draft-family (model-based)
+                # 1=DRAFT_SIMPLE  = 1   # standalone draft model speculative decoding
+                # 2=DRAFT_EAGLE3  = 2   # Eagle3 speculative decoding
+                # 3=DRAFT_MTP     = 3   # Multi-token prediction
+                # 4=DRAFT_DFLASH  = 4   # DFlash speculative decoding
+                # 5=DRAFT_DSPARK  = 5   # DSpark speculative decoding
+                #
+                # ngram-family (statistical)
+                # 6=NGRAM_SIMPLE  = 6   # simple self-speculative decoding based on n-grams
+                # 7=NGRAM_MAP_K   = 7   # self-speculative decoding with n-gram keys only
+                # 8=NGRAM_MAP_K4V = 8   # self-speculative decoding with n-gram keys and 4 m-gram values
+                # 9=NGRAM_MOD     = 9   # self-speculative decoding with n-gram mod
+                # 10=NGRAM_CACHE   = 10  # self-speculative decoding with 3-level n-gram cache
+
+                if speculative_enabled:
+
+                    t_speculative = time.perf_counter()
+
+                    speculative_type = int(config.get("speculative_type", 3)) 
+                    try:
+                        valid_speculative_type = SpeculativeType(speculative_type)
+                    except ValueError:
+                        speculative_enabled = False
+                 
+                    if speculative_enabled:
+                        spec_kwargs = {
+                            "spec_type": valid_speculative_type,
+                            "draft_n_max": config.get("draft_n_max", 2),
+                            "draft_p_min": config.get("draft_p_min", 0.0),
+                        }
+                         
+                        # Параметры для внешних черновых моделей
+                        draft_model_path = config.get("draft_model_path", "").strip()
+                        if draft_model_path:
+                            spec_kwargs["draft_model_path"] = draft_model_path
+                            spec_kwargs["draft_n_gpu_layers"] = config.get("draft_n_gpu_layers", -1)
+                            spec_kwargs["draft_backend_sampling"] = config.get("draft_backend_sampling", True)
+
+                        # Параметры для N-gram семейства
+                        if valid_speculative_type in (SpeculativeType.NGRAM_SIMPLE, SpeculativeType.NGRAM_MAP_K, SpeculativeType.NGRAM_MAP_K4V, SpeculativeType.NGRAM_MOD, SpeculativeType.NGRAM_CACHE):
+                            spec_kwargs["ngram_size_n"] = config.get("ngram_size_n", 8)
+                            spec_kwargs["ngram_size_m"] = config.get("ngram_size_m", 16)
+                            spec_kwargs["ngram_min_hits"] = config.get("ngram_min_hits", 1)
+                            if valid_speculative_type == SpeculativeType.NGRAM_MAP_K4V:
+                                spec_kwargs["ngram_max_entries_per_key"] = config.get("ngram_max_entries_per_key", 4)
+
+                        llm_kwargs["speculative"] = SpecConfig(**spec_kwargs)                     
+                             
+                        _debug_print(debug, f"Speculative decoding enabled (type={speculative_type})", t_speculative, file=sys.stderr)
 
                 if chat_handler is not None:
                     # Мультимодальный режим: используем chat_handler
@@ -943,6 +1008,20 @@ def _inference(config):
                     _debug_print(debug, "inference", t_inference0, text=f"{speed:.2f} tok/sec {completion_tokens} tokens", file=sys.stderr)
 
                 output = result["choices"][0]["message"]["content"]
+
+            ### SPECULATIVE ###
+            if speculative_enabled and debug:
+                if hasattr(current_cache["llm"], "last_speculative_stats"):
+                    spec_stats = current_cache["llm"].last_speculative_stats
+                    if spec_stats:
+                        rate = spec_stats.get('draft_token_acceptance_rate', 0)
+                        mean_length = spec_stats.get('mean_accepted_length', 0)
+                        tok_sec = spec_stats.get('generation_tokens_per_second', 0)
+
+                        _debug_info(debug, "speculative stats", 
+                            text=f"Accept: {rate:.1%}, MeanLen: {mean_length:.1f}, Speed: {tok_sec:.2f} tok/sec", 
+                            file=sys.stderr)
+
 
             if not config.get("raw_output", False):
                 if config.get("remove_thinking", False):

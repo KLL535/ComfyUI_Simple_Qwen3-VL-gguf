@@ -31,7 +31,6 @@ _ADVANCED_DEFAULTS = {
     "swa_full": False,
     "type_k": 1,          # "1=F16" -> 1
     "type_v": 1,
-    "ctx_checkpoints": 0,
     # sampling
     "max_tokens": 2048,
     "temperature": 0.7,
@@ -77,6 +76,20 @@ _ADVANCED_DEFAULTS = {
     "audio_sample_rate": 0,
     "image_quality": 95,
     "frame_quality": 75,
+    # speculative decoding
+    "speculative_enabled": False,
+    "speculative_type": 3, # "3=MTP (Multi-token Prediction)" -> 3
+    "ngram_size_n": 8,
+    "ngram_size_m": 16,
+    "draft_model_path": "",
+    "draft_n_max": 2,
+    "draft_p_min": 0.0,
+    "draft_n_gpu_layers": -1,
+    "draft_backend_sampling": True,
+    "ngram_min_hits": 1,
+    "ngram_max_entries_per_key": 4,
+    "ctx_checkpoints": 0,
+    "checkpoint_on_device": False,
     # embeddings
     "extract_embedding": False,
     "pooling_type": 0,
@@ -198,6 +211,22 @@ FLASH_ATTN_TYPES = {
     "-1=AUTO": -1,
     "0=DISABLED": 0,
     "1=ENABLED": 1,
+}
+
+SPECULATIVE_TYPES = {
+    "0=NONE (Disabled)": 0,
+    # Draft-family (Model-based)
+    "1=DRAFT_SIMPLE (Legacy standalone)": 1,
+    "2=DRAFT_EAGLE3 (Requires specific EAGLE-3 GGUF)": 2,
+    "3=MTP (Multi-token Prediction)": 3,
+    "4=DFLASH (Block-diffusion draft)": 4,
+    "5=DSPARK (Markov/confidence heads)": 5,
+    # N-gram family (Statistical, no draft model needed)
+    "6=NGRAM_SIMPLE (Basic, less efficient)": 6,
+    "7=NGRAM_MAP_K (Recommended N-gram)": 7,
+    "8=NGRAM_MAP_K4V (N-gram with 4 continuations)": 8,
+    "9=NGRAM_MOD (Experimental modulo)": 9,
+    "10=NGRAM_CACHE (Experimental 3-level cache)": 10,
 }
 
 ADD_ID_MODES = ["auto", "true", "false"]
@@ -341,13 +370,6 @@ class Qwen3VL_AdvancedConfig:
                 "logits_all": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "If True, llama.cpp evaluates logits for ALL tokens (not only the last one). Required for perplexity evaluation and some scoring tasks, but significantly increases VRAM and time.",
-                }),
-                "ctx_checkpoints": ("INT", {
-                    "default": 0,
-                    "min": 0,
-                    "max": 4096,
-                    "step": 1,
-                    "tooltip": "Max number of context checkpoints to create per slot. 0 = disabled.",
                 }),
                 "swa_full": ("BOOLEAN", {
                     "default": False,
@@ -600,21 +622,21 @@ class Qwen3VL_AdvancedConfig:
                 }),
                 "max_images": ("INT", {
                     "default": 10,
-                    "min": 1,
+                    "min": 0,
                     "max": 100,
                     "step": 1,
                     "tooltip": "Limit on the total number of incoming images.",
                 }),
                 "max_frames": ("INT", {
                     "default": 24,
-                    "min": 1,
+                    "min": 0,
                     "max": 512,
                     "step": 1,
                     "tooltip": "Limit on video frames. More frames require larger context.",
                 }),
                 "max_audios": ("INT", {
                     "default": 3,
-                    "min": 1,
+                    "min": 0,
                     "max": 100,
                     "step": 1,
                     "tooltip": "Limit on the number of incoming audio clips.",
@@ -642,7 +664,93 @@ class Qwen3VL_AdvancedConfig:
                 }),
 
                 # ==================================================
-                # GROUP 8: EMBEDDINGS
+                # GROUP 8: SPECULATIVE DECODING
+                # ==================================================
+                "⚡ Speculative Decoding": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Show/hide group: speculative decoding parameters (requires llama-cpp-python >= 0.3.48).",
+                }),
+                "speculative_enabled": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Master switch to enable speculative decoding. Disabled automatically for multimodal inputs.",
+                }),
+                "speculative_type": (list(SPECULATIVE_TYPES.keys()), {
+                    "default": "3=MTP (Multi-token Prediction)",
+                    "tooltip": "Speculative algorithm type. 3=MTP (best for Qwen3), 4/5=DFlash/DSpark (requires external draft), 7/8=N-gram (no draft model needed, good for code/JSON).",
+                }),
+                "draft_n_max": ("INT", {
+                    "default": 2,
+                    "min": 1,
+                    "max": 32,
+                    "step": 1,
+                    "tooltip": "Maximum number of draft tokens to generate per step. Recommended: 2 for MTP, 7 for DFlash.",
+                }),
+                "draft_p_min": ("FLOAT", {
+                    "default": 0.0,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "step": 0.05,
+                    "round": 0.01,
+                    "tooltip": "Minimum probability threshold to accept a draft token. 0.0 = accept all.",
+                }),
+                "draft_model_path": ("STRING", {
+                    "default": "",
+                    "placeholder": "models/draft-model.gguf (optional)",
+                    "tooltip": "Path to external draft GGUF model. Required for DFlash/DSpark. Leave empty for built-in MTP or N-gram.",
+                }),
+                "draft_n_gpu_layers": ("INT", {
+                    "default": -1,
+                    "min": -1,
+                    "max": 999,
+                    "step": 1,
+                    "tooltip": "Number of layers to offload for the external draft model. -1 = all, 0 = CPU.",
+                }),
+                "draft_backend_sampling": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Use backend vocabulary sampler for draft tokens. Recommended True for DFlash v1 and DSpark.",
+                }),
+                "ngram_size_n": ("INT", {
+                    "default": 8,
+                    "min": 2,
+                    "max": 32,
+                    "step": 1,
+                    "tooltip": "[N-gram only] Size of the n-gram window (N).",
+                }),
+                "ngram_size_m": ("INT", {
+                    "default": 16,
+                    "min": 2,
+                    "max": 64,
+                    "step": 1,
+                    "tooltip": "[N-gram only] Maximum length of the draft continuation (M).",
+                }),
+                "ngram_min_hits": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 10,
+                    "step": 1,
+                    "tooltip": "[N-gram only] Minimum number of matching occurrences required to propose a draft.",
+                }),
+                "ngram_max_entries_per_key": ("INT", {
+                    "default": 4,
+                    "min": 1,
+                    "max": 16,
+                    "step": 1,
+                    "tooltip": "[N-gram K4V only] Maximum cached continuations per n-gram key.",
+                }),
+                "ctx_checkpoints": ("INT", {
+                    "default": 0,
+                    "min": 0,
+                    "max": 4096,
+                    "step": 1,
+                    "tooltip": "Max number of context checkpoints per slot (0 = disabled). Set to 16 if using N-gram speculative decoding (required for rollbacks). For standard 1-question-1-answer generation or MTP/DFlash methods, keep at 0 to save memory.",
+                }),
+                "checkpoint_on_device": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Store context checkpoints in VRAM (True) instead of RAM (False). Saves VRAM if False, but makes rollbacks slower. Only matters if 'ctx_checkpoints' (in Memory group) > 0.",
+                }),
+
+                # ==================================================
+                # GROUP 9: EMBEDDINGS
                 # ==================================================
                 "🔢 Embeddings": ("BOOLEAN", {
                     "default": False,
@@ -676,7 +784,7 @@ class Qwen3VL_AdvancedConfig:
                 }),
 
                 # ==================================================
-                # GROUP 9: DEBUG / SYSTEM
+                # GROUP 10: DEBUG / SYSTEM
                 # ==================================================
                 "🛠️ Debug, System & Advanced": ("BOOLEAN", {
                     "default": False,
@@ -764,210 +872,125 @@ class Qwen3VL_AdvancedConfig:
         }
 
         # --------------------------------------------------------------
-        # 2. collect local params from widgets
-        #    None means "do not override" (not written into config)
-        # --------------------------------------------------------------
-
-        # model / paths
-        model_path = g("model_path", "")
-        mmproj_path = g("mmproj_path", "")
-
-        # memory / context
-        n_ctx = g("n_ctx", 8192)
-        n_batch = g("n_batch", 2048)
-        n_ubatch = g("n_ubatch", 512)
-        n_keep = g("n_keep", 256)
-        logits_all = g("logits_all", False)
-        offload_kqv = g("offload_kqv", True)
-        use_mmap = g("use_mmap", False)
-        use_mlock = g("use_mlock", False)
-        pool_size = g("pool_size", 4194304)
-        swa_full = g("swa_full", False)
-        type_k = GGML_TYPES.get(g("type_k", "1=F16"), 1)
-        type_v = GGML_TYPES.get(g("type_v", "1=F16"), 1)
-        ctx_checkpoints = g("ctx_checkpoints", 0)
-
-        # sampling
-        max_tokens = g("max_tokens", 2048)
-        temperature = g("temperature", 0.7)
-        top_p = g("top_p", 0.92)
-        min_p = g("min_p", 0.05)
-        top_k = g("top_k", 0)
-        repeat_penalty = g("repeat_penalty", 1.1)
-        presence_penalty = g("presence_penalty", 0.0)
-        frequency_penalty = g("frequency_penalty", 0.0)
-        words_to_ban = g("words_to_ban", "")
-
-        # gpu / offload / multi-gpu
-        n_gpu_layers = g("n_gpu_layers", -1)
-        n_cpu_moe = g("n_cpu_moe", 0)
-        cpu_moe = g("cpu_moe", False)
-        n_threads = g("n_threads", 8)
-        flash_attn_type = FLASH_ATTN_TYPES.get(g("flash_attn_type", "-1=AUTO"), -1)
-        split_mode = SPLIT_MODES.get(g("split_mode", "0=NONE"), 0)
-        main_gpu = g("main_gpu", 0)
-        cuda_device = g("cuda_device", "")
-        tensor_split = g("tensor_split", "")
-
-        # chat format
-        chat_handler = g("chat_handler", "none")
-        chat_format = g("chat_format", "none")
-        chat_format_from_gguf = g("chat_format_from_gguf", False)
-        enable_thinking = g("enable_thinking", False)
-        remove_thinking = g("remove_thinking", False)
-        force_reasoning = g("force_reasoning", False)
-        system_prompt_default = g("system_prompt_default", "")
-        system_preset_to_user_prompt = g("system_preset_to_user_prompt", False)
-        user_prompt_after_content = g("user_prompt_after_content", True)
-        add_vision_id = g("add_vision_id", "auto")
-
-        # templates 
-        raw_mode = g("raw_mode", False)
-        prompt_template = g("prompt_template", "")
-        stop = g("stop", "")
-
-        # multimodal / media
-        force_mmproj = g("force_mmproj", True)
-        image_min_tokens = g("image_min_tokens", 0)
-        image_max_tokens = g("image_max_tokens", 0)
-        max_images = g("max_images", 10)
-        max_frames = g("max_frames", 24)
-        max_audios = g("max_audios", 3)
-        audio_sample_rate = g("audio_sample_rate", 0)
-        image_quality = g("image_quality", 95)
-        frame_quality = g("frame_quality", 75)
-
-        # embeddings
-        extract_embedding = g("extract_embedding", False)
-        pooling_type = POOLING_TYPES.get(g("pooling_type", "0=NONE"), 0)
-        tokenizer_path = g("tokenizer_path", "")
-        embedding_scale = g("embedding_scale", 1.0)
-        convert_emb_to_cond = g("convert_emb_to_cond", False)
-
-        # variables / ids
-        enable_variables = g("enable_variables", False)
-        add_image_id = g("add_image_id", "")
-        add_frame_id = g("add_frame_id", "")
-        add_audio_id = g("add_audio_id", "")
-
-        # debug / system
-        verbose = g("verbose", False)
-        debug = g("debug", True)
-        debug_output = g("debug_output", False)
-        clearing_cache = g("clearing_cache", True)
-        force_gc_start = g("force_gc_start", False)
-        force_gc_unload = g("force_gc_unload", False)
-        raw_output = g("raw_output", False)
-
-        # extra passthrough
-        extra_raw = g("extra", "")
-
-        # --------------------------------------------------------------
-        # 3. build local_params dict
+        # build local_params dict
         # --------------------------------------------------------------
 
         local_params = {
             # model / paths
-            "model_path": model_path,
-            "mmproj_path": mmproj_path,
+            "model_path": g("model_path", ""),
+            "mmproj_path": g("mmproj_path", ""),
 
             # memory / context
-            "n_ctx": n_ctx,
-            "n_batch": n_batch,
-            "n_ubatch": n_ubatch,
-            "n_keep": n_keep,
-            "logits_all": logits_all,
-            "offload_kqv": offload_kqv,
-            "use_mmap": use_mmap,
-            "use_mlock": use_mlock,
-            "pool_size": pool_size,
-            "swa_full": swa_full,
-            "type_k": type_k,
-            "type_v": type_v,
-            "ctx_checkpoints": ctx_checkpoints,
+            "n_ctx": g("n_ctx", 8192),
+            "n_batch": g("n_batch", 2048),
+            "n_ubatch": g("n_ubatch", 512),
+            "n_keep": g("n_keep", 256),
+            "logits_all": g("logits_all", False),
+            "offload_kqv": g("offload_kqv", True),
+            "use_mmap": g("use_mmap", False),
+            "use_mlock": g("use_mlock", False),
+            "pool_size": g("pool_size", 4194304),
+            "swa_full": g("swa_full", False),
+            "type_k": GGML_TYPES.get(g("type_k", "1=F16"), 1),
+            "type_v": GGML_TYPES.get(g("type_v", "1=F16"), 1),
 
             # sampling
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "top_p": top_p,
-            "min_p": min_p,
-            "top_k": top_k,
-            "repeat_penalty": repeat_penalty,
-            "presence_penalty": presence_penalty,
-            "frequency_penalty": frequency_penalty,
-            "words_to_ban": words_to_ban,
+            "max_tokens": g("max_tokens", 2048),
+            "temperature": g("temperature", 0.7),
+            "top_p": g("top_p", 0.92),
+            "min_p": g("min_p", 0.05),
+            "top_k": g("top_k", 0),
+            "repeat_penalty": g("repeat_penalty", 1.1),
+            "presence_penalty": g("presence_penalty", 0.0),
+            "frequency_penalty": g("frequency_penalty", 0.0),
+            "words_to_ban": g("words_to_ban", ""),
 
             # gpu / offload / multi-gpu
-            "n_gpu_layers": n_gpu_layers,
-            "n_cpu_moe": n_cpu_moe,
-            "cpu_moe": cpu_moe,
-            "n_threads": n_threads,
-            "flash_attn_type": flash_attn_type,
-            "split_mode": split_mode,
-            "main_gpu": main_gpu,
-            "cuda_device": cuda_device,
-            "tensor_split": tensor_split,
+            "n_gpu_layers": g("n_gpu_layers", -1),
+            "n_cpu_moe": g("n_cpu_moe", 0),
+            "cpu_moe": g("cpu_moe", False),
+            "n_threads": g("n_threads", 8),
+            "flash_attn_type": FLASH_ATTN_TYPES.get(g("flash_attn_type", "-1=AUTO"), -1),
+            "split_mode": SPLIT_MODES.get(g("split_mode", "0=NONE"), 0),
+            "main_gpu": g("main_gpu", 0),
+            "cuda_device": g("cuda_device", ""),
+            "tensor_split": g("tensor_split", ""),
 
             # chat format
-            "chat_handler": chat_handler,
-            "chat_format": chat_format,
-            "chat_format_from_gguf": chat_format_from_gguf,
-            "enable_thinking": enable_thinking,
-            "remove_thinking": remove_thinking,
-            "force_reasoning": force_reasoning,
-            "system_prompt_default": system_prompt_default,
-            "system_preset_to_user_prompt": system_preset_to_user_prompt,
-            "user_prompt_after_content": user_prompt_after_content,
-            "add_vision_id": add_vision_id,
+            "chat_handler": g("chat_handler", "none"),
+            "chat_format": g("chat_format", "none"),
+            "chat_format_from_gguf": g("chat_format_from_gguf", False),
+            "enable_thinking": g("enable_thinking", False),
+            "remove_thinking": g("remove_thinking", False),
+            "force_reasoning": g("force_reasoning", False),
+            "system_prompt_default": g("system_prompt_default", ""),
+            "system_preset_to_user_prompt": g("system_preset_to_user_prompt", False),
+            "user_prompt_after_content": g("user_prompt_after_content", True),
+            "add_vision_id": g("add_vision_id", "auto"),
 
             # templates 
-            "raw_mode": raw_mode,
-            "prompt_template": prompt_template,
-            "stop": stop,
+            "raw_mode": g("raw_mode", False),
+            "prompt_template": g("prompt_template", ""),
+            "stop": g("stop", ""),
 
             # multimodal / media
-            "force_mmproj": force_mmproj,
-            "image_min_tokens": image_min_tokens,
-            "image_max_tokens": image_max_tokens,
-            "max_images": max_images,
-            "max_frames": max_frames,
-            "max_audios": max_audios,
-            "audio_sample_rate": audio_sample_rate,
-            "image_quality": image_quality,
-            "frame_quality": frame_quality,
+            "force_mmproj": g("force_mmproj", True),
+            "image_min_tokens": g("image_min_tokens", 0),
+            "image_max_tokens": g("image_max_tokens", 0),
+            "max_images": g("max_images", 10),
+            "max_frames": g("max_frames", 24),
+            "max_audios": g("max_audios", 3),
+            "audio_sample_rate": g("audio_sample_rate", 0),
+            "image_quality": g("image_quality", 95),
+            "frame_quality": g("frame_quality", 75),
+
+            # speculative decoding
+            "speculative_enabled": g("speculative_enabled", False),
+            "speculative_type": SPECULATIVE_TYPES.get(g("speculative_type", "3=MTP (Multi-token Prediction)"), 3),
+            "ngram_size_n": g("ngram_size_n", 8),
+            "ngram_size_m": g("ngram_size_m", 16),
+            "draft_model_path": g("draft_model_path", ""),
+            "draft_n_max": g("draft_n_max", 2),
+            "draft_p_min": g("draft_p_min", 0.0),
+            "draft_n_gpu_layers": g("draft_n_gpu_layers", -1),
+            "draft_backend_sampling": g("draft_backend_sampling", True),
+            "ngram_min_hits": g("ngram_min_hits", 1),
+            "ngram_max_entries_per_key": g("ngram_max_entries_per_key", 4),
+            "ctx_checkpoints": g("ctx_checkpoints", 0),
+            "checkpoint_on_device": g("checkpoint_on_device", False),
 
             # embeddings
-            "extract_embedding": extract_embedding,
-            "pooling_type": pooling_type,
-            "tokenizer_path": tokenizer_path,
-            "embedding_scale": embedding_scale,
-            "convert_emb_to_cond": convert_emb_to_cond,
+            "extract_embedding": g("extract_embedding", False),
+            "pooling_type": POOLING_TYPES.get(g("pooling_type", "0=NONE"), 0),
+            "tokenizer_path": g("tokenizer_path", ""),
+            "embedding_scale": g("embedding_scale", 1.0),
+            "convert_emb_to_cond": g("convert_emb_to_cond", False),
 
             # variables / ids
-            "enable_variables": enable_variables,
-            "add_image_id": add_image_id,
-            "add_frame_id": add_frame_id,
-            "add_audio_id": add_audio_id,
+            "enable_variables": g("enable_variables", False),
+            "add_image_id": g("add_image_id", ""),
+            "add_frame_id": g("add_frame_id", ""),
+            "add_audio_id": g("add_audio_id", ""),
 
             # debug / system
-            "verbose": verbose,
-            "debug": debug,
-            "clearing_cache": clearing_cache,
-            "force_gc_start": force_gc_start,
-            "force_gc_unload": force_gc_unload,
-            "raw_output": raw_output,
-            "debug_output": debug_output,
+            "verbose": g("verbose", False),
+            "debug": g("debug", True),
+            "debug_output": g("debug_output", False),
+            "clearing_cache": g("clearing_cache", True),
+            "force_gc_start": g("force_gc_start", False),
+            "force_gc_unload": g("force_gc_unload", False),
+            "raw_output": g("raw_output", False),
         }
 
         # --------------------------------------------------------------
-        # 4. apply local params (skip None)
+        # apply local params (skip None)
         # --------------------------------------------------------------
         for k, v in local_params.items():
             if v is not None:
                 config[k] = v
 
         # --------------------------------------------------------------
-        # 4b. build diff_config — только параметры, отличающиеся от дефолта
+        # build diff_config — только параметры, отличающиеся от дефолта
         # --------------------------------------------------------------
         diff_config = {}
         for k, v in local_params.items():
@@ -983,15 +1006,15 @@ class Qwen3VL_AdvancedConfig:
                 diff_config[k] = v
 
         # --------------------------------------------------------------
-        # 5. apply extra passthrough
+        # apply extra passthrough
         # --------------------------------------------------------------
-        extra_dict = _parse_extra(extra_raw)
+        extra_dict = _parse_extra(g("extra", ""))
         if extra_dict:
             config.update(extra_dict)
             diff_config.update(extra_dict)
 
         # --------------------------------------------------------------
-        # 6. apply stacked config_override (highest priority)
+        # apply stacked config_override (highest priority)
         # --------------------------------------------------------------
         config_override = kwargs.get("config_override", None)
         if config_override:

@@ -1,4 +1,5 @@
 # Nightly
+- Add speculative decoding
 - Add dynamic image, audio, video input
 - Add "user_prompt_template" input
 - Add "bypass" input

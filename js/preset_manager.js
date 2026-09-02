@@ -12,6 +12,7 @@ const GROUP_HEADERS = [
     "💬 Chat, Prompts & Variables",
     "📝 Prompt Template",
     "🖼️ Multimodal & Media",
+    "⚡ Speculative Decoding",
     "🔢 Embeddings",
     "🛠️ Debug, System & Advanced"
 ];
@@ -23,18 +24,20 @@ const HEADER_COLORS = {
     "💬 Chat, Prompts & Variables": "#f43f5e",
     "📝 Prompt Template": "#d946ef",
     "🖼️ Multimodal & Media": "#06b6d4",
+    "⚡ Speculative Decoding": "#eab308",
     "🔢 Embeddings": "#6366f1",
     "🛠️ Debug, System & Advanced": "#71717a"
 };
 const HEADER_DEFAULT_COLOR = "#3a6ea5";
 const GROUP_FIELDS = {
     "📁 Model & Paths": ["model_path", "mmproj_path"],
-    "🗄️ Memory & Context": ["n_ctx", "n_batch", "n_ubatch", "n_keep", "offload_kqv", "type_k", "type_v", "use_mmap", "use_mlock", "pool_size", "logits_all", "ctx_checkpoints", "swa_full"],
+    "🗄️ Memory & Context": ["n_ctx", "n_batch", "n_ubatch", "n_keep", "offload_kqv", "type_k", "type_v", "use_mmap", "use_mlock", "pool_size", "logits_all", "swa_full"],
     "🎲 Sampling & Generation": ["max_tokens", "temperature", "top_p", "min_p", "top_k", "repeat_penalty", "presence_penalty", "frequency_penalty", "enable_thinking", "remove_thinking", "force_reasoning", "words_to_ban"],
     "⚙️ Hardware & Acceleration": ["n_gpu_layers", "n_cpu_moe", "cpu_moe", "n_threads", "flash_attn_type", "split_mode", "main_gpu", "cuda_device", "tensor_split"],
     "💬 Chat, Prompts & Variables": ["chat_handler", "chat_format", "chat_format_from_gguf", "system_prompt_default", "system_preset_to_user_prompt", "user_prompt_after_content", "enable_variables", "add_vision_id", "add_image_id", "add_frame_id", "add_audio_id"],
     "📝 Prompt Template": ["raw_mode", "prompt_template", "stop"],
     "🖼️ Multimodal & Media": ["force_mmproj", "image_min_tokens", "image_max_tokens", "max_images", "max_frames", "max_audios", "audio_sample_rate", "image_quality", "frame_quality"],
+    "⚡ Speculative Decoding": ["speculative_enabled", "speculative_type", "draft_n_max", "draft_p_min", "draft_model_path", "draft_n_gpu_layers", "draft_backend_sampling", "ngram_size_n", "ngram_size_m", "ngram_min_hits", "ngram_max_entries_per_key", "ctx_checkpoints", "checkpoint_on_device"],
     "🔢 Embeddings": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond"],
     "🛠️ Debug, System & Advanced": ["verbose", "debug", "debug_output", "raw_output", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"]
 };
@@ -59,6 +62,19 @@ const GGML_REVERSE = {
 const SPLIT_MODE_REVERSE = { 0: "0=NONE", 1: "1=LAYER", 2: "2=ROW", 3: "3=TENSOR" };
 const POOLING_REVERSE = { "-1": "-1=UNSPECIFIED", "0": "0=NONE", "1": "1=MEAN", "2": "2=CLS", "3": "3=LAST", "4": "4=RANK" };
 const FLASH_ATTN_REVERSE = { "-1": "-1=AUTO", "0": "0=DISABLED", "1": "1=ENABLED" };
+const SPECULATIVE_TYPES_REVERSE = { 
+    0: "0=NONE (Disabled)", 
+    1: "1=DRAFT_SIMPLE (Legacy standalone)",
+    2: "2=DRAFT_EAGLE3 (Requires specific EAGLE-3 GGUF)",
+    3: "3=MTP (Multi-token Prediction)", 
+    4: "4=DFLASH (Block-diffusion draft)", 
+    5: "5=DSPARK (Markov/confidence heads)", 
+    6: "6=NGRAM_SIMPLE (Basic, less efficient)", 
+    7: "7=NGRAM_MAP_K (Recommended N-gram)", 
+    8: "8=NGRAM_MAP_K4V (N-gram with 4 continuations)",
+    9: "9=NGRAM_MOD (Experimental modulo)", 
+    10: "10=NGRAM_CACHE (Experimental 3-level cache)"
+};
 
 app.registerExtension({
     name: "SimpleQwenVL.ConfiguratorUI",
@@ -385,6 +401,9 @@ function convertValue(fieldName, value, widget) {
         case "flash_attn_type":
             if (typeof value === "number" && FLASH_ATTN_REVERSE[value]) return FLASH_ATTN_REVERSE[value];
             return value;
+        case "speculative_type":
+            if (typeof value === "number" && SPECULATIVE_TYPES_REVERSE[value]) return SPECULATIVE_TYPES_REVERSE[value];
+            return value;
         case "add_vision_id":
             if (value === true) return "true";
             if (value === false) return "false";
@@ -431,6 +450,10 @@ function collectNodeConfig(node) {
             val = nameToId(FLASH_ATTN_REVERSE, val);
             if (val === null) continue;
         }
+        if (w.name === "speculative_type") {
+            val = nameToId(SPECULATIVE_TYPES_REVERSE, val);
+            if (val === null) continue;
+        }
         if (w.name === "type_k" || w.name === "type_v") {
             val = nameToId(GGML_REVERSE, val);
             if (val === null) continue;
@@ -449,6 +472,77 @@ function collectNodeConfig(node) {
             }
         } catch (e) {
             console.warn("[Configurator] Failed to parse extra:", e);
+        }
+    }
+    return out;
+}
+
+// =========================================================================
+// collectDiffConfig — только отличия от дефолтов
+// =========================================================================
+function collectDiffConfig(node) {
+    const out = {};
+    const defaults = node._widgetDefaults || {};
+    for (const w of node.widgets) {
+        if (w.skipSerialize) continue;
+        if (w.name === "model_preset" || w.name === "preset_name" ||
+            w.name === "preset_controls" || w.name === "group_toggle_panel") continue;
+        if (GROUP_HEADERS.includes(w.name)) continue;
+        if (w.name === "extra") continue;
+
+        let val = w.value;
+        if (w.name === "split_mode") {
+            val = nameToId(SPLIT_MODE_REVERSE, val);
+            if (val === null) continue;
+        }
+        if (w.name === "pooling_type") {
+            val = nameToId(POOLING_REVERSE, val);
+            if (val === null) continue;
+        }
+        if (w.name === "flash_attn_type") {
+            val = nameToId(FLASH_ATTN_REVERSE, val);
+            if (val === null) continue;
+        }
+        if (w.name === "speculative_type") {
+            val = nameToId(SPECULATIVE_TYPES_REVERSE, val);
+            if (val === null) continue;
+        }
+        if (w.name === "type_k" || w.name === "type_v") {
+            val = nameToId(GGML_REVERSE, val);
+            if (val === null) continue;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
+            let defVal = defaults[w.name];
+
+            if (w.name === "split_mode") defVal = nameToId(SPLIT_MODE_REVERSE, defVal);
+            else if (w.name === "pooling_type") defVal = nameToId(POOLING_REVERSE, defVal);
+            else if (w.name === "flash_attn_type") defVal = nameToId(FLASH_ATTN_REVERSE, defVal);
+            else if (w.name === "speculative_type") defVal = nameToId(SPECULATIVE_TYPES_REVERSE, defVal);
+            else if (w.name === "type_k" || w.name === "type_v") defVal = nameToId(GGML_REVERSE, defVal);
+
+            if (defVal !== null && String(val) !== String(defVal)) {
+               out[w.name] = val;
+            }
+        } else {
+            // Дефолта нет — считаем отличием
+            out[w.name] = val;
+        }
+    }
+
+    // Extra: если не пустое — тоже включаем
+    const extraWidget = node.widgets.find(w => w.name === "extra");
+    if (extraWidget && extraWidget.value &&
+        typeof extraWidget.value === "string" && extraWidget.value.trim()) {
+        try {
+            const parsed = JSON.parse(extraWidget.value.trim());
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+                for (const [key, value] of Object.entries(parsed)) {
+                    out[key] = value;
+                }
+            }
+        } catch (e) {
+            console.warn("[Configurator] Failed to parse extra for diff:", e);
         }
     }
     return out;
@@ -626,34 +720,26 @@ async function onImportJson(node, combo) {
             // Сбрасываем все виджеты в дефолтные значения
             const defaults = node._widgetDefaults || {};
             for (const w of node.widgets) {
-                // Пропускаем служебные виджеты и заголовки групп
                 if (w.skipSerialize) continue;
                 if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
                 if (GROUP_HEADERS.includes(w.name)) continue;
                 if (w.type === "button") continue;
-                
-                if (w.name === "extra") {
-                    w.value = "";
-                    continue;
-                }
-
-                // Сбрасываем значение в дефолт
+                if (w.name === "extra") { w.value = ""; continue; }
                 if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
                     w.value = convertValue(w.name, defaults[w.name], w);
                 }
             }
-            // =====================================================================
 
-            // 2. Применяем импортированный конфиг поверх сброшенных дефолтов
+            // Применяем импортированный конфиг поверх сброшенных дефолтов
             applyPreset(node, config, false);
 
-            // 3. Cравниваем виджеты с текущим baseline (логика dirty state)
+            // Dirty state
             const currentPresetName = node.widgets.find(w => w.name === "model_preset")?.value;
             if (currentPresetName && currentPresetName !== "None") {
                 node._dirty = node.widgets.some(w =>
                     !w.skipSerialize &&
                     !["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name) &&
-                    !GROUP_HEADERS.includes(w.name) && 
+                    !GROUP_HEADERS.includes(w.name) &&
                     w.type !== "button" &&
                     node._baselineValues[w.name] !== undefined &&
                     w.value !== node._baselineValues[w.name]
@@ -666,53 +752,189 @@ async function onImportJson(node, combo) {
             showError(`JSON Parse Error:\n${e.message}`);
             return false;
         }
-    });
+    }, [
+        // ---- Дополнительные кнопки ----
+        {
+            label: '📋 Current Config (All)',
+            onClick: (textarea) => {
+                const config = collectNodeConfig(node);
+                textarea.value = JSON.stringify(config, null, 2);
+            }
+        },
+        {
+            label: '📋 Current Config (Diff)',
+            onClick: (textarea) => {
+                const diff = collectDiffConfig(node);
+                textarea.value = Object.keys(diff).length > 0
+                    ? JSON.stringify(diff, null, 2)
+                    : '{\n  // no differences from defaults\n}';
+            }
+        }
+    ]);
 }
 
 // =========================================================================
 // MultilineDialog
 // =========================================================================
-function showMultilineDialog(title, defaultValue, onConfirm) {
+function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) {
     const overlay = document.createElement('div');
-    overlay.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;`;
+    overlay.style.cssText =
+        'position:fixed;top:0;left:0;width:100%;height:100%;' +
+        'background:rgba(0,0,0,0.55);z-index:10000;' +
+        'display:flex;align-items:center;justify-content:center;';
+
     const dialog = document.createElement('div');
-    dialog.style.cssText = `background: #2a2a2a; border: 1px solid #555; border-radius: 8px; padding: 20px; min-width: 500px; max-width: 800px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);`;
+    dialog.style.cssText =
+        'background:var(--comfy-menu-bg,#2a2a2a);' +
+        'border:1px solid var(--border-color,#555);' +
+        'border-radius:8px;padding:20px;' +
+        'min-width:520px;max-width:820px;' +
+        'box-shadow:0 4px 24px rgba(0,0,0,0.6);' +
+        'font-family:sans-serif;';
+
+    // Заголовок
     const titleEl = document.createElement('h3');
     titleEl.textContent = title;
-    titleEl.style.cssText = 'margin: 0 0 15px 0; color: #fff; font-size: 16px;';
+    titleEl.style.cssText =
+        'margin:0 0 14px 0;' +
+        'color:var(--input-text,#fff);' +
+        'font-size:14px;font-weight:600;font-family:sans-serif;';
+
+    // Textarea
     const textarea = document.createElement('textarea');
     textarea.value = defaultValue || '';
-    textarea.style.cssText = `width: 100%; height: 400px; background: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 10px; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; resize: vertical; box-sizing: border-box;`;
+    textarea.spellcheck = false;
+    textarea.style.cssText =
+        'width:100%;height:380px;' +
+        'background:var(--comfy-input-bg,#1a1a1a);' +
+        'color:var(--input-text,#e0e0e0);' +
+        'border:1px solid var(--border-color,#444);' +
+        'border-radius:4px;padding:10px;' +
+        "font-family:'Consolas','Monaco','Courier New',monospace;" +
+        'font-size:12px;line-height:1.45;' +
+        'resize:vertical;box-sizing:border-box;outline:none;';
+    textarea.addEventListener('focus', () => {
+        textarea.style.borderColor = '#4a90e2';
+    });
+    textarea.addEventListener('blur', () => {
+        textarea.style.borderColor = 'var(--border-color,#444)';
+    });
+
+    // Сообщение об ошибке
     const errorMsg = document.createElement('div');
-    errorMsg.style.cssText = `margin-top: 10px; padding: 10px; background: #7f1d1d; color: #fca5a5; border-radius: 4px; font-size: 13px; display: none; font-family: 'Consolas', 'Monaco', monospace; white-space: pre-wrap; word-break: break-word;`;
+    errorMsg.style.cssText =
+        'margin-top:8px;padding:8px 10px;' +
+        'background:#7f1d1d;color:#fca5a5;' +
+        'border-radius:4px;font-size:12px;' +
+        "font-family:'Consolas','Monaco','Courier New',monospace;" +
+        'white-space:pre-wrap;word-break:break-word;display:none;';
+
+    // ---------- Ряд кнопок ----------
     const buttonRow = document.createElement('div');
-    buttonRow.style.cssText = 'margin-top: 15px; display: flex; gap: 10px; justify-content: flex-end;';
-    const okBtn = document.createElement('button');
-    okBtn.textContent = '✓ Apply';
-    okBtn.style.cssText = `padding: 8px 20px; background: #3b82f6; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;`;
-    okBtn.onmouseover = () => okBtn.style.background = '#2563eb';
-    okBtn.onmouseout = () => okBtn.style.background = '#3b82f6';
+    buttonRow.style.cssText =
+        'margin-top:14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
+
+    // Общий стиль для всех кнопок (как в preset controls)
+    const baseBtnStyle =
+        'height:26px;padding:0 14px;' +
+        'background:var(--comfy-input-bg,#333);' +
+        'color:var(--input-text,#e0e0e0);' +
+        'border:1px solid var(--border-color,#555);' +
+        'border-radius:4px;cursor:pointer;' +
+        'font-size:11px;font-family:sans-serif;' +
+        'display:inline-flex;align-items:center;justify-content:center;' +
+        'line-height:1;white-space:nowrap;outline:none;' +
+        'transition:background .15s,border-color .15s;';
+
+    // Вспомогательная: навесить hover на «обычную» кнопку
+    const attachHover = (btn, hoverBg, hoverColor, hoverBorder) => {
+        btn.addEventListener('mouseenter', () => {
+            btn.style.background = hoverBg;
+            btn.style.color = hoverColor || '#ffffff';
+            btn.style.borderColor = hoverBorder || hoverBg;
+        });
+        btn.addEventListener('mouseleave', () => {
+            btn.style.background = 'var(--comfy-input-bg,#333)';
+            btn.style.color = 'var(--input-text,#e0e0e0)';
+            btn.style.borderColor = 'var(--border-color,#555)';
+        });
+        btn.addEventListener('mousedown', (e) => { e.preventDefault(); btn.style.opacity = '0.7'; });
+        btn.addEventListener('mouseup', () => { btn.style.opacity = '1'; });
+    };
+
+    // Дополнительные кнопки (загрузка конфига) — слева
+    extraButtons.forEach(eb => {
+        const btn = document.createElement('button');
+        btn.textContent = eb.label;
+        btn.style.cssText = baseBtnStyle;
+        attachHover(btn, '#4a90e2', '#ffffff', '#4a90e2');
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            eb.onClick(textarea);
+        });
+        buttonRow.appendChild(btn);
+    });
+
+    // Спейсер, чтобы основные кнопки были справа
+    if (extraButtons.length > 0) {
+        const spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        buttonRow.appendChild(spacer);
+    }
+
+    // Cancel
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = '✗ Cancel';
-    cancelBtn.style.cssText = `padding: 8px 20px; background: #555; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;`;
-    cancelBtn.onmouseover = () => cancelBtn.style.background = '#666';
-    cancelBtn.onmouseout = () => cancelBtn.style.background = '#555';
+    cancelBtn.style.cssText = baseBtnStyle;
+    attachHover(cancelBtn, '#666', '#ffffff', '#666');
+
+    // Apply (primary)
+    const okBtn = document.createElement('button');
+    okBtn.textContent = '✓ Apply';
+    okBtn.style.cssText =
+        baseBtnStyle.replace(
+            'background:var(--comfy-input-bg,#333);',
+            'background:#3b82f6;'
+        ).replace(
+            'color:var(--input-text,#e0e0e0);',
+            'color:#ffffff;'
+        ).replace(
+            'border:1px solid var(--border-color,#555);',
+            'border:1px solid #3b82f6;'
+        );
+    okBtn.addEventListener('mouseenter', () => {
+        okBtn.style.background = '#2563eb';
+        okBtn.style.borderColor = '#2563eb';
+    });
+    okBtn.addEventListener('mouseleave', () => {
+        okBtn.style.background = '#3b82f6';
+        okBtn.style.borderColor = '#3b82f6';
+    });
+    okBtn.addEventListener('mousedown', (e) => { e.preventDefault(); okBtn.style.opacity = '0.7'; });
+    okBtn.addEventListener('mouseup', () => { okBtn.style.opacity = '1'; });
+
     buttonRow.appendChild(cancelBtn);
     buttonRow.appendChild(okBtn);
+
+    // Собираем диалог
     dialog.appendChild(titleEl);
     dialog.appendChild(textarea);
     dialog.appendChild(errorMsg);
     dialog.appendChild(buttonRow);
     overlay.appendChild(dialog);
     document.body.appendChild(overlay);
+
     textarea.focus();
     textarea.select();
+
+    // ---------- Логика ----------
     const close = () => document.body.removeChild(overlay);
     const showError = (msg) => {
         errorMsg.textContent = '❌ ' + msg;
         errorMsg.style.display = 'block';
     };
     const hideError = () => { errorMsg.style.display = 'none'; };
+
     okBtn.onclick = () => {
         const text = textarea.value.trim();
         if (!text) { showError('Text is empty'); return; }
@@ -721,10 +943,11 @@ function showMultilineDialog(title, defaultValue, onConfirm) {
         if (result !== false) close();
     };
     cancelBtn.onclick = close;
+
     overlay.onclick = (e) => {
         if (e.target === overlay) {
-            const selection = window.getSelection();
-            if (selection && selection.toString().length > 0) return;
+            const sel = window.getSelection();
+            if (sel && sel.toString().length > 0) return;
             close();
         }
     };
@@ -797,7 +1020,7 @@ function createPresetControlsWidget(hostNode, presetCombo) {
 
 function createGroupTogglePanel(hostNode) {
     const element = document.createElement("div");
-    element.style.cssText = `display: flex; flex-direction: row; gap: 4px; margin: 0 !important; padding: 0 !important; width: 100%; height: 24px !important; box-sizing: border-box; overflow: hidden;`;
+    element.style.cssText = `display: flex; flex-direction: row; gap: 2px; margin: 0 !important; padding: 0 !important; width: 100%; height: 24px !important; box-sizing: border-box; overflow: hidden;`;
     const groups = [
         { icon: "📁", name: "📁 Model & Paths", title: "Model & Paths" },
         { icon: "🗄️", name: "🗄️ Memory & Context", title: "Memory & Context" },
@@ -806,6 +1029,7 @@ function createGroupTogglePanel(hostNode) {
         { icon: "💬", name: "💬 Chat, Prompts & Variables", title: "Chat, Prompts & Variables" },
         { icon: "📝", name: "📝 Prompt Template", title: "Prompt Template" },
         { icon: "🖼️", name: "🖼️ Multimodal & Media", title: "Multimodal & Media" },
+        { icon: "⚡", name: "⚡ Speculative Decoding", title: "Speculative Decoding" },
         { icon: "🔢", name: "🔢 Embeddings", title: "Embeddings" },
         { icon: "🛠️", name: "🛠️ Debug, System & Advanced", title: "Debug, System & Advanced" },
     ];
