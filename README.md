@@ -15,6 +15,9 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
+- Add speculative decoding
+> ⚠️ **Important Limitations**: Incompatible with multimodal inputs (images, video, audio), requires `llama-cpp-python` version 0.3.48 or higher, disabled by default.
+
 - Add dynamic image, audio, video input, Add "user_prompt_template" input, Add "bypass" input
 - New design for LLM Config
 - **Added new configurator 🌐 LLM Config and 🌐 LLM Prompt Preset**
@@ -416,7 +419,6 @@ Possible model configurations that can be passed to the `config_override` input.
 | use_mlock | bool | False | Enable mlock. Lock model in RAM to prevent OS swapping. Uses more RAM but prevents page faults |
 | pool_size | int | 4194304 | Memory pool size for llama.cpp. Increase if you get ggml_new_object: not enough space |
 | logits_all | bool | False | Evaluate logits for ALL tokens (not just last one). Required for perplexity evaluation, but significantly increases VRAM and time |
-| ctx_checkpoints | int | 0 | Max number of context checkpoints to create per slot. 0 = disabled. Used for prompt caching |
 | swa_full | bool | False | Enable full Sliding Window Attention context. Required for some models (Mistral/Gemma) to prevent truncation |
 
 🎲 Sampling & Generation
@@ -486,6 +488,26 @@ Possible model configurations that can be passed to the `config_override` input.
 | audio_sample_rate | int | 0 | Target sampling frequency for audio resampling. 0 = not set (keep original) | 
 | image_quality | int | 95 | JPEG quality (1-100) when encoding images to data URIs. Higher = better quality, larger size |
 | frame_quality | int | 75 | JPEG quality (1-100) when encoding video frames. Lower than images to save space |
+
+⚡ Speculative Decoding
+
+Speculative decoding accelerates text generation by using a draft model (or statistical n-gram) to predict multiple tokens ahead, which are then verified by the target model in a single batch pass. This can significantly speed up inference when the draft predictions are accurate.
+
+| Field | Type | Default | Description |
+|--------|--------|--------|--------|
+| speculative_enabled | bool | False | Master switch to enable speculative decoding. Automatically disabled for multimodal inputs (images/video/audio). |
+| speculative_type | int | 3=MTP | Speculative algorithm type. `3=MTP` (Multi-token Prediction, built-in for Qwen3.5/3.8, recommended), `4=DFLASH` (Block-diffusion draft, requires external model), `5=DSPARK` (Markov/confidence heads, requires external model), `7=NGRAM_MAP_K` (Statistical n-gram, no draft model needed, good for code/JSON), `8=NGRAM_MAP_K4V` (N-gram with 4 cached continuations per key). Other types (1,2,6,9,10) are experimental or legacy. |
+| draft_n_max | int | 2 | Maximum number of draft tokens to generate per step. `Recommended: 2 for MTP`, `7 for DFlash/DSpark`. Higher values increase potential speedup but reduce acceptance rate. Must be ≤ `n_batch - 1`. |
+| draft_p_min | float | 0.0 | Minimum probability threshold to accept a draft token. `0.0` = accept all. For `DFlash/DFlash2`, filters transition probability. For DSpark, filters acceptance confidence. |
+| draft_model_path | string | "" | Path to external draft GGUF model. Required for DFlash (4) and DSpark (5). Leave empty for built-in MTP (3) or N-gram (7/8). The draft model vocabulary and embedding dimensions must match the target model. |
+| draft_n_gpu_layers | int | -1 | **[External model only]** Number of layers to offload for the external draft model. `-1` = all layers on GPU, `0` = CPU only. Only used when `draft_model_path` is specified. |
+| draft_backend_sampling | bool | True | **[External model only]** Use backend vocabulary sampler for draft tokens. Recommended `True` for `DFlash v1` and `DSpark` with large vocabularies. `DFlash2` reads its compact selector output directly and ignores this setting. |
+| ngram_size_n | int | 8 | **[N-gram only]** Size of the n-gram window (N).** Defines how many previous tokens to match when searching for continuations in the generated text history. |
+| ngram_size_m | int | 16 | **[N-gram only]** Maximum length of the draft continuation (M).** How many tokens ahead to propose when a matching n-gram pattern is found. Longer drafts can be faster for highly repetitive output (code, JSON, templates). |
+| ngram_min_hits | int | 1 | **[N-gram only]** Minimum number of matching occurrences required to propose a draft.** Higher values increase confidence but reduce the number of proposals. |
+| ngram_max_entries_per_key | int | 4 | **[NGRAM_MAP_K4V only]** Maximum cached continuations per n-gram key.** Only used when `speculative_type=8`. Allows caching multiple possible continuations for each n-gram pattern. |
+| ctx_checkpoints | int | 0 | Max number of context checkpoints per slot for rollback support. Set to 16 if using N-gram speculative decoding (required for rollbacks when draft is rejected). For standard 1-question-1-answer generation or MTP/DFlash methods, keep at `0` to save VRAM. |
+| checkpoint_on_device | bool | False | Store context checkpoints in VRAM (`True`) instead of RAM (`False`). Saves VRAM if `False`, but makes rollbacks slower due to PCIe transfer. Only matters if `ctx_checkpoints > 0` (i.e., only for N-gram). |
 
 🔢 Embeddings
 
