@@ -348,12 +348,105 @@ def _debug_calc_speed(result, exec_time):
 
     return completion_tokens, speed
 
+# =====================================================================
+# INTERRUPTIBLE STREAMING
+# =====================================================================
+def _stream_chat_completion(llm, messages, completion_kwargs, debug=False):
+    """
+    Streaming-обертка с проверкой прерывания раз в N токенов.
+    """
+    collected_content = []
+    prompt_tokens = 0
+    completion_tokens = 0
+    tick = 0
+    check_every = 10  # Проверка прерывания раз в 10 токенов
+    
+    max_tokens = completion_kwargs.get("max_tokens", 0)
+    bar_width = 30
+    progress_tick = 0
+    progress_every = 10  # Обновлять бар раз в 10 токенов 
+    
+    try:
+        import comfy.model_management
+        has_comfy = True
+    except ImportError:
+        has_comfy = False
+
+    stream = llm.create_chat_completion(
+        messages=messages,
+        stream=True,
+        **completion_kwargs
+    )
+
+    for chunk in stream:
+        tick += 1
+        
+        # Проверка прерывания
+        if tick >= check_every:
+            tick = 0
+            if has_comfy:
+                try:
+                    comfy.model_management.throw_exception_if_processing_interrupted()
+                except Exception:
+                    # Прерывание запрошено! Используем встроенный метод abort
+                    if hasattr(llm, 'abort'):
+                        llm.abort()
+                    raise
+
+        # Подсчет токенов
+        if "usage" in chunk and chunk["usage"]:
+            prompt_tokens = chunk["usage"].get("prompt_tokens", 0)
+
+        delta = chunk["choices"][0].get("delta", {})
+        content = delta.get("content")
+        if content:
+            collected_content.append(content)
+            completion_tokens += 1
+            
+            # Обновление прогресс-бара
+            progress_tick += 1
+            if progress_tick >= progress_every:
+                progress_tick = 0
+                
+                if max_tokens > 0:
+                    # Прогресс относительно max_tokens (потолок)
+                    progress = min(completion_tokens / max_tokens, 1.0)
+                    filled = int(bar_width * progress)
+                    bar = "█" * filled + "░" * (bar_width - filled)
+                    bar_line = f"\r[{bar}] {completion_tokens}/{max_tokens} tokens"
+                else:
+                    # Если max_tokens не задан - просто счетчик
+                    bar_line = f"\rGenerating: {completion_tokens} tokens..."
+                
+                sys.stderr.write(bar_line)
+                sys.stderr.flush()
+
+    # Финализация прогресс-бара
+    if max_tokens > 0:
+        progress = min(completion_tokens / max_tokens, 1.0)
+        filled = int(bar_width * progress)
+        bar = "█" * filled + "░" * (bar_width - filled)
+        bar_line = f"\r[{bar}] {completion_tokens}/{max_tokens} tokens\n"
+        sys.stderr.write(bar_line)
+        sys.stderr.flush()
+
+    output = "".join(collected_content)
+
+    return {
+        "choices": [{"message": {"content": output}}],
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
+    }
+
 def _inference(config):
     """Внутренняя функция, выполняющая инференс с кешированием модели."""
-
     try:
         debug = config.get("debug", True)
         verbose = config.get("verbose", False)
+        streaming_mode = config.get("streaming_mode", False)
 
         chat_handler_type = _norm_str(config.get("chat_handler"))
         chat_format = _norm_str(config.get("chat_format"))
@@ -761,9 +854,10 @@ def _inference(config):
 
                 llm_kwargs = {
                     "model_path": model_path,
-                    "n_ctx": config.get("n_ctx", config.get("ctx", 4096)),
-                    "n_batch": config.get("n_batch", 512),
+                    "n_ctx": config.get("n_ctx", config.get("ctx", 8192)),
+                    "n_batch": config.get("n_batch", 2048),
                     "n_ubatch": config.get("n_ubatch", 512),
+                    "n_keep": config.get("n_keep", 256),
                     "verbose": verbose,
                     "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)),
                     "pooling_type": config.get("pooling_type", LLAMA_POOLING_TYPE_NONE)
@@ -900,10 +994,10 @@ def _inference(config):
                     _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
 
                     t_inference0 = time.perf_counter()
-                    result = current_cache["llm"].create_chat_completion(
-                        messages=messages,
-                        **completion_kwargs
-                    )
+                    if streaming_mode:
+                        result = _stream_chat_completion(current_cache["llm"], messages, completion_kwargs, debug)
+                    else:
+                        result = current_cache["llm"].create_chat_completion(messages=messages, **completion_kwargs)
                     t_inference1 = time.perf_counter()
 
                     if debug:
@@ -997,10 +1091,10 @@ def _inference(config):
                 # --- Инференс ---
 
                 t_inference0 = time.perf_counter()
-                result = current_cache["llm"].create_chat_completion(
-                    messages=messages,
-                    **completion_kwargs
-                )
+                if streaming_mode:
+                    result = _stream_chat_completion(current_cache["llm"], messages, completion_kwargs, debug)
+                else:
+                    result = current_cache["llm"].create_chat_completion(messages=messages, **completion_kwargs)
                 t_inference1 = time.perf_counter()
 
                 if debug:
@@ -1068,9 +1162,12 @@ def _inference(config):
 
             t_emb = time.perf_counter()
             try:
-
-                template_str = config.get("prompt_template", "{user}")
-                prompt, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
+                template_str = config.get("prompt_template", "")
+                if template_str:
+                    text_before, text_after = build_prompt(template_str, system=system_prompt, user=user_prompt)
+                    prompt = text_before + text_after
+                else:
+                    prompt = user_prompt            
 
                 #prompt = f"<|im_start|>user\nA red apple<|im_end|>\n<|im_start|>assistant\n"
                 #[151644,872,198,32,2518,23268,151645,198,151644,77091,198]
@@ -1201,19 +1298,19 @@ def main():
 
         if len(sys.argv) != 2:
             print(json.dumps({"status": "error", "message": "sys.argv != 2"}, ensure_ascii=True), flush=True)
-            sys.exit(1)
+            os._exit(1)
         config_path = sys.argv[1]
 
         if not Path(config_path).exists():
             print(json.dumps({"status": "error", "message": "Config file not found"}, ensure_ascii=True), flush=True)
-            sys.exit(1)
+            os._exit(1)
 
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
         except Exception as e:
             print(json.dumps({"status": "error", "message": f"Failed to load config: {e}"}, ensure_ascii=True), flush=True)
-            sys.exit(1)
+            os._exit(1)
 
         save_dup()
 
@@ -1239,14 +1336,16 @@ def main():
         print(json.dumps(result, ensure_ascii=True), flush=True)
 
         if result["status"] == "error":
-            sys.exit(1)
+            os._exit(1)
+
+        os._exit(0)
 
     except Exception as e:
 
         restore_dup()
 
         print(json.dumps({"status": "error", "message": f"Critical error in main: {e}"}, ensure_ascii=True), flush=True)
-        sys.exit(1)
+        os._exit(1)
             
 
 if __name__ == "__main__":

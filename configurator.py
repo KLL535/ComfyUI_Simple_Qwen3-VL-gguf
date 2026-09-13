@@ -106,6 +106,7 @@ _ADVANCED_DEFAULTS = {
     "debug": True,
     "debug_output": False,
     "raw_output": False,
+    "streaming_mode": False,
     "clearing_cache": True,
     "force_gc_start": False,
     "force_gc_unload": False,
@@ -806,6 +807,10 @@ class Qwen3VL_AdvancedConfig:
                     "default": False,
                     "tooltip": "If True, disables output.strip() (keeps leading/trailing whitespaces).",
                 }),
+                "streaming_mode": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Enables token streaming to allow interrupting generation via the ComfyUI 'Interrupt' button. Adds a negligible overhead (~1%), but guarantees you can manually stop long responses. Recommended if you often need to cancel generations.",
+                }),
                 "clearing_cache": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "Clear cache to prevent execution freezing during heavy memory activity.",
@@ -980,6 +985,7 @@ class Qwen3VL_AdvancedConfig:
             "force_gc_start": g("force_gc_start", False),
             "force_gc_unload": g("force_gc_unload", False),
             "raw_output": g("raw_output", False),
+            "streaming_mode": g("streaming_mode", False),
         }
 
         # --------------------------------------------------------------

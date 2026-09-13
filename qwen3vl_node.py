@@ -16,6 +16,7 @@ import textwrap
 import traceback
 import re
 import folder_paths
+import threading
 
 HAS_JSON_REPAIR = False
 try:
@@ -482,80 +483,126 @@ def run_script_subprocess(script_name, config, timeout=300):
     script_path = os.path.join(node_dir, script_name)
 
     if not os.path.exists(script_path):
-        return {
-            "status": "error", 
-            "message": f"Script file '{script_name}' not found in {node_dir}"
-        }
+        return {"status": "error", "message": f"Script file '{script_name}' not found in {node_dir}"}
 
     if os.path.basename(script_name) != script_name:
-        return {
-            "status": "error", 
-            "message": "Script name must not contain path separators"
-        }
+        return {"status": "error", "message": "Script name must not contain path separators"}
 
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False, encoding='utf-8') as tmp_file:
         json.dump(config, tmp_file, ensure_ascii=False)
         tmp_config_path = tmp_file.name
-    try:
-        result = subprocess.run(
-            [sys.executable, script_path, tmp_config_path],
-            capture_output=True,
-            text=True,
-            #encoding='utf-8',
-            errors='replace',
-            timeout=timeout,
-            cwd=node_dir
-        )
 
+    process = subprocess.Popen(
+        [sys.executable, script_path, tmp_config_path],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors='replace',
+        cwd=node_dir
+    )
+
+    # === communicate() в отдельном потоке ===
+    # Это гарантирует отсутствие deadlock'а (как в subprocess.run)
+    comm_result = {"stdout": None, "stderr": None, "exception": None}
+
+    def _reader():
         try:
-            output_data = extract_json_from_output(result.stdout)
+            stdout, stderr = process.communicate()
+            comm_result["stdout"] = stdout
+            comm_result["stderr"] = stderr
+        except Exception as e:
+            comm_result["exception"] = e
+
+    reader_thread = threading.Thread(target=_reader, daemon=True)
+    reader_thread.start()
+
+    start_time = time.time()
+
+    try:
+        # === Основной цикл: ждём поток-читатель, проверяя прерывание и таймаут ===
+        while reader_thread.is_alive():
+            # 1. Проверка глобального таймаута
+            if time.time() - start_time > timeout:
+                print(f"[SimpleQwenVL] Subprocess timed out after {timeout}s. Killing...", file=sys.stderr)
+                process.kill()
+                reader_thread.join(timeout=3)
+                stdout = comm_result["stdout"] or ""
+                stderr = comm_result["stderr"] or ""
+                return {
+                    "status": "error",
+                    "message": f"Inference timed out ({timeout}s).",
+                    "traceback": f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
+                }
+
+            # 2. Проверка прерывания ComfyUI (кнопка X)
+            try:
+                comfy.model_management.throw_exception_if_processing_interrupted()
+            except Exception:
+                print("[SimpleQwenVL] Interrupt detected. Terminating subprocess...", file=sys.stderr)
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                reader_thread.join(timeout=3)
+                raise  # пробрасываем, чтобы ComfyUI остановил граф
+
+            # 3. Ждём поток-читатель 0.5 сек и идём на новый круг
+            reader_thread.join(timeout=0.5)
+
+        # === Поток-читатель завершился — проверяем, не было ли исключения ===
+        if comm_result["exception"] is not None:
+            raise comm_result["exception"]
+
+        stdout = comm_result["stdout"]
+        stderr = comm_result["stderr"]
+
+        # === Обработка результата (как в старом subprocess.run) ===
+        try:
+            output_data = extract_json_from_output(stdout)
         except Exception as e:
             return {
-                "status": "error", 
+                "status": "error",
                 "message": str(e),
-                "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+                "traceback": f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
             }
 
-        if result.returncode == 0:
-
+        if process.returncode == 0:
             debug = config.get("debug", True)
-            if debug: 
-                if result.stderr:
-                    print(f"{result.stderr}")
-                    
+            if debug and stderr:
+                print(f"{stderr}", file=sys.stderr)
             return output_data
-
         else:
-            if result.returncode == 1:
+            if process.returncode == 1:
                 return {
-                    "status": "error", 
-                    "message": output_data.get('message', "Unknown error"), 
-                    "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}\n{output_data.get('traceback', '')}"
+                    "status": "error",
+                    "message": output_data.get('message', "Unknown error"),
+                    "traceback": f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}\n{output_data.get('traceback', '')}"
                 }
-            else:    
+            else:
                 return {
-                    "status": "error", 
-                    "message": f"Subprocess failed with code: {result.returncode}", 
-                    "traceback": f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+                    "status": "error",
+                    "message": f"Subprocess failed with code: {process.returncode}",
+                    "traceback": f"STDOUT:\n{stdout}\nSTDERR:\n{stderr}"
                 }
 
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "error", 
-            "message": "Inference timed out (5 min)."
-        }
-
+    except InterruptedError:
+        # Пробрасываем прерывание ComfyUI
+        raise
     except Exception as e:
         return {
-            "status": "error", 
+            "status": "error",
             "message": f"Subprocess launch failed: {e}",
             "traceback": traceback.format_exc()
         }
-
     finally:
+        # Гарантируем, что поток-читатель завершён
+        if reader_thread.is_alive():
+            process.kill()
+            reader_thread.join(timeout=2)
         try:
             os.unlink(tmp_config_path)
-        except:
+        except Exception:
             pass
 
 def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = False, debug = False):
@@ -1003,10 +1050,13 @@ class SimpleQwen3VL_GGUF_Node:
 
             # Неподдерживаемые сценарии
             if mode == "subprocess":
+                # streaming_mode не нужен в subprocess режиме
+                config["streaming_mode"] = False
+
                 for val in video_value:
                     # Если в подпроцесс пытаются передать не путь (строку), а numpy массив
                     if not isinstance(val, str):
-                        raise ValueError("Subprocess mode unsopported with videos in VideoFromComponents and Raw Tensor formats. Use direct_clean/keep_vram mode.")
+                        raise ValueError("Subprocess mode unsopported with videos in VideoFromComponents and Raw Tensor formats. Use direct_clean/keep_vram mode.")            
 
             if (len(images_value) + len(audio_value) + len(video_value)) == 0:
                 config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша

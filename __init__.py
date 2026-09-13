@@ -8,6 +8,8 @@ from .configurator import Qwen3VL_AdvancedConfig, Qwen3VL_PromptPresetConfig, Qw
 from .ideogram4 import Ideogram4JsonPreviewOnImage, Ideogram4JsonSwapCoordinates
 from .video_fragment_loader import SimpleLoadVideoFragment
 
+#from .rag_node import RAG_Collection_Manager
+
 WEB_DIRECTORY = "./js"
 
 NODE_CLASS_MAPPINGS = {
@@ -36,6 +38,9 @@ NODE_CLASS_MAPPINGS = {
     #ideogram4
     "Ideogram4JsonPreviewOnImage": Ideogram4JsonPreviewOnImage,
     "Ideogram4JsonSwapCoordinates": Ideogram4JsonSwapCoordinates,
+
+    #RAG
+    #"RAG_Collection_Manager": RAG_Collection_Manager,
 
     #deprecated_node
     "SimpleQwenVLgguf": Qwen3VL_GGUF_Node,
@@ -69,6 +74,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     #ideogram4
     "Ideogram4JsonPreviewOnImage": "📐 Ideogram 4 JSON Preview",
     "Ideogram4JsonSwapCoordinates": "🔄 Ideogram 4 JSON Swap XY Coordinates",
+
+    #RAG
+    #"RAG_Collection_Manager": "🌐 RAG: Collection Manager",
     
     #deprecated_node
     "SimpleQwenVLgguf": "Qwen-VL Vision Language Model",
@@ -77,4 +85,3 @@ NODE_DISPLAY_NAME_MAPPINGS = {
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS','NODE_DISPLAY_NAME_MAPPINGS','WEB_DIRECTORY']
-

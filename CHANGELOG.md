@@ -1,4 +1,5 @@
 # Nightly
+- Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
 - Add speculative decoding
 - Add dynamic image, audio, video input
 - Add "user_prompt_template" input

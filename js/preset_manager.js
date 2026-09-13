@@ -39,7 +39,7 @@ const GROUP_FIELDS = {
     "🖼️ Multimodal & Media": ["force_mmproj", "image_min_tokens", "image_max_tokens", "max_images", "max_frames", "max_audios", "audio_sample_rate", "image_quality", "frame_quality"],
     "⚡ Speculative Decoding": ["speculative_enabled", "speculative_type", "draft_n_max", "draft_p_min", "draft_model_path", "draft_n_gpu_layers", "draft_backend_sampling", "ngram_size_n", "ngram_size_m", "ngram_min_hits", "ngram_max_entries_per_key", "ctx_checkpoints", "checkpoint_on_device"],
     "🔢 Embeddings": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond"],
-    "🛠️ Debug, System & Advanced": ["verbose", "debug", "debug_output", "raw_output", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"]
+    "🛠️ Debug, System & Advanced": ["verbose", "debug", "debug_output", "raw_output", "streaming_mode", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"]
 };
 const LEGACY_ORDER = [
     "model_preset", "📁 Model & Paths", "model_path", "mmproj_path",
@@ -478,7 +478,77 @@ function collectNodeConfig(node) {
 }
 
 // =========================================================================
-// collectDiffConfig — только отличия от дефолтов
+// collectPresetDiffConfig — отличия от загруженного пресета
+// =========================================================================
+function collectPresetDiffConfig(node) {
+    const baseline = node._baselineValues || {};
+    const presetName = node.widgets.find(w => w.name === "model_preset")?.value;
+    if (!presetName || presetName === "None" || Object.keys(baseline).length === 0) {
+        return null;
+    }
+    const out = {};
+    for (const w of node.widgets) {
+        if (w.skipSerialize) continue;
+        if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
+        if (GROUP_HEADERS.includes(w.name)) continue;
+        if (w.name === "extra") continue;
+
+        let val = w.value;
+        if (w.name === "split_mode") {
+            val = nameToId(SPLIT_MODE_REVERSE, val);
+            if (val === null) continue;
+        } else if (w.name === "pooling_type") {
+            val = nameToId(POOLING_REVERSE, val);
+            if (val === null) continue;
+        } else if (w.name === "flash_attn_type") {
+            val = nameToId(FLASH_ATTN_REVERSE, val);
+            if (val === null) continue;
+        } else if (w.name === "speculative_type") {
+            val = nameToId(SPECULATIVE_TYPES_REVERSE, val);
+            if (val === null) continue;
+        } else if (w.name === "type_k" || w.name === "type_v") {
+            val = nameToId(GGML_REVERSE, val);
+            if (val === null) continue;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(baseline, w.name)) {
+            let baseVal = baseline[w.name];
+            // baseline хранится в "виджетном" виде (строки для enum), приводим к числовому для сравнения
+            if (w.name === "split_mode") baseVal = nameToId(SPLIT_MODE_REVERSE, baseVal);
+            else if (w.name === "pooling_type") baseVal = nameToId(POOLING_REVERSE, baseVal);
+            else if (w.name === "flash_attn_type") baseVal = nameToId(FLASH_ATTN_REVERSE, baseVal);
+            else if (w.name === "speculative_type") baseVal = nameToId(SPECULATIVE_TYPES_REVERSE, baseVal);
+            else if (w.name === "type_k" || w.name === "type_v") baseVal = nameToId(GGML_REVERSE, baseVal);
+
+            if (baseVal !== null && String(val) !== String(baseVal)) {
+                out[w.name] = val;
+            }
+        } else {
+            // Поля нет в baseline — считаем отличием
+            out[w.name] = val;
+        }
+    }
+
+    // Extra
+    const extraWidget = node.widgets.find(w => w.name === "extra");
+    if (extraWidget && extraWidget.value &&
+        typeof extraWidget.value === "string" && extraWidget.value.trim()) {
+        try {
+            const parsed = JSON.parse(extraWidget.value.trim());
+            if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+                for (const [key, value] of Object.entries(parsed)) {
+                    out[key] = value;
+                }
+            }
+        } catch (e) {
+            console.warn("[Configurator] Failed to parse extra for preset diff:", e);
+        }
+    }
+    return out;
+}
+
+// =========================================================================
+// collectDiffConfig — отличия от дефолтов
 // =========================================================================
 function collectDiffConfig(node) {
     const out = {};
@@ -700,83 +770,74 @@ async function openFileDialog(kind) {
 }
 
 async function onImportJson(node, combo) {
-    showMultilineDialog('📥 Import JSON Configuration', '', (text, showError) => {
-        try {
-            let config = null;
-            const parsed = JSON.parse(text);
-            if (typeof parsed === 'object' && parsed !== null) {
-                const keys = Object.keys(parsed);
-                if (keys.length === 1 && typeof parsed[keys[0]] === 'object' && !Array.isArray(parsed[keys[0]])) {
-                    config = parsed[keys[0]];
-                } else {
-                    config = parsed;
+    showMultilineDialog(
+        '📥 Import JSON Configuration', 
+        '', 
+        // onConfirm callback
+        (text, showError, options = {}) => {
+            try {
+                let config = null;
+                const parsed = JSON.parse(text);
+                if (typeof parsed === 'object' && parsed !== null) {
+                    const keys = Object.keys(parsed);
+                    if (keys.length === 1 && typeof parsed[keys[0]] === 'object' && !Array.isArray(parsed[keys[0]])) {
+                        config = parsed[keys[0]];
+                    } else {
+                        config = parsed;
+                    }
                 }
-            }
-            if (!config || typeof config !== 'object') {
-                showError('Invalid JSON structure: root must be an object {}');
+
+                if (!config || typeof config !== 'object') {
+                    showError('Invalid JSON structure: root must be an object {}');
+                    return false;
+                }
+
+                const resetOthers = options.resetOthers !== false; // по умолчанию true
+
+                if (resetOthers) {
+                    const defaults = node._widgetDefaults || {};
+                    for (const w of node.widgets) {
+                        if (w.skipSerialize) continue;
+                        if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
+                        if (GROUP_HEADERS.includes(w.name)) continue;
+                        if (w.type === "button") continue;
+                        if (w.name === "extra") { w.value = ""; continue; }
+                        if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
+                            w.value = convertValue(w.name, defaults[w.name], w);
+                        }
+                    }
+                }
+
+                applyPreset(node, config, false);
+
+                // Обновляем dirty state
+                const currentPresetName = node.widgets.find(w => w.name === "model_preset")?.value;
+                if (currentPresetName && currentPresetName !== "None") {
+                    node._dirty = node.widgets.some(w =>
+                        !w.skipSerialize &&
+                        !["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name) &&
+                        !GROUP_HEADERS.includes(w.name) &&
+                        w.type !== "button" &&
+                        node._baselineValues[w.name] !== undefined &&
+                        w.value !== node._baselineValues[w.name]
+                    );
+                    if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
+                }
+                console.log('[Configurator] JSON imported successfully, dirty state:', node._dirty);
+                return true;
+            } catch (e) {
+                showError(`JSON Parse Error:\n${e.message}`);
                 return false;
             }
-
-            // Сбрасываем все виджеты в дефолтные значения
-            const defaults = node._widgetDefaults || {};
-            for (const w of node.widgets) {
-                if (w.skipSerialize) continue;
-                if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
-                if (GROUP_HEADERS.includes(w.name)) continue;
-                if (w.type === "button") continue;
-                if (w.name === "extra") { w.value = ""; continue; }
-                if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
-                    w.value = convertValue(w.name, defaults[w.name], w);
-                }
-            }
-
-            // Применяем импортированный конфиг поверх сброшенных дефолтов
-            applyPreset(node, config, false);
-
-            // Dirty state
-            const currentPresetName = node.widgets.find(w => w.name === "model_preset")?.value;
-            if (currentPresetName && currentPresetName !== "None") {
-                node._dirty = node.widgets.some(w =>
-                    !w.skipSerialize &&
-                    !["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name) &&
-                    !GROUP_HEADERS.includes(w.name) &&
-                    w.type !== "button" &&
-                    node._baselineValues[w.name] !== undefined &&
-                    w.value !== node._baselineValues[w.name]
-                );
-                if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-            }
-            console.log('[Configurator] JSON imported successfully, dirty state:', node._dirty);
-            return true;
-        } catch (e) {
-            showError(`JSON Parse Error:\n${e.message}`);
-            return false;
-        }
-    }, [
-        // ---- Дополнительные кнопки ----
-        {
-            label: '📋 Current Config (All)',
-            onClick: (textarea) => {
-                const config = collectNodeConfig(node);
-                textarea.value = JSON.stringify(config, null, 2);
-            }
         },
-        {
-            label: '📋 Current Config (Diff)',
-            onClick: (textarea) => {
-                const diff = collectDiffConfig(node);
-                textarea.value = Object.keys(diff).length > 0
-                    ? JSON.stringify(diff, null, 2)
-                    : '{\n  // no differences from defaults\n}';
-            }
-        }
-    ]);
+        node 
+    );
 }
 
 // =========================================================================
 // MultilineDialog
 // =========================================================================
-function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) {
+function showMultilineDialog(title, defaultValue, onConfirm, node) {
     const overlay = document.createElement('div');
     overlay.style.cssText =
         'position:fixed;top:0;left:0;width:100%;height:100%;' +
@@ -792,7 +853,6 @@ function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) 
         'box-shadow:0 4px 24px rgba(0,0,0,0.6);' +
         'font-family:sans-serif;';
 
-    // Заголовок
     const titleEl = document.createElement('h3');
     titleEl.textContent = title;
     titleEl.style.cssText =
@@ -800,7 +860,6 @@ function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) 
         'color:var(--input-text,#fff);' +
         'font-size:14px;font-weight:600;font-family:sans-serif;';
 
-    // Textarea
     const textarea = document.createElement('textarea');
     textarea.value = defaultValue || '';
     textarea.spellcheck = false;
@@ -813,14 +872,9 @@ function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) 
         "font-family:'Consolas','Monaco','Courier New',monospace;" +
         'font-size:12px;line-height:1.45;' +
         'resize:vertical;box-sizing:border-box;outline:none;';
-    textarea.addEventListener('focus', () => {
-        textarea.style.borderColor = '#4a90e2';
-    });
-    textarea.addEventListener('blur', () => {
-        textarea.style.borderColor = 'var(--border-color,#444)';
-    });
+    textarea.addEventListener('focus', () => { textarea.style.borderColor = '#4a90e2'; });
+    textarea.addEventListener('blur', () => { textarea.style.borderColor = 'var(--border-color,#444)'; });
 
-    // Сообщение об ошибке
     const errorMsg = document.createElement('div');
     errorMsg.style.cssText =
         'margin-top:8px;padding:8px 10px;' +
@@ -829,92 +883,143 @@ function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) 
         "font-family:'Consolas','Monaco','Courier New',monospace;" +
         'white-space:pre-wrap;word-break:break-word;display:none;';
 
-    // ---------- Ряд кнопок ----------
     const buttonRow = document.createElement('div');
     buttonRow.style.cssText =
         'margin-top:14px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
 
-    // Общий стиль для всех кнопок (как в preset controls)
+    // Единый базовый стиль для ВСЕХ кнопок
     const baseBtnStyle =
-        'height:26px;padding:0 14px;' +
+        'height:28px;padding:0 16px;' +
         'background:var(--comfy-input-bg,#333);' +
         'color:var(--input-text,#e0e0e0);' +
         'border:1px solid var(--border-color,#555);' +
         'border-radius:4px;cursor:pointer;' +
-        'font-size:11px;font-family:sans-serif;' +
+        'font-size:12px;font-family:sans-serif;' +
         'display:inline-flex;align-items:center;justify-content:center;' +
         'line-height:1;white-space:nowrap;outline:none;' +
-        'transition:background .15s,border-color .15s;';
+        'transition:all 0.15s ease;';
 
-    // Вспомогательная: навесить hover на «обычную» кнопку
-    const attachHover = (btn, hoverBg, hoverColor, hoverBorder) => {
+    // ЕДИНАЯ фабрика кнопок
+    const makeButton = (label, tooltip, onClickHandler) => {
+        const btn = document.createElement('button');
+        btn.textContent = label;
+        if (tooltip) btn.title = tooltip;
+        btn.style.cssText = baseBtnStyle;
+        
         btn.addEventListener('mouseenter', () => {
-            btn.style.background = hoverBg;
-            btn.style.color = hoverColor || '#ffffff';
-            btn.style.borderColor = hoverBorder || hoverBg;
+            btn.style.background = '#4a90e2';
+            btn.style.color = '#ffffff';
+            btn.style.borderColor = '#4a90e2';
         });
         btn.addEventListener('mouseleave', () => {
             btn.style.background = 'var(--comfy-input-bg,#333)';
             btn.style.color = 'var(--input-text,#e0e0e0)';
             btn.style.borderColor = 'var(--border-color,#555)';
+            btn.style.opacity = '1';
+            btn.style.transform = 'scale(1)';
         });
-        btn.addEventListener('mousedown', (e) => { e.preventDefault(); btn.style.opacity = '0.7'; });
-        btn.addEventListener('mouseup', () => { btn.style.opacity = '1'; });
-    };
-
-    // Дополнительные кнопки (загрузка конфига) — слева
-    extraButtons.forEach(eb => {
-        const btn = document.createElement('button');
-        btn.textContent = eb.label;
-        btn.style.cssText = baseBtnStyle;
-        attachHover(btn, '#4a90e2', '#ffffff', '#4a90e2');
+        btn.addEventListener('mousedown', (e) => { 
+            e.preventDefault(); 
+            btn.style.opacity = '0.7'; 
+            btn.style.transform = 'scale(0.96)';
+        });
+        btn.addEventListener('mouseup', () => { 
+            btn.style.opacity = '1'; 
+            btn.style.transform = 'scale(1)';
+        });
+        
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            eb.onClick(textarea);
+            onClickHandler();
         });
-        buttonRow.appendChild(btn);
+        return btn;
+    };
+
+    const closeDialog = () => {
+        if (document.body.contains(overlay)) document.body.removeChild(overlay);
+    };
+    const showError = (msg) => {
+        errorMsg.textContent = '❌ ' + msg;
+        errorMsg.style.display = 'block';
+    };
+    const hideError = () => { errorMsg.style.display = 'none'; };
+
+    // КНОПКИ ОПРЕДЕЛЕНЫ ЗДЕСЬ, В ОДНОМ МАССИВЕ
+    const allButtons = [
+        // Генераторы конфигурации (слева)
+        {
+            label: '📋 All Values',
+            title: 'Copy all current widget values to the text area',
+            onClick: () => {
+                const config = collectNodeConfig(node);
+                textarea.value = JSON.stringify(config, null, 2);
+            }
+        },
+        {
+            label: '📋 vs Defaults',
+            title: 'Copy only the values that differ from the factory defaults',
+            onClick: () => {
+                const diff = collectDiffConfig(node);
+                textarea.value = Object.keys(diff).length > 0 ? JSON.stringify(diff, null, 2) : 'No differences from defaults';
+            }
+        },
+        {
+            label: '📋 vs Preset',
+            title: 'Copy only the values that differ from the currently loaded preset',
+            onClick: () => {
+                const presetName = node.widgets.find(w => w.name === "model_preset")?.value;
+                if (!presetName || presetName === "None") {
+                    textarea.value = 'No preset selected';
+                    return;
+                }
+                const diff = collectPresetDiffConfig(node);
+                if (!diff) {
+                    textarea.value = 'No baseline to compare';
+                    return;
+                }
+                textarea.value = Object.keys(diff).length > 0 ? JSON.stringify(diff, null, 2) : 'No changes from preset';
+            }
+        },
+        // Визуальный разделитель
+        { isSpacer: true },
+        // Кнопки действий (справа)
+        {
+            label: '✓ Apply (Reset Others)',
+            title: 'Reset all fields to defaults, then apply this config',
+            onClick: () => {
+                const text = textarea.value.trim();
+                if (!text) { showError('Text is empty'); return; }
+                hideError();
+                if (onConfirm(text, showError, { resetOthers: true }) !== false) closeDialog();
+            }
+        },
+        {
+            label: '✓ Apply (Keep Others)',
+            title: 'Apply only these fields, keep other current values',
+            onClick: () => {
+                const text = textarea.value.trim();
+                if (!text) { showError('Text is empty'); return; }
+                hideError();
+                if (onConfirm(text, showError, { resetOthers: false }) !== false) closeDialog();
+            }
+        },
+        {
+            label: '✗ Cancel',
+            title: 'Close without applying changes',
+            onClick: closeDialog
+        }
+    ];
+
+    // Рендерим все кнопки из массива
+    allButtons.forEach(btnConfig => {
+        if (btnConfig.isSpacer) {
+            const spacer = document.createElement('div');
+            spacer.style.flex = '1';
+            buttonRow.appendChild(spacer);
+        } else {
+            buttonRow.appendChild(makeButton(btnConfig.label, btnConfig.title, btnConfig.onClick));
+        }
     });
-
-    // Спейсер, чтобы основные кнопки были справа
-    if (extraButtons.length > 0) {
-        const spacer = document.createElement('div');
-        spacer.style.flex = '1';
-        buttonRow.appendChild(spacer);
-    }
-
-    // Cancel
-    const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = '✗ Cancel';
-    cancelBtn.style.cssText = baseBtnStyle;
-    attachHover(cancelBtn, '#666', '#ffffff', '#666');
-
-    // Apply (primary)
-    const okBtn = document.createElement('button');
-    okBtn.textContent = '✓ Apply';
-    okBtn.style.cssText =
-        baseBtnStyle.replace(
-            'background:var(--comfy-input-bg,#333);',
-            'background:#3b82f6;'
-        ).replace(
-            'color:var(--input-text,#e0e0e0);',
-            'color:#ffffff;'
-        ).replace(
-            'border:1px solid var(--border-color,#555);',
-            'border:1px solid #3b82f6;'
-        );
-    okBtn.addEventListener('mouseenter', () => {
-        okBtn.style.background = '#2563eb';
-        okBtn.style.borderColor = '#2563eb';
-    });
-    okBtn.addEventListener('mouseleave', () => {
-        okBtn.style.background = '#3b82f6';
-        okBtn.style.borderColor = '#3b82f6';
-    });
-    okBtn.addEventListener('mousedown', (e) => { e.preventDefault(); okBtn.style.opacity = '0.7'; });
-    okBtn.addEventListener('mouseup', () => { okBtn.style.opacity = '1'; });
-
-    buttonRow.appendChild(cancelBtn);
-    buttonRow.appendChild(okBtn);
 
     // Собираем диалог
     dialog.appendChild(titleEl);
@@ -927,33 +1032,23 @@ function showMultilineDialog(title, defaultValue, onConfirm, extraButtons = []) 
     textarea.focus();
     textarea.select();
 
-    // ---------- Логика ----------
-    const close = () => document.body.removeChild(overlay);
-    const showError = (msg) => {
-        errorMsg.textContent = '❌ ' + msg;
-        errorMsg.style.display = 'block';
-    };
-    const hideError = () => { errorMsg.style.display = 'none'; };
-
-    okBtn.onclick = () => {
-        const text = textarea.value.trim();
-        if (!text) { showError('Text is empty'); return; }
-        hideError();
-        const result = onConfirm(text, showError);
-        if (result !== false) close();
-    };
-    cancelBtn.onclick = close;
-
+    // Глобальные обработчики
     overlay.onclick = (e) => {
         if (e.target === overlay) {
             const sel = window.getSelection();
             if (sel && sel.toString().length > 0) return;
-            close();
+            closeDialog();
         }
     };
+    
     textarea.onkeydown = (e) => {
-        if (e.key === 'Enter' && e.ctrlKey) okBtn.click();
-        else if (e.key === 'Escape') close();
+        if (e.key === 'Enter' && e.ctrlKey) {
+            e.preventDefault();
+            const keepOthersBtn = Array.from(buttonRow.querySelectorAll('button')).find(b => b.textContent.includes('Keep Others'));
+            if (keepOthersBtn) keepOthersBtn.click();
+        } else if (e.key === 'Escape') {
+            closeDialog();
+        }
     };
 }
 
