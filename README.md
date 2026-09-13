@@ -1,11 +1,11 @@
 <img width="2048" height="448" alt="15184-43452264163153+" src="https://github.com/user-attachments/assets/92b22216-aa55-4411-8718-8ec82e1b88b6" />
 
-Simple gguf LLM Qwen3-VL, Qwen3.5, Qwen3.6, Gemma4 and others model loader for Comfy-UI.
+Simple gguf LLM Qwen3-VL, Qwen3.5-3.8, Gemma4 and others model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
 1. The model must support gguf (gguf models run faster than transformer models).
-2. The model must support the Qwen3-VL, Qwen3.5, Qwen3.6, Gemma4 multimodal model.
+2. The model must support the Qwen3-VL, Qwen3.5-3.8, Gemma4 multimodal model.
 3. The node should be easily adaptable to work with any new released model.
 4. After running, the node must be completely cleared from memory, leaving no garbage behind. This is important. Next come very resource-intensive processes that require ALL the memory. (Yes, the model will have to be reloaded every time, but this is better than storing the model as dead weight while heavier tasks suffer from lack of memory and run slower).
 In the latest update added a new `keep_vram` mode, which allows you to keep the model from being unloaded from memory. Convenient for small models and batch modes.
@@ -15,6 +15,7 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
+- Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
 - Add speculative decoding
 > ⚠️ **Important Limitations**: Incompatible with multimodal inputs (images, video, audio), requires `llama-cpp-python` version 0.3.48 or higher, disabled by default.
 
@@ -34,6 +35,10 @@ The new advanced configurator brings a completely redesigned configuration exper
 <img width="1122" height="590" alt="image" src="https://github.com/user-attachments/assets/c960ccd4-c400-448e-8def-45cbb301a327" />
 
 > 💡 **TIP:** If you need to move preset lists to the top level of the subgraph, use widgets of the LLM Inference node — they work in the classic Comfi-UI way.
+
+<details>
+
+<summary>History</summary>
 
 - Added `words_to_ban` config (logit_bias).
 - Added `📸 Simple Gif Maker` node.
@@ -85,6 +90,8 @@ The new advanced configurator brings a completely redesigned configuration exper
 
 **04.03.2026 - V3.2**
 - Added support for Qwen3.5
+
+</details>
 
 # Correct installation of llama-cpp-python:
 
@@ -287,18 +294,12 @@ This project requires CUDA runtime libraries. They can be sourced from:
 The node is split into two parts. All work is isolated in a subprocess. Why? To ensure everything is cleaned up and nothing unnecessary remains in memory after this node runs and llama.cpp. I've often encountered other nodes leaving something behind, and that's unacceptable to me.
 > 💡 **Update:** The llama_python_cpp code has been improved and no longer leaks memory, so it is now possible to call llama_cpp directly.
 
-| Mode | Characteristics | Benefits |
-|--------|--------|--------|
-| subprocess | Inference runs in a separate Python process. The model is loaded and unloaded for each execution. |	✅ Complete isolation – no VRAM leaks. ✅ Safe main script - no crash. 💡 Frees VRAM after each use. |
-| direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are transmitted directly (no temporary files).	| ✅ Faster than subprocess (no process spawn overhead). 💡 Still frees VRAM after each use. |
-| keep_vram | Inference runs in the main ComfyUI process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. |	✅ Maximum speed for batch processing or iterative workflows. 💡 When switching the mode to `direct_clean` or `subprocess`, this cache will be unloaded. | 
-| save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `UnloadQwenModel` node and unload a specific cache or all caches. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
-
 # Nodes
 
-🌐 SimpleQwenVL (Core):
-- **Simple Qwen-VL Vision Language Model** - A universal Vision-Language model node supporting various GGUF models (Qwen, LLaVA, Gemma, MiniCPM, etc.).
-- **🌐 LLM Config (Advanced)** *(NEW)* - The ultimate configuration node. Provides access to all 70+ supported parameters organized into collapsible, logical groups. Features built-in preset management (Save/Rename/Delete) and Windows file browsing. 
+🌐 SQVLM (Core):
+- **🌐 LLM Inference (SQVLM)** - A universal Vision-Language model node supporting various GGUF models (Qwen, LLaVA, Gemma, MiniCPM, etc.).
+- **🌐 LLM Config (Advanced)** *(NEW)* - The ultimate configuration node. Provides access to all 70+ supported parameters organized into collapsible, logical groups. Features built-in preset management (Save/Rename/Delete) and Windows file browsing.
+- **🌐 LLM Prompt Preset** *(NEW)* - Similar to the previous node, it allows you to configure a collection of system prompts.
 
 🛠️ Utils:
 - **Master Prompt Loader** - Loads system prompt presets from JSON configuration files. Supports override via an optional string input. Ensures consistency across complex workflows.
@@ -324,10 +325,23 @@ The node is split into two parts. All work is isolated in a subprocess. Why? To 
 - **LLM Model Config** - Legacy configuration node (Model parameters only).
 - **LLM Sampling Config** - Legacy configuration node (Sampling parameters only).
 
-# Simple Qwen-VL Vision Language Model
+# LLM Inference (SQVLM)
 A universal version. The model and its parameters mast be passed to the `config_override` input or described in a file `ComfyUI/user/SimpleQwenVL_configs/system_prompts_user.json`
 
 <img width="546" height="609" alt="image" src="https://github.com/user-attachments/assets/4e06cb5f-4901-4dc3-900d-1324e21806e0" />
+
+<details>
+
+<summary>Modes</summary>
+
+| Mode | Characteristics | Benefits |
+|--------|--------|--------|
+| subprocess | Inference runs in a separate Python process. The model is loaded and unloaded for each execution. |	✅ Complete isolation – no VRAM leaks. ✅ Safe main script - no crash. 💡 Frees VRAM after each use. |
+| direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are transmitted directly (no temporary files).	| ✅ Faster than subprocess (no process spawn overhead). 💡 Still frees VRAM after each use. |
+| keep_vram | Inference runs in the main ComfyUI process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. |	✅ Maximum speed for batch processing or iterative workflows. 💡 When switching the mode to `direct_clean` or `subprocess`, this cache will be unloaded. | 
+| save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `UnloadQwenModel` node and unload a specific cache or all caches. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
+
+</details>
 
 <details>
 
@@ -388,7 +402,7 @@ You can bypass the UI widgets entirely and pass configuration directly as a text
 
 > 💡 Pro Tip: You can combine all three methods! Set a base configuration using a `Preset`, tweak a few settings using the `Advanced Configurator`, and inject a final, specific override (like a custom `stop` sequence) via the `config_override` text input. The system resolves them in that exact order of priority.
 
-# Model Configs:
+# Configurations
 
 Possible model configurations that can be passed to the `config_override` input.
 
@@ -495,7 +509,7 @@ Speculative decoding accelerates text generation by using a draft model (or stat
 
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
-| speculative_enabled | bool | False | Master switch to enable speculative decoding. Automatically disabled for multimodal inputs (images/video/audio). |
+| speculative_enabled | bool | False | Master switch to enable speculative decoding. |
 | speculative_type | int | 3=MTP | Speculative algorithm type. `3=MTP` (Multi-token Prediction, built-in for Qwen3.5/3.8, recommended), `4=DFLASH` (Block-diffusion draft, requires external model), `5=DSPARK` (Markov/confidence heads, requires external model), `7=NGRAM_MAP_K` (Statistical n-gram, no draft model needed, good for code/JSON), `8=NGRAM_MAP_K4V` (N-gram with 4 cached continuations per key). Other types (1,2,6,9,10) are experimental or legacy. |
 | draft_n_max | int | 2 | Maximum number of draft tokens to generate per step. `Recommended: 2 for MTP`, `7 for DFlash/DSpark`. Higher values increase potential speedup but reduce acceptance rate. Must be ≤ `n_batch - 1`. |
 | draft_p_min | float | 0.0 | Minimum probability threshold to accept a draft token. `0.0` = accept all. For `DFlash/DFlash2`, filters transition probability. For DSpark, filters acceptance confidence. |
@@ -527,6 +541,7 @@ Speculative decoding accelerates text generation by using a draft model (or stat
 | debug | bool | True | Enable timing output for each stage in console. Shows metrics [DEBUG] inference 80.11 tok/sec 1812 tokens: 22.619s |
 | debug_output | bool | False | Print final LLM text output to console | 
 | raw_output | bool | False | Disable output.strip(). Keeps leading/trailing whitespaces in response | 
+| streaming_mode | bool | False | Enables token streaming to allow interrupting generation via the ComfyUI 'Interrupt' button. Adds a negligible overhead (~1%), but guarantees you can manually stop long responses. Recommended if you often need to cancel generations. Ignore in subprocess mode | 
 | clearing_cache | bool | True | Clear cache to prevent execution freezing during heavy memory activity | 
 | force_gc_start | bool | False | Force garbage collection after memory clearing (when unload_all_models active). Increases time but cleans memory | 
 | force_gc_unload | bool | False | Force garbage collection after deleting LLM model. Prevents memory leake | 
@@ -683,8 +698,8 @@ For example (for 16 Gb VRAM):
     "top_k": 20,
     "repeat_penalty": 1.05,
     "chat_handler": "qwen35",
-    "image_min_tokens": 512,
-    "image_max_tokens": 1536
+    "image_min_tokens": 1024,
+    "image_max_tokens": 2048
 }
 ```
 
