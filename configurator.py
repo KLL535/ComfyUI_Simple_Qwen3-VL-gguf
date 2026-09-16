@@ -43,6 +43,7 @@ _ADVANCED_DEFAULTS = {
     "words_to_ban": "",
     "enable_thinking": False,
     "remove_thinking": False,
+    "answer_delimiter": "",
     "force_reasoning": False,
     # gpu / offload / multi-gpu
     "n_gpu_layers": -1,
@@ -448,6 +449,11 @@ class Qwen3VL_AdvancedConfig:
                 "remove_thinking": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Remove <think>...</think> or <|channel>...<channel|> section in text",
+                }),
+                "answer_delimiter": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Use this for non-standard models to clean up the output. Enter the token where the real answer starts, and the node will automatically cut out all thinking processes and technical tags generated prior to it.",
                 }),
                 "force_reasoning": ("BOOLEAN", {
                     "default": False,
@@ -927,6 +933,7 @@ class Qwen3VL_AdvancedConfig:
             "chat_format_from_gguf": g("chat_format_from_gguf", False),
             "enable_thinking": g("enable_thinking", False),
             "remove_thinking": g("remove_thinking", False),
+            "answer_delimiter": g("answer_delimiter", ""),
             "force_reasoning": g("force_reasoning", False),
             "system_prompt_default": g("system_prompt_default", ""),
             "system_preset_to_user_prompt": g("system_preset_to_user_prompt", False),

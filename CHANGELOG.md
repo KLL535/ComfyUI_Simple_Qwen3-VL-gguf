@@ -1,4 +1,5 @@
 # Nightly
+- Add `answer_delimiter` config
 - Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
 - Add speculative decoding
 - Add dynamic image, audio, video input

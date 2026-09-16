@@ -562,6 +562,7 @@ def _inference(config):
                     if key.startswith("extra_chat_handler_"):
                         new_key = key[len("extra_chat_handler_"):]
                         handler_kwargs[new_key] = value
+                        #print(f"extra chat handler kwargs: {new_key} = {value}", file=sys.stderr)
 
                 extra_handler_kwargs = {}
 
@@ -607,7 +608,12 @@ def _inference(config):
 
                 elif chat_handler_type == "generic":
                     from llama_cpp.llama_chat_format import GenericMTMDChatHandler
-                    chat_handler = GenericMTMDChatHandler(**handler_kwargs)
+                    extra_handler_kwargs = {
+                        "mmproj_path": mmproj_path,
+                        "chat_format": chat_format,
+                        "verbose": verbose,
+                    }
+                    chat_handler = GenericMTMDChatHandler(**extra_handler_kwargs)
 
                 elif chat_handler_type == "gemma3":
                     from llama_cpp.llama_chat_format import Gemma3ChatHandler
@@ -742,6 +748,7 @@ def _inference(config):
                     if key.startswith("extra_llama_"):
                         new_key = key[len("extra_llama_"):]
                         llm_kwargs[new_key] = value
+                        #print(f"extra llm kwargs: {new_key} = {value}", file=sys.stderr)
 
                 ### SPECULATIVE ###
                 # 0=NONE - no speculative decoding
@@ -867,6 +874,7 @@ def _inference(config):
                     if key.startswith("extra_llama_"):
                         new_key = key[len("extra_llama_"):]
                         llm_kwargs[new_key] = value
+                        #print(f"extra llm kwargs: {new_key} = {value}", file=sys.stderr)
 
                 current_cache["llm"] = LlamaEmbedding(**llm_kwargs)
 
@@ -952,6 +960,7 @@ def _inference(config):
                 if key.startswith("extra_completion_"):
                     new_key = key[len("extra_completion_"):]
                     completion_kwargs[new_key] = value
+                    #print(f"extra completion kwargs: {new_key} = {value}", file=sys.stderr)
 
             if raw_mode:
 
@@ -1118,19 +1127,28 @@ def _inference(config):
 
 
             if not config.get("raw_output", False):
-                if config.get("remove_thinking", False):
-                    # 1. Удаляем think-блоки
-                    output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL)
-                    output = output.split('</think>')[-1]
-                        
-                    # 2. Удаляем channel-блоки
-                    output = re.sub(r'<\|channel>.*?<channel\|>', '', output, flags=re.DOTALL)
-                    output = output.split('<channel|>')[-1]
 
-                    # 3. Схлопываем множественные пустые строки в одну
+                if config.get("remove_thinking", False):
+
+                    # 1. Отрезаем пользовательский разделитель
+                    cut_prefix = config.get("answer_delimiter")
+                    if cut_prefix and cut_prefix in output:
+                        output = output.split(cut_prefix)[-1]
+
+                    # 2. Удаляем think-блоки
+                    output = re.sub(r'<think>.*?</think>', '', output, flags=re.DOTALL)
+                    if '</think>' in output:
+                        output = output.split('</think>')[-1]
+                        
+                    # 3. Удаляем channel-блоки
+                    output = re.sub(r'<\|channel>.*?<channel\|>', '', output, flags=re.DOTALL)
+                    if '<channel|>' in output:
+                        output = output.split('<channel|>')[-1]
+
+                    # 4. Схлопываем множественные пустые строки в одну
                     output = re.sub(r'\n\s*\n+', '\n\n', output)    
 
-                # 4. Удаляем пустые строки в начале и конце
+                # 5. Удаляем пустые строки в начале и конце
                 output = output.strip()
 
             if config.get("debug_output", False):
