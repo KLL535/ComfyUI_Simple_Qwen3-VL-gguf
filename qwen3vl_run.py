@@ -6,6 +6,7 @@ import os
 import base64
 import time
 import gc
+import importlib
 import numpy as np
 import tempfile
 import traceback
@@ -166,6 +167,55 @@ def build_prompt(template: str, system: str, user: str):
     else:
         # Если метки нет, весь текст идёт до картинок
         return result, ""
+
+# chat_handler из конфига узла -> (класс llama-cpp, требование к версии).
+# Используется и при загрузке mmproj, и для текстового режима, где нужен
+# только chat-шаблон класса.
+_HANDLER_CLASSES = {
+    "gemma4":            ("Gemma4ChatHandler", "Gemma4 requires version v0.3.35 or higher."),
+    "qwen35":            ("Qwen35ChatHandler", "Qwen3.5 requires version v0.3.30 or higher."),
+    "qwen3":             ("Qwen3VLChatHandler", "Qwen3 requires version v0.3.17 or higher."),
+    "qwen3asr":          ("Qwen3ASRChatHandler", None),
+    "qwen25":            ("Qwen25VLChatHandler", None),
+    "generic":           ("GenericMTMDChatHandler", None),
+    "gemma3":            ("Gemma3ChatHandler", None),
+    "llava15":           ("Llava15ChatHandler", None),
+    "llava16":           ("Llava16ChatHandler", None),
+    "moondream":         ("MoondreamChatHandler", None),
+    "minicpmv26":        ("MiniCPMv26ChatHandler", None),
+    "minicpmv45":        ("MiniCPMv45ChatHandler", None),
+    "minicpmv46":        ("MiniCPMv46ChatHandler", None),
+    "glm41v":            ("GLM41VChatHandler", None),
+    "glm46v":            ("GLM46VChatHandler", None),
+    "granite":           ("GraniteDoclingChatHandler", None),
+    "lfm2vl":            ("LFM2VLChatHandler", None),
+    "lfm25vl":           ("LFM25VLChatHandler", None),
+    "paddleocr":         ("PaddleOCRChatHandler", None),
+    "obsidian":          ("ObsidianChatHandler", None),
+    "nanollava":         ("NanoLlavaChatHandler", None),
+    "llama3visionalpha": ("Llama3VisionAlphaChatHandler", None),
+    "step3vl":           ("Step3VLChatHandler", None),
+}
+
+def _resolve_handler_class(chat_handler_type):
+    """
+    Возвращает (класс обработчика, текст ошибки).
+    Класс = None, если тип неизвестен или класса нет в установленной llama-cpp-python.
+    """
+    entry = _HANDLER_CLASSES.get(chat_handler_type)
+    if entry is None:
+        return None, f"Unknown chat handler type: {chat_handler_type}"
+
+    class_name, requires = entry
+    module = importlib.import_module("llama_cpp.llama_chat_format")
+    handler_class = getattr(module, class_name, None)
+    if handler_class is None:
+        message = "You have an outdated version of the llama-cpp-python library."
+        if requires:
+            message = f"{message} {requires}"
+        return None, message
+
+    return handler_class, None
 
 def _build_image_content(image_item, quality=95):
 
@@ -593,142 +643,48 @@ def _inference(config):
                         handler_kwargs[new_key] = value
                         #print(f"extra chat handler kwargs: {new_key} = {value}", file=sys.stderr)
 
+                handler_class, handler_error = _resolve_handler_class(chat_handler_type)
+                if handler_class is None:
+                    return {"status": "error", "message": handler_error}, None
+
                 extra_handler_kwargs = {}
 
                 if chat_handler_type == "gemma4":
-                    try:
-                        from llama_cpp.llama_chat_format import Gemma4ChatHandler
-                    except ImportError:
-                        return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Gemma4 requires version v0.3.35 or higher."}, None
                     extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", False),
                     }
-                    chat_handler = Gemma4ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "qwen35":
-                    try:
-                        from llama_cpp.llama_chat_format import Qwen35ChatHandler
-                    except ImportError:
-                        return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3.5 requires version v0.3.30 or higher."}, None
                     extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", False),
                         "add_vision_id": add_vision_id,
                     }
-                    chat_handler = Qwen35ChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "qwen3":
-                    try:
-                        from llama_cpp.llama_chat_format import Qwen3VLChatHandler
-                    except ImportError:
-                        return {"status": "error", "message": "You have an outdated version of the llama-cpp-python library. Qwen3 requires version v0.3.17 or higher."}, None
                     extra_handler_kwargs = {
                         "force_reasoning": config.get("force_reasoning", False),
                         "add_vision_id": add_vision_id,
                     }
-                    chat_handler = Qwen3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
-                elif chat_handler_type == "qwen3asr":
-                    from llama_cpp.llama_chat_format import Qwen3ASRChatHandler
-                    chat_handler = Qwen3ASRChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "qwen25":
-                    from llama_cpp.llama_chat_format import Qwen25VLChatHandler
-                    chat_handler = Qwen25VLChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "generic":
-                    from llama_cpp.llama_chat_format import GenericMTMDChatHandler
-                    extra_handler_kwargs = {
-                        "mmproj_path": mmproj_path,
-                        "chat_format": chat_format,
-                        "verbose": verbose,
-                    }
-                    chat_handler = GenericMTMDChatHandler(**extra_handler_kwargs)
-
-                elif chat_handler_type == "gemma3":
-                    from llama_cpp.llama_chat_format import Gemma3ChatHandler
-                    chat_handler = Gemma3ChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "llava15":
-                    from llama_cpp.llama_chat_format import Llava15ChatHandler
-                    chat_handler = Llava15ChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "llava16":
-                    from llama_cpp.llama_chat_format import Llava16ChatHandler
-                    chat_handler = Llava16ChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "moondream":
-                    from llama_cpp.llama_chat_format import MoondreamChatHandler
-                    chat_handler = MoondreamChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "minicpmv26":
-                    from llama_cpp.llama_chat_format import MiniCPMv26ChatHandler
-                    chat_handler = MiniCPMv26ChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "minicpmv45":
-                    from llama_cpp.llama_chat_format import MiniCPMv45ChatHandler
+                elif chat_handler_type in ("minicpmv45", "minicpmv46", "glm46v", "step3vl"):
                     extra_handler_kwargs = {
                         "enable_thinking": config.get("enable_thinking", True),
                     }
-                    chat_handler = MiniCPMv45ChatHandler(**handler_kwargs, **extra_handler_kwargs)
-
-                elif chat_handler_type == "minicpmv46":
-                    from llama_cpp.llama_chat_format import MiniCPMv46ChatHandler
-                    extra_handler_kwargs = {
-                        "enable_thinking": config.get("enable_thinking", True),
-                    }
-                    chat_handler = MiniCPMv46ChatHandler(**handler_kwargs, **extra_handler_kwargs)
-
-                elif chat_handler_type == "glm41v":
-                    from llama_cpp.llama_chat_format import GLM41VChatHandler
-                    chat_handler = GLM41VChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "glm46v":
-                    from llama_cpp.llama_chat_format import GLM46VChatHandler
-                    extra_handler_kwargs = {
-                        "enable_thinking": config.get("enable_thinking", True),
-                    }
-                    chat_handler = GLM46VChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
                 elif chat_handler_type == "granite":
-                    from llama_cpp.llama_chat_format import GraniteDoclingChatHandler
                     extra_handler_kwargs = {
                         "controls": config.get("granite_controls", None),
                     }
-                    chat_handler = GraniteDoclingChatHandler(**handler_kwargs, **extra_handler_kwargs)
 
-                elif chat_handler_type == "lfm2vl":
-                    from llama_cpp.llama_chat_format import LFM2VLChatHandler
-                    chat_handler = LFM2VLChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "lfm25vl":
-                    from llama_cpp.llama_chat_format import LFM25VLChatHandler
-                    chat_handler = LFM25VLChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "paddleocr":
-                    from llama_cpp.llama_chat_format import PaddleOCRChatHandler
-                    chat_handler = PaddleOCRChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "obsidian":
-                    from llama_cpp.llama_chat_format import ObsidianChatHandler
-                    chat_handler = ObsidianChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "nanollava":
-                    from llama_cpp.llama_chat_format import NanoLlavaChatHandler
-                    chat_handler = NanoLlavaChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "llama3visionalpha":
-                    from llama_cpp.llama_chat_format import Llama3VisionAlphaChatHandler
-                    chat_handler = Llama3VisionAlphaChatHandler(**handler_kwargs)
-
-                elif chat_handler_type == "step3vl":
-                    from llama_cpp.llama_chat_format import Step3VLChatHandler
-                    extra_handler_kwargs = {
-                        "enable_thinking": config.get("enable_thinking", True),
-                    }
-                    chat_handler = Step3VLChatHandler(**handler_kwargs, **extra_handler_kwargs)
-
+                if chat_handler_type == "generic":
+                    # GenericMTMDChatHandler принимает mmproj_path вместо clip_model_path.
+                    chat_handler = handler_class(
+                        mmproj_path=mmproj_path,
+                        chat_format=chat_format,
+                        verbose=verbose,
+                    )
                 else:
-                    return {"status": "error", "message": f"Unknown chat handler type: {chat_handler_type}"}, None
+                    chat_handler = handler_class(**handler_kwargs, **extra_handler_kwargs)
 
                 _debug_print(debug, "create_chat_handler", t0, file=sys.stderr)
 
