@@ -390,9 +390,11 @@ def _build_video_content(video_item, config, video_num):
 # =====================================================================
 # INTERRUPTIBLE STREAMING
 # =====================================================================
-def _stream_chat_completion(llm, messages, completion_kwargs, debug=False):
+def _consume_stream(llm, stream, get_chunk_text, completion_kwargs):
     """
-    Streaming-обертка с проверкой прерывания раз в N токенов.
+    Общий цикл чтения стрима: проверка прерывания раз в N токенов и прогресс-бар.
+    get_chunk_text достаёт текст из chunk (формат отличается у chat и raw completion).
+    Возвращает (output, prompt_tokens, completion_tokens).
     """
     collected_content = []
     prompt_tokens = 0
@@ -410,12 +412,6 @@ def _stream_chat_completion(llm, messages, completion_kwargs, debug=False):
         has_comfy = True
     except ImportError:
         has_comfy = False
-
-    stream = llm.create_chat_completion(
-        messages=messages,
-        stream=True,
-        **completion_kwargs
-    )
 
     for chunk in stream:
         tick += 1
@@ -436,8 +432,7 @@ def _stream_chat_completion(llm, messages, completion_kwargs, debug=False):
         if "usage" in chunk and chunk["usage"]:
             prompt_tokens = chunk["usage"].get("prompt_tokens", 0)
 
-        delta = chunk["choices"][0].get("delta", {})
-        content = delta.get("content")
+        content = get_chunk_text(chunk)
         if content:
             collected_content.append(content)
             completion_tokens += 1
@@ -469,15 +464,49 @@ def _stream_chat_completion(llm, messages, completion_kwargs, debug=False):
         sys.stderr.write(bar_line)
         sys.stderr.flush()
 
-    output = "".join(collected_content)
+    return "".join(collected_content), prompt_tokens, completion_tokens
+
+def _stream_usage(prompt_tokens, completion_tokens):
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
+
+def _stream_chat_completion(llm, messages, completion_kwargs):
+    """
+    Streaming-обертка для chat completion с проверкой прерывания.
+    """
+    stream = llm.create_chat_completion(
+        messages=messages,
+        stream=True,
+        **completion_kwargs
+    )
+    output, prompt_tokens, completion_tokens = _consume_stream(
+        llm, stream, lambda chunk: chunk["choices"][0].get("delta", {}).get("content"), completion_kwargs
+    )
 
     return {
         "choices": [{"message": {"content": output}}],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        }
+        "usage": _stream_usage(prompt_tokens, completion_tokens),
+    }
+
+def _stream_completion(llm, prompt, completion_kwargs):
+    """
+    Streaming-обертка для raw completion с проверкой прерывания.
+    """
+    stream = llm.create_completion(
+        prompt=prompt,
+        stream=True,
+        **completion_kwargs
+    )
+    output, prompt_tokens, completion_tokens = _consume_stream(
+        llm, stream, lambda chunk: chunk["choices"][0].get("text"), completion_kwargs
+    )
+
+    return {
+        "choices": [{"text": output}],
+        "usage": _stream_usage(prompt_tokens, completion_tokens),
     }
 
 def _inference(config):
@@ -1079,7 +1108,7 @@ def _inference(config):
 
                     t_inference0 = time.perf_counter()
                     if streaming_mode:
-                        result = _stream_chat_completion(current_cache["llm"], messages, completion_kwargs, debug)
+                        result = _stream_chat_completion(current_cache["llm"], messages, completion_kwargs)
                     else:
                         result = current_cache["llm"].create_chat_completion(messages=messages, **completion_kwargs)
                     t_inference1 = time.perf_counter()
@@ -1095,10 +1124,10 @@ def _inference(config):
                     # Текстовый режим
 
                     t_inference0 = time.perf_counter()
-                    result = current_cache["llm"].create_completion(
-                        prompt=text_before + text_after,
-                        **completion_kwargs
-                    )
+                    if streaming_mode:
+                        result = _stream_completion(current_cache["llm"], text_before + text_after, completion_kwargs)
+                    else:
+                        result = current_cache["llm"].create_completion(prompt=text_before + text_after, **completion_kwargs)
                     t_inference1 = time.perf_counter()
 
                     if debug:
@@ -1178,7 +1207,7 @@ def _inference(config):
 
                 t_inference0 = time.perf_counter()
                 if streaming_mode:
-                    result = _stream_chat_completion(current_cache["llm"], messages, completion_kwargs, debug)
+                    result = _stream_chat_completion(current_cache["llm"], messages, completion_kwargs)
                 else:
                     result = current_cache["llm"].create_chat_completion(messages=messages, **completion_kwargs)
                 t_inference1 = time.perf_counter()
