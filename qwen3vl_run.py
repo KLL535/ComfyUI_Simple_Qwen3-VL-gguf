@@ -184,7 +184,7 @@ _HANDLER_CLASSES = {
     "moondream":         ("MoondreamChatHandler", None),
     "minicpmv26":        ("MiniCPMv26ChatHandler", None),
     "minicpmv45":        ("MiniCPMv45ChatHandler", None),
-    "minicpmv46":        ("MiniCPMv46ChatHandler", None),
+    "minicpmv46":        ("MiniCPMV46ChatHandler", None),
     "glm41v":            ("GLM41VChatHandler", None),
     "glm46v":            ("GLM46VChatHandler", None),
     "granite":           ("GraniteDoclingChatHandler", None),
