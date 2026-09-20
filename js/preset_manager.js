@@ -13,7 +13,7 @@ const GROUP_HEADERS = [
     "📝 Prompt Template",
     "🖼️ Multimodal & Media",
     "⚡ Speculative Decoding",
-    "🔢 Embeddings",
+    "🔢 Embeddings & TTS",
     "🛠️ Debug, System & Advanced"
 ];
 const HEADER_COLORS = {
@@ -25,7 +25,7 @@ const HEADER_COLORS = {
     "📝 Prompt Template": "#d946ef",
     "🖼️ Multimodal & Media": "#06b6d4",
     "⚡ Speculative Decoding": "#eab308",
-    "🔢 Embeddings": "#6366f1",
+    "🔢 Embeddings & TTS": "#6366f1",
     "🛠️ Debug, System & Advanced": "#71717a"
 };
 const HEADER_DEFAULT_COLOR = "#3a6ea5";
@@ -38,7 +38,7 @@ const GROUP_FIELDS = {
     "📝 Prompt Template": ["raw_mode", "prompt_template", "stop"],
     "🖼️ Multimodal & Media": ["force_mmproj", "image_min_tokens", "image_max_tokens", "max_images", "max_frames", "max_audios", "audio_sample_rate", "image_quality", "frame_quality"],
     "⚡ Speculative Decoding": ["speculative_enabled", "speculative_type", "draft_n_max", "draft_p_min", "draft_model_path", "draft_n_gpu_layers", "draft_backend_sampling", "ngram_size_n", "ngram_size_m", "ngram_min_hits", "ngram_max_entries_per_key", "ctx_checkpoints", "checkpoint_on_device"],
-    "🔢 Embeddings": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond"],
+    "🔢 Embeddings & TTS": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond", "extract_tts", "mmproj_use_gpu", "mmproj_flash_attn","mmproj_batch_max_tokens", "language"],
     "🛠️ Debug, System & Advanced": ["verbose", "debug", "debug_output", "raw_output", "streaming_mode", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"]
 };
 const LEGACY_ORDER = [
@@ -1125,7 +1125,7 @@ function createGroupTogglePanel(hostNode) {
         { icon: "📝", name: "📝 Prompt Template", title: "Prompt Template" },
         { icon: "🖼️", name: "🖼️ Multimodal & Media", title: "Multimodal & Media" },
         { icon: "⚡", name: "⚡ Speculative Decoding", title: "Speculative Decoding" },
-        { icon: "🔢", name: "🔢 Embeddings", title: "Embeddings" },
+        { icon: "🔢", name: "🔢 Embeddings & TTS", title: "Embeddings & TTS" },
         { icon: "🛠️", name: "🛠️ Debug, System & Advanced", title: "Debug, System & Advanced" },
     ];
     const buttons = [];

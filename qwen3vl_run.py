@@ -513,8 +513,11 @@ def _inference(config):
 
         if extract_embedding:
             from llama_cpp.llama_embedding import LlamaEmbedding, LLAMA_POOLING_TYPE_NONE
-        else: 
+        else:
             from llama_cpp import Llama
+            if extract_tts:
+                from llama_cpp.llama_multimodal import MTMDAudioGenerator 
+                from llama_cpp.llama_embedding import LLAMA_POOLING_TYPE_NONE
 
         if speculative_enabled:
             try:
@@ -541,7 +544,7 @@ def _inference(config):
 
             chat_handler = None
 
-            if is_vision_model:
+            if is_vision_model and not extract_tts:
                 t0 = time.perf_counter()
 
                 if not chat_handler_type:
@@ -705,7 +708,7 @@ def _inference(config):
 
             t1 = time.perf_counter()
 
-            if not extract_embedding:
+            if not extract_embedding and not extract_tts:
 
                 # Параметры Llama
                 llm_kwargs = {
@@ -857,7 +860,7 @@ def _inference(config):
                         # Подмена, это работает
                         chat_handler.chat_template = simple_template
 
-            else:
+            elif extract_embedding:
 
                 llm_kwargs = {
                     "model_path": model_path,
@@ -877,6 +880,32 @@ def _inference(config):
                         #print(f"extra llm kwargs: {new_key} = {value}", file=sys.stderr)
 
                 current_cache["llm"] = LlamaEmbedding(**llm_kwargs)
+
+            else: #extract_tts
+
+                # Собираем базовые аргументы для LLM
+                llm_kwargs = {
+                    "model_path": model_path,
+                    "n_ctx": config.get("n_ctx", config.get("ctx", 8192)),
+                    "n_batch": config.get("n_batch", 2048),
+                    "n_ubatch": config.get("n_ubatch", 512),
+                    # параметры для TTS (v0.4.0)
+                    "embeddings": True, 
+                    "pooling_type": config.get("pooling_type", LLAMA_POOLING_TYPE_NONE),
+                    "use_mmap": config.get("use_mmap", False),
+                    "verbose": verbose,
+                    "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)),
+                }
+
+                # Пробрасываем кастомные параметры
+                for key, value in config.items():
+                    if key.startswith("extra_llama_"):
+                        new_key = key[len("extra_llama_"):]
+                        llm_kwargs[new_key] = value
+                        #print(f"extra llm kwargs: {new_key} = {value}", file=sys.stderr)
+
+                # Инициализируем стандартный класс Llama
+                current_cache["llm"] = Llama(**llm_kwargs)        
 
             current_cache["hash"] = current_hash
             _debug_print(debug, "load_model", t1, file=sys.stderr)
@@ -1214,10 +1243,48 @@ def _inference(config):
 
             t_tts = time.perf_counter()
 
-            # 
-            # 
-            #
+            # 1. Инициализируем генератор аудио
+            audio_gen = MTMDAudioGenerator(
+                mmproj_path=mmproj_path, 
+                batch_max_tokens=config.get("mmproj_batch_max_tokens", 1024),
+                use_gpu=config.get("mmproj_use_gpu", True),
+                flash_attn=config.get("mmproj_flash_attn", True),
+            ) 
+             
+            # 2. Собираем аргументы для create_speech
+            tts_kwargs = {
+                "llama": current_cache["llm"],
+                "text": user_prompt,
+                "seed": config.get("seed", 42),
+                "max_frames": config.get("max_tokens", 2048),
+                "temperature": config.get("temperature", 0.7),
+                "repeat_penalty": config.get("repeat_penalty", 1.1),
+                "top_p": config.get("top_p", 0.92),
+                "min_p": config.get("min_p", 0.05),
+                "top_k": config.get("top_k", 0),
+            }
+         
+            # Опциональные параметры из конфига
+            language = config.get("language", "").strip()
+            if language:
+                tts_kwargs["language"] = language
 
+            if audios:        
+                for aud_item in audios:
+                    if aud_item is not None:
+                        tts_kwargs["speaker_reference"] = aud_item
+                        break    
+
+            # 3. Запускаем генерацию
+            generated_audio = audio_gen.create_speech(**tts_kwargs)
+
+            # 4. Проверка результата
+            if generated_audio.finish_reason == "length":
+                print("[WARNING] Audio has been cut off (max_frames limit reached)")
+             
+            # 5. Извлекаем байты (находятся в атрибуте .data)         
+            output_data = generated_audio.data
+            data_type = 2 # это аудио
             _debug_print(debug, "get tts", t_tts, file=sys.stderr)
 
         return {"status": "success", "output": output, "data_type": data_type}, output_data
@@ -1334,16 +1401,16 @@ def main():
 
         swap_dup()
 
-        result, data_type = _inference(config)
+        result, output_data = _inference(config)
 
         # Сохраняем data
-        if data_type is not None:
+        if output_data is not None:
 
             import pickle
 
             t_save_data = time.perf_counter()
             with tempfile.NamedTemporaryFile(suffix='.pkl', delete=False) as f:
-                pickle.dump(data_type, f)
+                pickle.dump(output_data, f)
                 data_path = f.name    
             result["data_file"] = data_path
             debug = config.get("debug", True)

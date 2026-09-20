@@ -667,8 +667,36 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
                     conditioning = data
 
             audio = None
-            if data_type == 2 and data is not None:
-                pass
+            if data_type == 2 and data is not None: #TTS
+                try:
+                    import io
+                    import wave     
+                    import numpy as np
+
+                    # 1. Читаем стандартный WAV
+                    with wave.open(io.BytesIO(data), 'rb') as wav_file:
+                        sample_rate = wav_file.getframerate()
+                        channels = wav_file.getnchannels()
+                        frames = wav_file.readframes(wav_file.getnframes())
+                    
+                    # 2. Преобразуем PCM16 байты в float32 массив в диапазоне [-1.0, 1.0]
+                    audio_np = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+                    
+                    # 3. Создаем тензор и приводим к форме [batch, channels, samples]
+                    waveform = torch.from_numpy(audio_np).unsqueeze(0) # временно [1, samples]
+                    
+                    if channels > 1:
+                        waveform = waveform.view(1, channels, -1)
+                    else:
+                        waveform = waveform.view(1, 1, -1) # Моно аудио: [1, 1, samples]
+                        
+                    # 4. Формируем итоговый словарь для ComfyUI
+                    audio = {
+                        "waveform": waveform,
+                        "sample_rate": int(sample_rate)
+                    }
+                except Exception as e:
+                    print(f"[ERROR] Failed to convert TTS bytes to ComfyUI format: {e}", file=sys.stderr)
 
             return text, conditioning, audio
         else:
@@ -859,6 +887,9 @@ class SimpleQwen3VL_GGUF_Node:
                 }),
                 "seed": ("INT", {
                     "default": 42,
+                    "min": 0, 
+                    "max": 0xffffffff,
+                    "step": 1,
                     "tooltip": "Random seed for reproducible generation.",
                 }),
                 "unload_all_models": ("BOOLEAN", {
@@ -923,8 +954,8 @@ class SimpleQwen3VL_GGUF_Node:
             },
         }
 
-    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING")
-    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt")
+    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING", "AUDIO")
+    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt", "audio")
     FUNCTION = "run"
     CATEGORY = CATEGORY_NAME
 
@@ -943,7 +974,7 @@ class SimpleQwen3VL_GGUF_Node:
             **kwargs):
 
         if bypass:
-            return (user_prompt, None, "", "")
+            return (user_prompt, None, "", "", None)
 
         t_total0 = time.perf_counter()
         temp_paths = []
@@ -1173,7 +1204,7 @@ class SimpleQwen3VL_GGUF_Node:
             # Запуск инференса
             text, conditioning, audio = run_inference_pipeline(script_name, final_config, mode, gccollect, debug = debug)
 
-            return (text, conditioning, system_prompt, user_prompt)
+            return (text, conditioning, system_prompt, user_prompt, audio)
 
         finally:
 
