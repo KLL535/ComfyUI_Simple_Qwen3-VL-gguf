@@ -15,6 +15,8 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
+- Add Qwen3-TTS audio output + configurations.
+- Add `answer_delimiter` config.
 - Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
 - Add speculative decoding
 > ⚠️ **Important Limitations**: Incompatible with multimodal inputs (images, video, audio), requires `llama-cpp-python` version 0.3.48 or higher, disabled by default.
@@ -447,7 +449,8 @@ Possible model configurations that can be passed to the `config_override` input.
 | presence_penalty | float | 0.0 | Penalty based on token presence. Positive values encourage new topics, negative favor repetition |
 | frequency_penalty | float | 0.0 | Penalty based on token frequency. Positive values reduce repetition of common words |
 | enable_thinking | bool | False | Enable thinking/reasoning process for Gemma, Qwen, MiniCPM, GLM models. Requires more output tokens |
-| remove_thinking | bool | False | Cleans model output by removing `<think>...</think>` or <|channel>...<channel|> sections. |
+| remove_thinking | bool | False | Cleans model output by removing `<think>...</think>` sections. |
+| answer_delimiter | string | "" | **[if remove_thinking = true]** Use this for non-standard models to clean up the output. Enter the token where the real answer starts, and the node will automatically cut out all thinking processes and technical tags generated prior to it |
 | force_reasoning | bool | False | For Qwen3: force reasoning mode even on simple queries. Makes model always "think" before answering |
 | words_to_ban | string | "" | Comma-separated list of banned words. Applies logit_bias of -100 to their tokens. Example: woman,Woman,man,Man |
 
@@ -471,7 +474,7 @@ Possible model configurations that can be passed to the `config_override` input.
 |--------|--------|--------|--------|
 | chat_handler | dropdown/string | "none" | Chat handler for multimodal models: gemma4, qwen35, qwen3, qwen25, llava16, minicpmv45, etc. Required for vision models |
 | chat_format | dropdown/string | "none" | Chat format for text-only models: llama-2, llama-3, chatml, alpaca, etc. Not needed if chat_handler is set |
-| chat_format_from_gguf | bool | False | Force loading chat template from GGUF metadata. 💡 Does NOT work with images/audio/video |
+| chat_format_from_gguf | bool | False | Force loading chat template from GGUF metadata. 💡 **Does NOT work with images/audio/video** |
 | system_prompt_default | string | "" | Default system prompt for the model. Used when no preset or override is provided | 
 | system_preset_to_user_prompt | bool | False | Move system preset from system prompt role to user prompt role. Useful for models that follow user prompts better | 
 | user_prompt_after_content | bool | True | Insert user_prompt AFTER image/audio/video content. False = insert before |
@@ -523,7 +526,7 @@ Speculative decoding accelerates text generation by using a draft model (or stat
 | ctx_checkpoints | int | 0 | Max number of context checkpoints per slot for rollback support. Set to 16 if using N-gram speculative decoding (required for rollbacks when draft is rejected). For standard 1-question-1-answer generation or MTP/DFlash methods, keep at `0` to save VRAM. |
 | checkpoint_on_device | bool | False | Store context checkpoints in VRAM (`True`) instead of RAM (`False`). Saves VRAM if `False`, but makes rollbacks slower due to PCIe transfer. Only matters if `ctx_checkpoints > 0` (i.e., only for N-gram). |
 
-🔢 Embeddings
+🔢 Embeddings & TTS
 
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
@@ -532,6 +535,11 @@ Speculative decoding accelerates text generation by using a draft model (or stat
 | tokenizer_path | string | "" | Path to external HuggingFace tokenizer. Overrides built-in llama.cpp tokenizer. May slow performance |
 | embedding_scale | float | 1.0 | Scalar multiplier for output embedding vector. 1.0 = no scaling. Match magnitude for downstream models |
 | convert_emb_to_cond | bool | False | Wrap embedding into ComfyUI CONDITIONING (hidden_states + attention_mask). Required for SD/Flux conditioning |
+| extract_tts | bool | False | Switch node to TTS (Text-to-Speech) mode. When enabled, the node generates audio from text instead of user_prompt text. Requires mmproj_path and a TTS-compatible model |
+| mmproj_use_gpu | bool | True | Use GPU for mmproj (multimodal projector). Disable for CPU-only inference (slower but works without CUDA) |
+| mmproj_flash_attn | bool | True | Enable Flash Attention for mmproj (multimodal projector). Improves performance on supported GPUs. Disable if you encounter compatibility issues |
+| mmproj_batch_max_tokens | int | 1024 | Maximum batch size for the multimodal projector (mmproj). Multimodal tasks require more VRAM per token than standard text, so this value is typically lower than n_batch. Reduce if VRAM is insufficient (to 512 or 256) or increase for faster processing if memory allows |
+| language | string | "" | Language code for TTS generation (zh, en, de, it, pt, es, ja, ko, fr, ru). Leave empty for auto-detection or model default. Note: model must support the specified language. |
 
 🛠️ Debug, System & Advanced
 
@@ -680,6 +688,75 @@ Allows select a user prompt from templates:
 
 <details>
 
+<summary>Qwen3-TTS</summary>
+
+- https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/tree/main
+
+For example:
+`Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf` + `mmproj-Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf`
+
+> 💡 **TIP:** You can provide audio as input, and it will serve as the `speaker_reference`.
+
+```json
+{
+  "model_path": "I:\\LLM\\tts\\qwen3-tts\\Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf",
+  "mmproj_path": "I:\\LLM\\tts\\qwen3-tts\\mmproj-Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf",
+  "n_ctx": 4096,
+  "max_tokens": 512,
+  "temperature": 0.8,
+  "top_p": 0.95,
+  "top_k": 40,
+  "repeat_penalty": 1.05,
+  "pooling_type": -1,
+  "extract_tts": true,
+  "mmproj_batch_max_tokens": 1024,
+  "language": "ru"
+}
+```
+
+</details>
+
+<details>
+
+<summary>Muse-Glimmer-30B</summary>
+
+- https://huggingface.co/unsloth/Muse-Glimmer-30B-GGUF
+
+For example (heavily quantized model for 16 GB of VRAM):
+`Muse-Glimmer-30B-UD-IQ3_XXS.gguf` + `mmproj-Muse-Glimmer-30B-Q8_0.gguf`
+
+> 💡 **TIP:** specifying type_k and type_v is not required - I need this to save memory
+
+> 💡 **TIP:** Parameters not specified in this list have **default** values. See `Model Configs` sections.
+
+> 💡 **WARNING:** Since prompt_template is used the `enable_thinking` setting will not work. However, you can specify a different parameter `Reasoning strength: low` - which is defined in the `prompt_template`, with the available options being `low`, `medium`, `high`, and `xhigh`. For now, this is the only way to change it - by editing the `prompt_template` string
+
+```json
+{
+    "model_path": "I:\\LLM\\Muse-Glimmer\\Muse-Glimmer-30B-Heretic-IQ3_XXS.gguf",
+    "mmproj_path": "I:\\LLM\\Muse-Glimmer\\mmproj-Muse-Glimmer-30B-Q8_0.gguf",
+    "n_batch": 512,
+    "type_k": 8,
+    "type_v": 8,
+    "max_tokens": 4096,
+    "temperature": 0.1,
+    "top_p": 0.95,
+    "top_k": 64,
+    "remove_thinking": true,
+    "answer_delimiter": "<|start|>assistant to=user<|message|>",
+    "chat_handler": "generic",
+    "raw_mode": true,
+    "prompt_template": "<|start|>system<|message|>{system}\\n\\nReasoning strength: low.\\n\\n# Valid recipients: \"self\", \"user\".<|eot|><|start|>user<|message|>{images}{user}<|eot|><|start|>assistant",
+    "stop": "<|end_of_text|>, <|eot|>",
+    "force_mmproj": false,
+    "streaming_mode": true
+}
+```
+
+</details>
+
+<details>
+
 <summary>Qwen3.8-27B</summary>
 
 - https://huggingface.co/Blackfrost-AI/Qwen3.8-27B-ABLITERATED-GGUF
@@ -687,7 +764,7 @@ Allows select a user prompt from templates:
 For example (for 16 Gb VRAM):
 `Qwen3.8-27B-ABLITERATED-Q3_K_S.gguf` + `mmproj-BF16.gguf`
 
-> 💡 **WARNING:** Parameters not specified in this list have **default** values. See `Model Configs` sections.
+> 💡 **TIP:** Parameters not specified in this list have **default** values. See `Model Configs` sections.
 
 ```json
 {
