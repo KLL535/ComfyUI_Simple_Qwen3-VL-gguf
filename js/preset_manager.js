@@ -228,8 +228,13 @@ app.registerExtension({
                     origPresetCb?.call(presetCombo, value);
                     if (value && value !== "None") {
                         const cfg = await fetchPresetConfig(value);
-                        if (cfg) applyPreset(this, cfg);
+                        if (cfg) {
+                            resetWidgetsToDefaults(this);       // сброс в дефолт
+                            applyPreset(this, cfg);             // накладываем значения пресета
+                        }
                     } else {
+                        // При выборе "None" — тоже сбрасываем в дефолт
+                        resetWidgetsToDefaults(this);
                         applyPreset(this, null);
                     }
                 };
@@ -276,6 +281,20 @@ function insertWidgetsAfter(node, target, widgets) {
     if (idx < 0) return;
     node.widgets = node.widgets.filter(w => !widgets.includes(w));
     node.widgets.splice(idx + 1, 0, ...widgets);
+}
+
+function resetWidgetsToDefaults(node) {
+    const defaults = node._widgetDefaults || {};
+    for (const w of node.widgets) {
+        if (w.skipSerialize) continue;
+        if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
+        if (GROUP_HEADERS.includes(w.name)) continue;
+        if (w.type === "button") continue;
+        if (w.name === "extra") { w.value = ""; continue; }
+        if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
+            w.value = convertValue(w.name, defaults[w.name], w);
+        }
+    }
 }
 
 function setBaselineFromPreset(node, presetConfig) {
@@ -795,19 +814,8 @@ async function onImportJson(node, combo) {
                 const resetOthers = options.resetOthers !== false; // по умолчанию true
 
                 if (resetOthers) {
-                    const defaults = node._widgetDefaults || {};
-                    for (const w of node.widgets) {
-                        if (w.skipSerialize) continue;
-                        if (["model_preset", "preset_name", "preset_controls", "group_toggle_panel"].includes(w.name)) continue;
-                        if (GROUP_HEADERS.includes(w.name)) continue;
-                        if (w.type === "button") continue;
-                        if (w.name === "extra") { w.value = ""; continue; }
-                        if (Object.prototype.hasOwnProperty.call(defaults, w.name)) {
-                            w.value = convertValue(w.name, defaults[w.name], w);
-                        }
-                    }
+                    resetWidgetsToDefaults(node);
                 }
-
                 applyPreset(node, config, false);
 
                 // Обновляем dirty state
