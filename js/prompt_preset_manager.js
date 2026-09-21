@@ -16,13 +16,6 @@ const GROUP_FIELDS = {
     "📝 System Prompt": ["system_prompt"],
     "📝 User Prompt Template": ["user_prompt_template"]
 };
-const LEGACY_ORDER = [
-    "system_preset",
-    "📝 System Prompt",
-    "system_prompt",
-    "📝 User Prompt Template",
-    "user_prompt_template"
-];
 
 app.registerExtension({
     name: "SimpleQwenVL.PromptPresetConfiguratorUI",
@@ -596,80 +589,53 @@ function patchServiceWidgets(node, presetCombo) {
     const origConfigure = node.configure;
     node.configure = function (info) {
         const savedValues = info.widgets_values;
-        const savedNames = info._widget_names;
-        if (savedValues) info = { ...info, widgets_values: null };
-        origConfigure.apply(this, [info]);
+        const savedNames  = info._widget_names;
 
-        if (savedValues) {
+        origConfigure.apply(this, arguments);
+
+        // Восстанавливаем значения по именам
+        if (savedValues && Array.isArray(savedValues)) {
             const targets = this.widgets.filter(w => !w.skipSerialize);
-            // ПУТЬ А: НОВЫЕ ВОРКФЛОУ (есть _widget_names)
             if (savedNames && savedNames.length === savedValues.length) {
                 for (let i = 0; i < savedValues.length; i++) {
                     const name = savedNames[i];
-                    const targetWidget = targets.find(w => w.name === name);
-                    if (targetWidget) targetWidget.value = savedValues[i];
-                }
-            // ПУТЬ Б: СТАРЫЕ ВОРКФЛОУ (сохранены ДО этого патча)
-            } else {
-                if (savedValues.length === LEGACY_ORDER.length) {
-                    for (let i = 0; i < savedValues.length; i++) {
-                        const name = LEGACY_ORDER[i];
-                        const targetWidget = targets.find(w => w.name === name);
-                        if (targetWidget) targetWidget.value = savedValues[i];
-                    }
-                } else {
-                    console.warn("[PromptConfigurator] Legacy order mismatch, falling back to index mapping.");
-                    for (let i = 0; i < savedValues.length && i < targets.length; i++) {
-                        targets[i].value = savedValues[i];
+                    const target = targets.find(w => w.name === name);
+                    if (target) {
+                        target.value = savedValues[i];
                     }
                 }
-            }
+            } 
         }
 
-        // Синхронно обновляем группы ДО первой отрисовки
+        // Синхронизация групп — без триггера колбэков
         GROUP_HEADERS.forEach(headerName => {
             const widget = this.widgets.find(w => w.name === headerName);
             if (widget) this.toggleGroup(widget, !!widget.value);
         });
-        if (this._groupTogglePanel?.syncState) {
-            this._groupTogglePanel.syncState();
-        }
+        if (this._groupTogglePanel?.syncState) this._groupTogglePanel.syncState();
 
-        // Обновляем список пресетов с сервера
+        // Базовые значения пресета — асинхронно, но БЕЗ сброса виджетов
         setTimeout(async () => {
             try {
                 const resp = await fetch('/simpleqwenvl/presets/list?type=prompt');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data.presets) {
-                        const oldValue = presetCombo.value;
-                        presetCombo.options.values = data.presets;
-                        if (!data.presets.includes(presetCombo.value)) {
-                            presetCombo.value = "None";
-                            if (oldValue !== "None") {
-                                this._dirty = false;
-                                this._baselineValues = {};
-                            }
-                        }
-                        
-                        const presetName = presetCombo.value;
-                        if (presetName && presetName !== "None") {
-                            const cfg = await fetchPromptPreset(presetName);
-                            if (cfg) {
-                                setBaselineFromPreset(this, cfg);
-                            } else {
-                                this._dirty = false;
-                                this._baselineValues = {};
-                            }
-                        } else {
-                            this._dirty = false;
-                            this._baselineValues = {};
-                        }
-                        
-                        if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
-                        this.setDirtyCanvas(true, true);
-                    }
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (!data.presets) return;
+
+                presetCombo.options.values = data.presets;
+                if (!data.presets.includes(presetCombo.value)) {
+                    presetCombo.value = "None";
                 }
+                const presetName = presetCombo.value;
+                if (presetName && presetName !== "None") {
+                    const cfg = await fetchPromptPreset(presetName);
+                    if (cfg) setBaselineFromPreset(this, cfg);
+                    else { this._dirty = false; this._baselineValues = {}; }
+                } else {
+                    this._dirty = false; this._baselineValues = {};
+                }
+                if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
+                this.setDirtyCanvas(true, true);
             } catch (e) {
                 console.error("[PromptConfigurator] Failed to refresh presets list:", e);
             }

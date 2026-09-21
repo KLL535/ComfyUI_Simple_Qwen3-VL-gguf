@@ -41,17 +41,6 @@ const GROUP_FIELDS = {
     "🔢 Embeddings & TTS": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond", "extract_tts", "mmproj_use_gpu", "mmproj_flash_attn","mmproj_batch_max_tokens", "language"],
     "🛠️ Debug, System & Advanced": ["verbose", "debug", "debug_output", "raw_output", "streaming_mode", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"]
 };
-const LEGACY_ORDER = [
-    "model_preset", "📁 Model & Paths", "model_path", "mmproj_path",
-    "🗄️ Memory & Context", "n_ctx", "n_batch", "n_ubatch", "n_keep", "offload_kqv", "type_k", "type_v", "use_mmap", "use_mlock", "pool_size", "logits_all", "ctx_checkpoints", "swa_full",
-    "🎲 Sampling & Generation", "max_tokens", "temperature", "top_p", "min_p", "top_k", "repeat_penalty", "presence_penalty", "frequency_penalty", "enable_thinking", "force_reasoning", "words_to_ban",
-    "⚙️ Hardware & Acceleration", "n_gpu_layers", "n_cpu_moe", "cpu_moe", "n_threads", "flash_attn_type", "split_mode", "main_gpu", "cuda_device", "tensor_split",
-    "💬 Chat, Prompts & Variables", "chat_handler", "chat_format", "chat_format_from_gguf", "system_prompt_default", "system_preset_to_user_prompt", "user_prompt_after_content", "enable_variables", "add_vision_id", "add_image_id", "add_frame_id", "add_audio_id",
-    "📝 Prompt Template", "raw_mode", "prompt_template", "stop",
-    "🖼️ Multimodal & Media", "force_mmproj", "image_min_tokens", "image_max_tokens", "max_images", "max_frames", "max_audios", "audio_sample_rate", "image_quality", "frame_quality",
-    "🔢 Embeddings", "extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond",
-    "🛠️ Debug, System & Advanced", "verbose", "debug", "debug_output", "raw_output", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"
-];
 const GGML_REVERSE = {
     0: "0=F32", 1: "1=F16", 2: "2=Q4_0", 3: "3=Q4_1", 6: "6=Q5_0", 7: "7=Q5_1", 8: "8=Q8_0", 9: "9=Q8_1",
     10: "10=Q2_K", 11: "11=Q3_K", 12: "12=Q4_K", 13: "13=Q5_K", 14: "14=Q6_K", 15: "15=Q8_K",
@@ -1237,84 +1226,53 @@ function patchServiceWidgets(node, presetCombo) {
     const origConfigure = node.configure;
     node.configure = function (info) {
         const savedValues = info.widgets_values;
-        const savedNames = info._widget_names;
-        if (savedValues) info = { ...info, widgets_values: null };
-        origConfigure.apply(this, [info]);
+        const savedNames  = info._widget_names;
 
-        if (savedValues) {
+        origConfigure.apply(this, arguments);
+
+        // Восстанавливаем значения по именам
+        if (savedValues && Array.isArray(savedValues)) {
             const targets = this.widgets.filter(w => !w.skipSerialize);
-            // ПУТЬ А: НОВЫЕ ВОРКФЛОУ (есть _widget_names)
             if (savedNames && savedNames.length === savedValues.length) {
                 for (let i = 0; i < savedValues.length; i++) {
                     const name = savedNames[i];
-                    const targetWidget = targets.find(w => w.name === name);
-                    if (targetWidget) {
-                        targetWidget.value = savedValues[i];
+                    const target = targets.find(w => w.name === name);
+                    if (target) {
+                        target.value = savedValues[i];
                     }
                 }
-            }
-            // ПУТЬ Б: СТАРЫЕ ВОРКФЛОУ (сохранены ДО этого патча)
-            else {
-                if (savedValues.length === LEGACY_ORDER.length) {
-                    for (let i = 0; i < savedValues.length; i++) {
-                        const name = LEGACY_ORDER[i];
-                        const targetWidget = targets.find(w => w.name === name);
-                        if (targetWidget) {
-                            targetWidget.value = savedValues[i];
-                        }
-                    }
-                } else {
-                    console.warn("[Configurator] Legacy order mismatch, falling back to index mapping.");
-                    for (let i = 0; i < savedValues.length && i < targets.length; i++) {
-                        targets[i].value = savedValues[i];
-                    }
-                }
-            }
+            } 
         }
 
-        // Синхронно обновляем группы и кнопки ДО первой отрисовки
+        // Синхронизация групп — без триггера колбэков
         GROUP_HEADERS.forEach(headerName => {
             const widget = this.widgets.find(w => w.name === headerName);
             if (widget) this.toggleGroup(widget, !!widget.value);
         });
-        if (this._groupTogglePanel?.syncState) {
-            this._groupTogglePanel.syncState();
-        }
+        if (this._groupTogglePanel?.syncState) this._groupTogglePanel.syncState();
 
-        // Обновляем список пресетов с сервера
+        // Базовые значения пресета — асинхронно, но БЕЗ сброса виджетов
         setTimeout(async () => {
             try {
                 const resp = await fetch('/simpleqwenvl/presets/list?type=model');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data.presets) {
-                        const oldValue = presetCombo.value;
-                        presetCombo.options.values = data.presets;
-                        if (!data.presets.includes(presetCombo.value)) {
-                            presetCombo.value = "None";
-                            if (oldValue !== "None") {
-                                this._dirty = false;
-                                this._baselineValues = {};
-                            }
-                        }
-                        const presetName = presetCombo.value;
-                        if (presetName && presetName !== "None") {
-                            const cfg = await fetchPresetConfig(presetName);
-                            if (cfg) {
-                                setBaselineFromPreset(this, cfg);
-                            } else {
-                                this._dirty = false;
-                                this._baselineValues = {};
-                            }
-                        } else {
-                            this._dirty = false;
-                            this._baselineValues = {};
-                        }
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (!data.presets) return;
 
-                        if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
-                        this.setDirtyCanvas(true, true);
-                    }
+                presetCombo.options.values = data.presets;
+                if (!data.presets.includes(presetCombo.value)) {
+                    presetCombo.value = "None";
                 }
+                const presetName = presetCombo.value;
+                if (presetName && presetName !== "None") {
+                    const cfg = await fetchPresetConfig(presetName);
+                    if (cfg) setBaselineFromPreset(this, cfg);
+                    else { this._dirty = false; this._baselineValues = {}; }
+                } else {
+                    this._dirty = false; this._baselineValues = {};
+                }
+                if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
+                this.setDirtyCanvas(true, true);
             } catch (e) {
                 console.error("[Configurator] Failed to refresh presets list:", e);
             }
