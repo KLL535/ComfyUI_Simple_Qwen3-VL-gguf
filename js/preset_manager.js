@@ -1,6 +1,7 @@
 // js/preset_manager.js
 import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
+import { showPromptDialog, showConfirmDialog } from "./dialogs.js";
 
 const TARGET_NODE = "Qwen3VL_AdvancedConfig";
 const SAVE_BUTTON_ACTION = "save";
@@ -660,32 +661,32 @@ async function onSavePreset(node, combo) {
 }
 
 async function onSaveAsPreset(node, combo) {
-    const newName = prompt("Enter new preset name:", combo.value && combo.value !== "None" ? combo.value + "_copy" : "");
-    if (!newName || !newName.trim()) return;
-    const name = newName.trim();
-    const config = collectNodeConfig(node);
-    try {
-        const res = await api.fetchApi("/simpleqwenvl/presets/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "model", name, config }),
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Save As failed");
+    const defaultName = combo.value && combo.value !== "None" ? combo.value + "_copy" : "";
+    showPromptDialog("Save preset as", defaultName, async (name) => {
+        const config = collectNodeConfig(node);
+        try {
+            const res = await api.fetchApi("/simpleqwenvl/presets/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: "model", name, config }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Save As failed");
+            }
+            const data = await res.json();
+            if (data.success && data.presets) {
+                combo.options.values = data.presets;
+                combo.value = name;
+                setBaselineFromPreset(node, config);
+                if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
+                app.graph.setDirtyCanvas(true, true);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Save As failed: " + e.message);
         }
-        const data = await res.json();
-        if (data.success && data.presets) {
-            combo.options.values = data.presets;
-            combo.value = name;
-            setBaselineFromPreset(node, config);
-            if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-            app.graph.setDirtyCanvas(true, true);
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Save As failed: " + e.message);
-    }
+    });
 }
 
 async function onRenamePreset(node, combo) {
@@ -694,33 +695,33 @@ async function onRenamePreset(node, combo) {
         alert("Select a preset to rename first");
         return;
     }
-    const newName = prompt("Enter new name for preset:", current);
-    if (!newName || !newName.trim()) return;
-    const name = newName.trim();
-    if (name === current) return;
-    const config = collectNodeConfig(node);
-    try {
-        const res = await api.fetchApi("/simpleqwenvl/presets/rename", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "model", old_name: current, new_name: name, config }),
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Rename failed");
+
+    showPromptDialog("Rename preset", current, async (name) => {
+        if (name === current) return;
+        const config = collectNodeConfig(node);
+        try {
+            const res = await api.fetchApi("/simpleqwenvl/presets/rename", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ type: "model", old_name: current, new_name: name, config }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Rename failed");
+            }
+            const data = await res.json();
+            if (data.success && data.presets) {
+                combo.options.values = data.presets.length > 0 ? data.presets : ["None"];
+                combo.value = name;
+                setBaselineFromPreset(node, config);
+                if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
+                app.graph.setDirtyCanvas(true, true);
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Rename failed: " + e.message);
         }
-        const data = await res.json();
-        if (data.success && data.presets) {
-            combo.options.values = data.presets.length > 0 ? data.presets : ["None"];
-            combo.value = name;
-            setBaselineFromPreset(node, config);
-            if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-            app.graph.setDirtyCanvas(true, true);
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Rename failed: " + e.message);
-    }
+    });
 }
 
 async function onDeletePreset(node, combo) {
@@ -729,30 +730,36 @@ async function onDeletePreset(node, combo) {
         alert("Nothing to delete");
         return;
     }
-    if (!confirm(`Delete preset "${current}"?`)) return;
-    try {
-        const res = await api.fetchApi("/simpleqwenvl/presets/delete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "model", name: current }),
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Delete failed");
+
+    showConfirmDialog(
+        "Delete preset",
+        `Delete preset "${current}"? This cannot be undone.`,
+        async () => {
+            try {
+                const res = await api.fetchApi("/simpleqwenvl/presets/delete", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: "model", name: current }),
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || "Delete failed");
+                }
+                const data = await res.json();
+                if (data.success && data.presets) {
+                    combo.options.values = data.presets.length > 0 ? data.presets : ["None"];
+                    combo.value = "None";
+
+                    combo.callback?.(combo.value);
+
+                    app.graph.setDirtyCanvas(true, true);
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Delete failed: " + e.message);
+            }
         }
-        const data = await res.json();
-        if (data.success && data.presets) {
-            combo.options.values = data.presets.length > 0 ? data.presets : ["None"];
-            combo.value = "None";
-            
-            combo.callback?.(combo.value);
-            
-            app.graph.setDirtyCanvas(true, true);
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Delete failed: " + e.message);
-    }
+    );
 }
 
 async function fetchPresetConfig(name) {

@@ -1,4 +1,5 @@
 # Nightly
+- custom DOM dialogs
 - name-based serialization fix + native video mode with ffmpeg + memory-free endpoint for the cleanup button
 - Qwen3-TTS: add audio output, `extract_tts`, `mmproj_use_gpu`, `mmproj_flash_attn`, `mmproj_batch_max_tokens`, `language` config
 - Add `answer_delimiter` config
