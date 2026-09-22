@@ -71,6 +71,17 @@ def _norm_default(value, default):
         pass
     return value
 
+def _debug_calc_speed(result, exec_time):
+    if exec_time == 0: 
+        return 0, 0
+    usage = result['usage']
+    #prompt_tokens = usage['prompt_tokens']
+    completion_tokens = usage['completion_tokens']
+    #total_tokens = usage['total_tokens']
+    speed = completion_tokens / exec_time
+
+    return completion_tokens, speed
+
 def _parse_strings_list(value):
     """
     Parse stop sequences from widget string.
@@ -167,6 +178,10 @@ def build_prompt(template: str, system: str, user: str):
         # Если метки нет, весь текст идёт до картинок
         return result, ""
 
+# ============================================================
+# Image helpers (phase 2)
+# ============================================================
+
 def _build_image_content(image_item, quality=95):
 
     # Сценарий 1: image -> в base64
@@ -189,6 +204,10 @@ def _build_image_content(image_item, quality=95):
     else:
         print(f"build_image: Unsupported type: {type(image_item)}", file=sys.stderr)
         return None
+
+# ============================================================
+# Audio helpers (phase 2)
+# ============================================================
 
 def _build_audio_content(audio_item):
 
@@ -219,62 +238,77 @@ def _build_audio_content(audio_item):
         print(f"build_audio: Unsupported type: {type(audio_item)}", file=sys.stderr)
         return None
 
-def _build_video_content(video_input, config):
+# ============================================================
+# Video helpers (phase 2)
+# ============================================================
 
+def _build_video_native(video_item, config, video_num):
+    """Нативный режим MTMD: передаем путь к файлу напрямую."""
+
+    file_path = video_item.get("path")
+    if file_path is None:
+        print(f"[ERROR] Native video path not found", file=sys.stderr)
+        return []
+
+    if not os.path.exists(file_path):
+        print(f"[ERROR] Native video file not found: {file_path}", file=sys.stderr)
+        return []
+
+    abs_path = os.path.abspath(file_path)
+    return [{
+        "type": "video",
+        "video": abs_path
+    }]
+
+def _build_video_as_images(video_item, config, video_num):
+    """Режим изображений: извлекаем кадры и кодируем в base64."""
     max_frames = config.get('max_frames', 24)
     quality = config.get('frame_quality', 75)
-    trim_start = config.get('trim_start', 0.0)
-    trim_duration = config.get('trim_duration', 0.0)
-    frame_id = _norm_default(config.get("add_frame_id", ""), "")
-    
-    # ==========================================
-    # РЕЖИМ 1: Нативное видео в llama.cpp
-    # ==========================================
+    frame_id = config.get("add_frame_id", "").strip()
 
-    # Unsupported
-
-    # ==========================================
-    # РЕЖИМ 2: Прореженные кадры как изображения
-    # ==========================================
-    
-    video_content_items = []
     frames_to_process = []
-    
-    # Сценарий 1: Путь к файлу (Работа через cv2) ---
-    if isinstance(video_input, str):
 
+    file_path = video_item.get("path")
+    np_frames = video_item.get("array")
+
+    if file_path is not None:
+
+        trim_start = video_item.get("trim_start", 0.0)
+        trim_duration = video_item.get("trim_duration", 0.0)
+
+        # Сценарий 1: Путь к файлу (Работа через cv2)
         import cv2
 
-        video_path = video_input
-        if not os.path.exists(video_path):
-            print(f"[ERROR] Video file not found: {video_path}", file=sys.stderr)
+        if not os.path.exists(file_path):
+            print(f"[ERROR] Video file not found: {file_path}", file=sys.stderr)
             return []
             
-        cap = cv2.VideoCapture(video_path)
+        cap = cv2.VideoCapture(file_path)
         if not cap.isOpened():
+            print(f"[ERROR] Failed to open video file: {file_path}", file=sys.stderr)
             return []
             
         fps = cap.get(cv2.CAP_PROP_FPS)
-        if fps <= 0: fps = 30.0
+        if fps <= 0: 
+            fps = 30.0 # Fallback
         
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         if total_frames <= 0:
             cap.release()
             return []
             
-        # Применяем обрезку (trim) из config
         start_frame = int(trim_start * fps)
         if trim_duration > 0:
             end_frame = int((trim_start + trim_duration) * fps)
         else:
             end_frame = total_frames
             
+        # Защита от выхода за границы
         start_frame = max(0, min(start_frame, total_frames - 1))
         end_frame = max(start_frame + 1, min(end_frame, total_frames))
         
         effective_total = end_frame - start_frame
         
-        # Прореживание кадров в пределах обрезанного окна
         if effective_total > max_frames:
             indices = set(np.linspace(0, effective_total - 1, max_frames, dtype=int).tolist())
         else:
@@ -286,67 +320,72 @@ def _build_video_content(video_input, config):
         
         while cap.isOpened() and current_idx < end_frame:
             ret, frame = cap.read()
-            if not ret: break
+            if not ret: 
+                break
             
             if (current_idx - start_frame) in indices:
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 frames_to_process.append(frame_rgb)
                 selected_count += 1
-                if selected_count >= max_frames: break
+                if selected_count >= max_frames: 
+                    break
             current_idx += 1
         cap.release()
-        
-    # Сценарий 2: Numpy массив (in-memory)
-    elif isinstance(video_input, np.ndarray):
-        np_frames = video_input
-        # Ожидаем формат (T, H, W, C)
+
+    elif np_frames is not None:
+
+        # Сценарий 2: Numpy массив (in-memory)
         if len(np_frames.shape) != 4:
             print(f"[ERROR] Invalid numpy array shape for video: {np_frames.shape}", file=sys.stderr)
             return []
             
         total_frames = np_frames.shape[0]
-        
-        # Прореживание
         if total_frames > max_frames:
             indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
             frames_to_process = [np_frames[i] for i in indices]
         else:
             frames_to_process = [np_frames[i] for i in range(total_frames)]
-            
+
     else:
-        print(f"[ERROR] Unsupported video_input type in _build_video_content: {type(video_input)}", file=sys.stderr)
+        print(f"[ERROR] Unsupported video_item type: missing 'path' and 'array'", file=sys.stderr)
         return []
+
+    if not frames_to_process:
+        print(f"[ERROR] No frames extracted from video_item", file=sys.stderr)
+        return []
+
+    video_content_items = []
         
-    num = 0
-    # Кодируем кадры в base64 
+    frame_num = 0
     for frame_rgb in frames_to_process:
         img = Image.fromarray(frame_rgb)
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=quality) 
-        img_bytes = buf.getvalue()
-        b64_data = base64.b64encode(img_bytes).decode("utf-8")
+        b64_data = base64.b64encode(buf.getvalue()).decode("utf-8")
         
         if frame_id:
-            video_content_items.append({"type": "text", "text": frame_id.replace("{num}", str(num))})
+            text = frame_id.replace("{frame_num}", str(frame_num)).replace("{video_num}", str(video_num))
+            video_content_items.append({"type": "text", "text": text})
 
         video_content_items.append({
             "type": "image_url",
             "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}
         })
-        num += 1
+        frame_num += 1
         
     return video_content_items
 
-def _debug_calc_speed(result, exec_time):
-    if exec_time == 0: 
-        return 0, 0
-    usage = result['usage']
-    #prompt_tokens = usage['prompt_tokens']
-    completion_tokens = usage['completion_tokens']
-    #total_tokens = usage['total_tokens']
-    speed = completion_tokens / exec_time
+def _build_video_content(video_item, config, video_num):
+    """Маршрутизатор видео-контента (Фаза 2)"""
+    if not isinstance(video_item, dict):
+        print("[ERROR] Unsupported video_item type (expected dict)", file=sys.stderr)
+        return []
 
-    return completion_tokens, speed
+    video_mode = config.get("video_mode", "images")
+    if video_mode == "native":
+        return _build_video_native(video_item, config, video_num)
+    else:
+        return _build_video_as_images(video_item, config, video_num)
 
 # =====================================================================
 # INTERRUPTIBLE STREAMING
@@ -554,6 +593,13 @@ def _inference(config):
                     "clip_model_path": mmproj_path,
                     "verbose": verbose,
                 }
+
+                video_ffmpeg_bin_dir = config.get("video_ffmpeg_bin_dir", None)
+                if video_ffmpeg_bin_dir:
+                    handler_kwargs["video_ffmpeg_bin_dir"] = video_ffmpeg_bin_dir
+                    handler_kwargs["video_fps_target"] = config.get("video_fps_target", 1.0)
+                    handler_kwargs["video_timestamp_interval_ms"] = config.get("video_timestamp_interval_ms", 5000)
+                    handler_kwargs["batch_max_tokens"] = config.get("mmproj_batch_max_tokens", 1024)
 
                 if image_min_tokens is not None:
                     handler_kwargs["image_min_tokens"] = image_min_tokens
@@ -1015,15 +1061,15 @@ def _inference(config):
                             content.append(img_content)
 
                     # Пока аудио в raw режиме не работает
-                    #for aud_item in audios:
-                    #    aud_content = _build_audio_content(aud_item)
-                    #    if aud_content is not None:
-                    #        content.append(aud_content)
 
+                    # Нативное видео пока в raw режиме не работает
+                    
+                    num = 0 
                     for path in videos:
-                        frames_items = _build_video_content(path, config)
+                        frames_items = _build_video_content(path, config, num)
                         if frames_items is not None:
                             content.extend(frames_items) 
+                            num += 1
 
                     content.append({"type": "text", "text": text_after})
 
@@ -1071,8 +1117,8 @@ def _inference(config):
                     content = []
 
                     user_prompt_after_content = config.get("user_prompt_after_content", True)
-                    image_id = _norm_default(config.get("add_image_id", ""), "")
-                    audio_id = _norm_default(config.get("add_audio_id", ""), "")
+                    image_id = config.get("add_image_id", "").strip()
+                    audio_id = config.get("add_audio_id", "").strip()
 
                     if not user_prompt_after_content:
                         content.append({"type": "text", "text": user_prompt})
@@ -1095,10 +1141,12 @@ def _inference(config):
                             content.append(aud_content)
                             num += 1     
 
+                    num = 0        
                     for path in videos:
-                        frames_items = _build_video_content(path, config)
+                        frames_items = _build_video_content(path, config, num)
                         if frames_items is not None:
                             content.extend(frames_items) 
+                            num += 1
 
                     if user_prompt_after_content:
                         content.append({"type": "text", "text": user_prompt})

@@ -77,6 +77,11 @@ _ADVANCED_DEFAULTS = {
     "audio_sample_rate": 0,
     "image_quality": 95,
     "frame_quality": 75,
+    "video_mode": "images",
+    "video_fps_target": 1.0,
+    "video_timestamp_interval_ms": 5000,
+    "mmproj_batch_max_tokens": 1024,
+
     # speculative decoding
     "speculative_enabled": False,
     "speculative_type": 3, # "3=MTP (Multi-token Prediction)" -> 3
@@ -101,7 +106,6 @@ _ADVANCED_DEFAULTS = {
     "extract_tts": False,
     "mmproj_use_gpu": True,
     "mmproj_flash_attn": True,
-    "mmproj_batch_max_tokens": 1024,
     "language": "",
     # variables / ids
     "enable_variables": False,
@@ -573,17 +577,17 @@ class Qwen3VL_AdvancedConfig:
                 "add_image_id": ("STRING", {
                     "default": "",
                     "placeholder": "\\n[Image {num}]:",
-                    "tooltip": "Template to label images before insertion. {num} = image index.",
+                    "tooltip": "Template to label images before insertion. {num} = image index (0,1,2...)",
                 }),
                 "add_frame_id": ("STRING", {
                     "default": "",
-                    "placeholder": "\\n[Frame {num}]:",
-                    "tooltip": "Template to label video frames before insertion. {num} = frame index.",
+                    "placeholder": "\\n[Video {video_num}, Frame {frame_num}]:",
+                    "tooltip": "Template to label video frames before insertion. {video_num} = video index (0,1,2...). {frame_num} = frame index (0,1,2...)",
                 }),
                 "add_audio_id": ("STRING", {
                     "default": "",
                     "placeholder": "\\n[Audio {num}]:",
-                    "tooltip": "Template to label audio clips before insertion. {num} = audio index.",
+                    "tooltip": "Template to label audio clips before insertion. {num} = audio index (0,1,2...)",
                 }),
 
                 # ==================================================
@@ -673,7 +677,35 @@ class Qwen3VL_AdvancedConfig:
                     "min": 1,
                     "max": 100,
                     "step": 1,
-                    "tooltip": "JPEG quality (1-100) when encoding video frames to data URIs.",
+                    "tooltip": "JPEG quality (1-100) when encoding video frames to data URIs (image video mode only)",
+                }),
+                "video_mode": (["native", "images"], {
+                    "default": "images",
+                    "tooltip": "Video processing mode. \"native\": Video processing on the llama side (requires llama-cpp-python version 4.0.0 or higher);"
+                    "uses ffmpeg for video encoding; preserves temporal sequence understanding but requires the model to support video." 
+                    "\"images\": extracts frames and processes them as individual images."
+                    "Use \"native\" for better temporal coherence, and \"images\" for compatibility with all models or if ffmpeg is missing from the system (not in PATH or the \"python_embeded\\Scripts\" folder).",
+                }),
+                "video_fps_target": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.1,
+                    "max": 60.0,
+                    "step": 0.1,
+                    "tooltip": "Target frames per second for video encoding (native video mode only). Lower values (0.5-2.0) reduce the number of frames sent to the model, saving VRAM and processing time but potentially missing fast motion. Higher values (15.0-30.0) capture more detail for fast-paced content but increase VRAM usage significantly. Typical range: 1.0-5.0 FPS for most use cases.",
+                }),
+                "video_timestamp_interval_ms": ("INT", {
+                    "default": 5000,
+                    "min": 100,
+                    "max": 60000,
+                    "step": 100,
+                    "tooltip": "Interval in milliseconds between timestamp markers injected into the video stream (native video mode only). Smaller values (1000-2000ms) provide finer temporal granularity for precise event localization but increase token count. Larger values (5000-10000ms) reduce overhead for long videos where exact timing is less critical. Set to 0 to disable timestamps entirely.",
+                }),
+                "mmproj_batch_max_tokens": ("INT", {
+                    "default": 1024,
+                    "min": 0,
+                    "max": 1048576,
+                    "step": 1,
+                    "tooltip": "Maximum batch size for the multimodal projector (mmproj). Multimodal tasks require more VRAM per token than standard text, so this value is typically lower than n_batch. Reduce if VRAM is insufficient (to 512 or 256) or increase for faster processing if memory allows.",
                 }),
 
                 # ==================================================
@@ -807,13 +839,6 @@ class Qwen3VL_AdvancedConfig:
                 "mmproj_flash_attn": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "Enable Flash Attention for mmproj (multimodal projector). Improves performance on supported GPUs. Disable if you encounter compatibility issues.",
-                }),
-                "mmproj_batch_max_tokens": ("INT", {
-                    "default": 1024,
-                    "min": 0,
-                    "max": 1048576,
-                    "step": 1,
-                    "tooltip": "Maximum batch size for the multimodal projector (mmproj). Multimodal tasks require more VRAM per token than standard text, so this value is typically lower than n_batch. Reduce if VRAM is insufficient (to 512 or 256) or increase for faster processing if memory allows.",
                 }),
                 "language": ("STRING", {
                     "default": "",
@@ -985,6 +1010,10 @@ class Qwen3VL_AdvancedConfig:
             "audio_sample_rate": g("audio_sample_rate", 0),
             "image_quality": g("image_quality", 95),
             "frame_quality": g("frame_quality", 75),
+            "video_mode": g("video_mode", "images"),
+            "video_fps_target": g("video_fps_target", 1.0),
+            "video_timestamp_interval_ms": g("video_timestamp_interval_ms", 5000),
+            "mmproj_batch_max_tokens": g("mmproj_batch_max_tokens", 1024),
 
             # speculative decoding
             "speculative_enabled": g("speculative_enabled", False),
@@ -1012,7 +1041,6 @@ class Qwen3VL_AdvancedConfig:
             "extract_tts": g("extract_tts", False),
             "mmproj_use_gpu": g("mmproj_use_gpu", True),
             "mmproj_flash_attn": g("mmproj_flash_attn", True),
-            "mmproj_batch_max_tokens": g("mmproj_batch_max_tokens", 1024),
             "language": g("language", ""),
 
             # variables / ids

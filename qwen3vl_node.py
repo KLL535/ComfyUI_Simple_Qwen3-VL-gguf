@@ -55,6 +55,8 @@ def _norm_default(value, default):
 _config_cache = {}
 _last_modified = {}
 _user_config_file = None  
+_is_inferring = False       # True, пока нода в execute
+_pending_cleanup = False    # True, если пришёл запрос во время инференса
 
 def get_user_config_path() -> str:
     """Возвращает путь к пользовательскому файлу конфигурации, создавая его при необходимости."""
@@ -334,99 +336,321 @@ def process_audios(audio_inputs, file_mode=True, target_sr=None, max_audios=3):
 
     return results
 
-def process_videos(video_inputs, config):
+# ============================================================
+# Video helpers (phase 1)
+# ============================================================
+
+def _video_from_file(vid):
     """
-    Читает форматы VideoFromFile, VideoFromComponents или cырой тензор
+    Получает из VideoFromFile путь к файлу и параметры обрезки.
     """
-    import numpy as np
-    
+    video_path = None
+    if hasattr(vid, '_VideoFromFile__file'):
+        video_path = str(vid._VideoFromFile__file)
+    elif hasattr(vid, 'path'):
+        video_path = str(vid.path)
+        
+    if not video_path or not os.path.exists(video_path):
+        print(f"[ERROR] Invalid video path: {video_path}", file=sys.stderr)
+        return None
+
+    # Извлекаем параметры обрезки для передачи в config
+    start_time = 0.0
+    duration = 0.0
+    try:
+        if hasattr(vid, 'get_active_trim_window'):
+            start_time, duration = vid.get_active_trim_window()
+        elif hasattr(vid, 'get_duration'):
+            duration = vid.get_duration()    
+    except Exception as e:
+        print(f"[ERROR] get_active_trim_window/get_duration failed: {e}", file=sys.stderr)
+        return None
+
+    return video_path, start_time, duration
+
+def _video_from_tensor(vid, max_frames):
+    """
+    Конвертирует VideoFromComponents или torch-тензор в numpy-массив uint8 (RGB) и прореживает до max_frames.
+    """
+    tensor_frames = None
+    if hasattr(vid, 'get_components'):
+        try:
+            components = vid.get_components()
+            if hasattr(components, 'images'):
+                tensor_frames = components.images
+            else:
+                print(f"[ERROR] Сomponents has no 'images' attribute", file=sys.stderr)
+                return None
+        except Exception as e:
+            print(f"[ERROR] get_components failed: {e}", file=sys.stderr)
+            return None
+    else:
+        tensor_frames = vid
+        
+    if tensor_frames is None:
+        return None
+
+    if tensor_frames.dtype in (torch.float32, torch.float16, torch.bfloat16):
+        if tensor_frames.max() > 1.0:
+            tensor_frames = tensor_frames.clamp(0, 255).byte()
+        else:
+            tensor_frames = (tensor_frames * 255).clamp(0, 255).byte()
+    elif tensor_frames.dtype != torch.uint8:
+        tensor_frames = tensor_frames.byte()
+
+    np_frames = tensor_frames.cpu().numpy()
+    if len(np_frames.shape) == 5:
+        np_frames = np_frames[0]
+
+    # Прореживание до max_frames
+    if len(np_frames) > max_frames:
+        indices = np.linspace(0, len(np_frames) - 1, max_frames).astype(int)
+        np_frames = np_frames[indices]
+
+    return np_frames
+
+def _process_videos_native(video_inputs, config, execution_mode):
+    """
+    Native-режим.
+    """
+    max_frames = config.get("max_frames", 24)
+    target_fps = config.get("video_fps_target", 1.0)
+
     video_values = []
     config_updates = {}
+    file_paths = []
+    total_frame_num = 0
+
+    # В нативном режиме в любом случае нужен ffmpeg
+    ffmpeg_exe = _get_ffmpeg_exe_node()
+    if ffmpeg_exe is None:
+        return [], {}, []
+    config_updates["video_ffmpeg_bin_dir"] = os.path.dirname(ffmpeg_exe)
     
-    frame_num = 0
+    for vid in video_inputs:
+        if vid is None:
+            continue
+
+        vid_type = str(type(vid))
+
+        # --- Сценарий 1: VideoFromFile ---
+        if 'VideoFromFile' in vid_type:
+
+            result = _video_from_file(vid)
+            if result is None:
+                continue
+            video_path, start_time, duration = result
+
+            has_trim = (start_time > 0) or (duration > 0)
+            if has_trim:
+                trimmed_path = _trim_video_with_ffmpeg_node(video_path, start_time, duration, ffmpeg_exe)
+                if trimmed_path is None:
+                    continue
+
+                # Добавляем новый файл
+                file_paths.append(trimmed_path)
+                video_values.append({ "path":trimmed_path })
+                total_frame_num += max_frames
+
+            else:
+
+                # Добавляем исходный файл, обрезка не требуется
+                video_values.append({ "path":video_path })
+                total_frame_num += max_frames
+
+        # --- Сценарий 2: VideoFromComponents или сырой тензор ---
+        elif hasattr(vid, 'get_components') or isinstance(vid, torch.Tensor):
+
+            np_frames = _video_from_tensor(vid, max_frames)
+            if np_frames is None:
+                continue
+
+            encoded_path = _encode_video_with_ffmpeg_node(np_frames, fps=target_fps, ffmpeg_exe=ffmpeg_exe)
+            if encoded_path is None:
+                continue
+
+            # Добавляем новый файл
+            file_paths.append(encoded_path)
+            video_values.append({ "path":encoded_path })
+            total_frame_num += len(np_frames)
+
+        else:
+            print(f"[WARNING] Unsupported video type: {vid_type}", file=sys.stderr)
+
+    config_updates['frame_num'] = total_frame_num
+    return video_values, config_updates, file_paths
+
+def _process_videos_images(video_inputs, config, execution_mode):
+    """
+    Images-режим.
+    """
+    max_frames = config.get("max_frames", 24)
+    target_fps = config.get("video_fps_target", 1.0)
+
+    video_values = []
+    config_updates = {}
+    file_paths = []
+    total_frame_num = 0
 
     for vid in video_inputs:
         if vid is None:
             continue
-            
+
         vid_type = str(type(vid))
-        
-        # --- Сценарий 1: VideoFromFile (есть файл и параметры обрезки) ---
+
+        # --- Сценарий 1: VideoFromFile ---
         if 'VideoFromFile' in vid_type:
-            video_path = None
-            if hasattr(vid, '_VideoFromFile__file'):
-                video_path = str(vid._VideoFromFile__file)
-            elif hasattr(vid, 'path'):
-                video_path = str(vid.path)
-                
-            if not video_path or not os.path.exists(video_path):
-                print(f"[ERROR] Invalid video path: {video_path}", file=sys.stderr)
+            result = _video_from_file(vid)
+            if result is None:
                 continue
-                
-            # Извлекаем параметры обрезки для передачи в config
-            start_time = 0.0
-            duration = 0.0
-            if hasattr(vid, 'get_active_trim_window'):
-                start_time, duration = vid.get_active_trim_window()
-            elif hasattr(vid, 'get_duration'):
-                duration = vid.get_duration()
-                
-            video_values.append(video_path) # Передаем путь (строку)
-            
-            # Кладем параметры обрезки в конфиг
-            config_updates['trim_start'] = start_time
-            config_updates['trim_duration'] = duration
-            frame_num += config.get('max_frames', 24)
-            
-        # --- Сценарий 2: VideoFromComponents или Сырой тензор (in-memory) ---
+            video_path, start_time, duration = result
+
+            # Добавляем исходный файл, обрезка будет на второй стадии
+            video_values.append({ 
+                "path":video_path,
+                "trim_start": start_time,
+                "trim_duration": duration,
+            }) 
+            total_frame_num += max_frames
+
+        # --- Сценарий 2: VideoFromComponents или сырой тензор ---
         elif hasattr(vid, 'get_components') or isinstance(vid, torch.Tensor):
-            tensor_frames = None
-            if hasattr(vid, 'get_components'):
-                try:
-                    components = vid.get_components()
-                    if hasattr(components, 'images'):
-                        tensor_frames = components.images
-                except Exception as e:
-                    print(f"[ERROR] Failed to get components: {e}", file=sys.stderr)
-                    continue
-            else:
-                tensor_frames = vid
                 
-            if tensor_frames is None:
+            np_frames = _video_from_tensor(vid, max_frames)
+            if np_frames is None:
                 continue
                 
-            # Конвертируем torch -> numpy (uint8, RGB). 
-            if tensor_frames.dtype in (torch.float32, torch.float16):
-                if tensor_frames.max() > 1.0:
-                    tensor_frames = tensor_frames.clamp(0, 255).byte()
-                else:
-                    tensor_frames = (tensor_frames * 255).clamp(0, 255).byte()
-            elif tensor_frames.dtype != torch.uint8:
-                tensor_frames = tensor_frames.byte()
-                
-            np_frames = tensor_frames.cpu().numpy()
-            
-            # Если формат (Batch, T, H, W, C), берем первый батч
-            if len(np_frames.shape) == 5:
-                np_frames = np_frames[0]
+            if execution_mode == "subprocess":
+                ffmpeg_exe = _get_ffmpeg_exe_node()
+                if ffmpeg_exe is None:
+                    continue
+                encoded_path = _encode_video_with_ffmpeg_node(np_frames, fps=target_fps, ffmpeg_exe=ffmpeg_exe)
+                if encoded_path is None:
+                    continue
 
-            # Прореживание кадров до max_frames
-            max_frames = config.get('max_frames', 24)
-            if len(np_frames) > max_frames:
-                # Равномерно выбираем индексы кадров по всей длине видео
-                indices = np.linspace(0, len(np_frames) - 1, max_frames).astype(int)
-                np_frames = np_frames[indices]
-                
-            video_values.append(np_frames) # Передаем numpy массив (in-memory)
+                # Добавляем новый файл
+                file_paths.append(encoded_path)
+                video_values.append({ "path":encoded_path })
+                total_frame_num += len(np_frames)
 
-            frame_num += len(np_frames)
+            else:
+
+                # Передаем массив без создания файла
+                video_values.append({ "array":np_frames }) 
+                total_frame_num += len(np_frames)
             
         else:
             print(f"[WARNING] Unsupported video type: {vid_type}", file=sys.stderr)
             
-    config_updates['frame_num'] = frame_num
+    config_updates['frame_num'] = total_frame_num
+    return video_values, config_updates, file_paths
 
-    return video_values, config_updates
+def process_videos(video_inputs, config, execution_mode):
+    """
+    Маршрутизатор видео-контента (Фаза 1)
+    Читает форматы VideoFromFile, VideoFromComponents или сырой тензор.
+    Возвращает: video_values (пути или numpy), config_updates, file_paths (список временных файлов для очистки)
+    """
+    video_mode = config.get("video_mode", "images")
+
+    if video_mode == "native":
+        return _process_videos_native(video_inputs, config, execution_mode)
+    else:
+        return _process_videos_images(video_inputs, config, execution_mode)
+
+# ============================================================
+# ffmpeg utilities
+# ============================================================
+
+def _get_ffmpeg_exe_node():
+    """
+    Ищет ffmpeg и ffprobe в директории Scripts или системном PATH.
+    """
+    exe_ffmpeg = "ffmpeg.exe" if os.name == "nt" else "ffmpeg"
+    exe_ffprobe = "ffprobe.exe" if os.name == "nt" else "ffprobe"
+    
+    # 1. Директория Scripts
+    python_dir = os.path.dirname(sys.executable)
+    bin_dir = os.path.join(python_dir, "Scripts")
+    if os.path.isdir(bin_dir):    
+        path_ffmpeg = os.path.join(bin_dir, exe_ffmpeg)
+        path_ffprobe = os.path.join(bin_dir, exe_ffprobe)
+        
+        if os.path.isfile(path_ffmpeg) and os.path.isfile(path_ffprobe):
+            return path_ffmpeg
+
+    # 2. Системный PATH 
+    import shutil
+
+    path_ffmpeg = shutil.which("ffmpeg")
+    path_ffprobe = shutil.which("ffprobe")
+
+    if path_ffmpeg and path_ffprobe and os.path.isfile(path_ffmpeg) and os.path.isfile(path_ffprobe):
+        return path_ffmpeg
+
+    print("[ERROR] ffmpeg/ffprobe path not found", file=sys.stderr)
+    return None
+
+def _trim_video_with_ffmpeg_node(video_path, start_time, duration, ffmpeg_exe=None):
+    """
+    Обрезает видеофайл с помощью ffmpeg (stream copy).
+    Возвращает путь к временному файлу при успехе, или None при ошибке.
+    """    
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
+    try:
+        cmd = [
+            ffmpeg_exe, "-y", "-ss", str(start_time), "-i", video_path,
+            "-t", str(duration), "-c", "copy", tmp_out
+        ]
+        
+        subprocess.run(cmd, capture_output=True, check=True)
+        return tmp_out
+
+    except Exception as e:
+        print(f"[ERROR] ffmpeg trim failed: {e}", file=sys.stderr)
+        # Очистка неполного/поврежденного файла в случае ошибки
+        if os.path.exists(tmp_out):
+            try:
+                os.remove(tmp_out)
+            except OSError:
+                pass
+        return None
+
+def _encode_video_with_ffmpeg_node(frames_np, fps=24, ffmpeg_exe=None):
+    """
+    Кодирует numpy-кадры (T, H, W, C) uint8 RGB в видеофайл через ffmpeg.
+    ffmpeg_exe: полный путь к исполняемому файлу (не директория!).
+    """
+    if frames_np.ndim != 4 or frames_np.shape[0] == 0:
+        print(f"[ERROR] Invalid frames shape: {frames_np.shape}", file=sys.stderr)
+        return None
+        
+    tmp_out = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False).name
+    try:
+        t, h, w, c = frames_np.shape
+        pix_fmt_in = "rgb24" if c == 3 else "gray"
+        
+        cmd = [
+            ffmpeg_exe, "-y", "-f", "rawvideo", "-vcodec", "rawvideo",
+            "-s", f"{w}x{h}", "-pix_fmt", pix_fmt_in, "-framerate", str(fps),
+            "-i", "pipe:0", "-c:v", "libx264", "-crf", "23", "-pix_fmt", "yuv420p",
+            "-preset", "ultrafast", str(tmp_out),
+        ]
+        
+        subprocess.run(cmd, input=frames_np.tobytes(), capture_output=True, check=True)
+        return tmp_out
+
+    except Exception as e:
+        print(f"[ERROR] ffmpeg encode failed: {e}", file=sys.stderr)
+        # Очистка неполного/поврежденного файла в случае ошибки
+        if os.path.exists(tmp_out):
+            try:
+                os.remove(tmp_out)
+            except OSError:
+                pass
+        return None
+
+# ============================================================
 
 def tensor_to_pil(img_tensor):
     """Конвертирует тензор (H,W,C) в PIL Image."""
@@ -946,9 +1170,8 @@ class SimpleQwen3VL_GGUF_Node:
                     "tooltip": (
                         "Input video (Load Video) or image batch. "
                         "Processed as a reduced set of frames (see 'max_frames'). "
-                        "💡 Requires increased 'n_ctx'. "
-                        "💡 Many frames/files consume more VRAM; smaller models may lose details. "
-                        "⚠️ INCOMPATIBLE with 'subprocess' mode due to large data transfer size."
+                        "Requires increased 'n_ctx'. "
+                        "Many frames/files consume more VRAM; smaller models may lose details. "
                     ),
                 }),
             },
@@ -981,6 +1204,8 @@ class SimpleQwen3VL_GGUF_Node:
         debug = None
         text = None
         try:
+            set_inferring(True)
+
             # Загружаем config из файла
             config = {}
             user_vars = {}
@@ -1074,20 +1299,14 @@ class SimpleQwen3VL_GGUF_Node:
             # Видео 
             if input_videos:
                 t_process_videos = time.perf_counter()
-                video_value, vid_config = process_videos(input_videos, config)
-                config.update(vid_config)
-                # file_mode unsopported
+                video_value, vid_config, file_paths = process_videos(input_videos, config, execution_mode=mode)
+                config.update(vid_config)    
+                temp_paths += file_paths
                 _debug_print(debug, "process_videos", t_process_videos)
 
-            # Неподдерживаемые сценарии
             if mode == "subprocess":
                 # streaming_mode не нужен в subprocess режиме
                 config["streaming_mode"] = False
-
-                for val in video_value:
-                    # Если в подпроцесс пытаются передать не путь (строку), а numpy массив
-                    if not isinstance(val, str):
-                        raise ValueError("Subprocess mode unsopported with videos in VideoFromComponents and Raw Tensor formats. Use direct_clean/keep_vram mode.")            
 
             if (len(images_value) + len(audio_value) + len(video_value)) == 0:
                 config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша
@@ -1213,7 +1432,11 @@ class SimpleQwen3VL_GGUF_Node:
                 clear_temp_files(temp_paths)
                 _debug_print(debug, "clear_temp_files", t_clear_temp_files0)
 
+            set_inferring(False)
+            check_pending_cleanup()
+
             _debug_print(debug, f"total time", t_total0)
+
 
 
 def old_config_patch(script_name, config):
@@ -1270,3 +1493,53 @@ def old_names_patch(config: Dict[str, Any]) -> Dict[str, Any]:
                 result[new_key] = result.pop(old_key)
 
     return result
+
+# ==========================================================
+# CLEANUP
+# ==========================================================
+
+def set_inferring(value: bool):
+    """Устанавливает флаг инференса. Вызывается из execute ноды."""
+    global _is_inferring
+    _is_inferring = value
+
+def request_cleanup() -> dict:
+    """
+    Вызывается из эндпоинта /simpleqwenvl/memory/free.
+    Возвращает словарь с результатом для ответа клиенту.
+    """
+    global _is_inferring, _pending_cleanup
+    
+    if _is_inferring:
+        _pending_cleanup = True
+        print("[SimpleQwenVL] Inference in progress. Cleanup deferred.")
+        return {"success": True, "deferred": True}
+    else:
+        _pending_cleanup = False
+        unload_model(gccollect = True, target="all")
+        print("[SimpleQwenVL] llama.cpp memory cleared (immediately).")
+        return {"success": True, "deferred": False}
+
+def check_pending_cleanup():
+    """
+    Вызывается в finally блока execute ноды.
+    Если был отложенный запрос — выполняет очистку.
+    """
+    global _pending_cleanup
+    
+    if _pending_cleanup:
+        _pending_cleanup = False
+        unload_model(gccollect = True, target="all")
+        print("[SimpleQwenVL] llama.cpp memory cleared (deferred).")
+
+from server import PromptServer
+from aiohttp import web
+
+@PromptServer.instance.routes.post("/simpleqwenvl/memory/free")
+async def free_qwen_memory(request):
+    try:
+        result = request_cleanup()
+        return web.json_response(result)
+    except Exception as e:
+        print(f"[SimpleQwenVL] Error during cleanup: {e}")
+        return web.json_response({"success": False, "error": str(e)}, status=500)

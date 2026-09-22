@@ -36,11 +36,12 @@ const GROUP_FIELDS = {
     "⚙️ Hardware & Acceleration": ["n_gpu_layers", "n_cpu_moe", "cpu_moe", "n_threads", "flash_attn_type", "split_mode", "main_gpu", "cuda_device", "tensor_split"],
     "💬 Chat, Prompts & Variables": ["chat_handler", "chat_format", "chat_format_from_gguf", "system_prompt_default", "system_preset_to_user_prompt", "user_prompt_after_content", "enable_variables", "add_vision_id", "add_image_id", "add_frame_id", "add_audio_id"],
     "📝 Prompt Template": ["raw_mode", "prompt_template", "stop"],
-    "🖼️ Multimodal & Media": ["force_mmproj", "image_min_tokens", "image_max_tokens", "max_images", "max_frames", "max_audios", "audio_sample_rate", "image_quality", "frame_quality"],
+    "🖼️ Multimodal & Media": ["force_mmproj", "image_min_tokens", "image_max_tokens", "max_images", "max_frames", "max_audios", "audio_sample_rate", "image_quality", "frame_quality", "video_mode", "video_fps_target", "video_timestamp_interval_ms", "mmproj_batch_max_tokens"],
     "⚡ Speculative Decoding": ["speculative_enabled", "speculative_type", "draft_n_max", "draft_p_min", "draft_model_path", "draft_n_gpu_layers", "draft_backend_sampling", "ngram_size_n", "ngram_size_m", "ngram_min_hits", "ngram_max_entries_per_key", "ctx_checkpoints", "checkpoint_on_device"],
-    "🔢 Embeddings & TTS": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond", "extract_tts", "mmproj_use_gpu", "mmproj_flash_attn","mmproj_batch_max_tokens", "language"],
+    "🔢 Embeddings & TTS": ["extract_embedding", "pooling_type", "tokenizer_path", "embedding_scale", "convert_emb_to_cond", "extract_tts", "mmproj_use_gpu", "mmproj_flash_attn", "language"],
     "🛠️ Debug, System & Advanced": ["verbose", "debug", "debug_output", "raw_output", "streaming_mode", "clearing_cache", "force_gc_start", "force_gc_unload", "script", "extra"]
 };
+
 const GGML_REVERSE = {
     0: "0=F32", 1: "1=F16", 2: "2=Q4_0", 3: "3=Q4_1", 6: "6=Q5_0", 7: "7=Q5_1", 8: "8=Q8_0", 9: "9=Q8_1",
     10: "10=Q2_K", 11: "11=Q3_K", 12: "12=Q4_K", 13: "13=Q5_K", 14: "14=Q6_K", 15: "15=Q8_K",
@@ -1203,76 +1204,112 @@ function patchServiceWidgets(node, presetCombo) {
     if (node._serviceWidgetsPatched) return;
     node._serviceWidgetsPatched = true;
 
-    // Сериализация: сохраняем значения + имена виджетов
-    const origSerialize = node.serialize;
-    node.serialize = function () {
-        const data = origSerialize.apply(this);
-        if (data.widgets_values && Array.isArray(data.widgets_values)) {
-            const filteredValues = [];
-            const filteredNames = [];
+    const origOnSerialize = node.onSerialize;
+    node.onSerialize = function (o) {
+        if (origOnSerialize) origOnSerialize.call(this, o);
+        if (o && Array.isArray(o.widgets_values)) {
+            const names = [];
             for (let i = 0; i < this.widgets.length; i++) {
-                if (!this.widgets[i].skipSerialize) {
-                    filteredValues.push(data.widgets_values[i]);
-                    filteredNames.push(this.widgets[i].name);
+                const w = this.widgets[i];
+                if (w && w.name) {
+                    names.push(w.name); // все имена, без skipSerialize
                 }
             }
-            data.widgets_values = filteredValues;
-            data._widget_names = filteredNames;
+            o._widget_names = names;
         }
-        return data;
     };
 
     // Десериализация: восстанавливаем по имени, а не по индексу
     const origConfigure = node.configure;
     node.configure = function (info) {
         const savedValues = info.widgets_values;
-        const savedNames  = info._widget_names;
+        const savedNames = info._widget_names || (info.extensions && info.extensions._widget_names);
 
-        origConfigure.apply(this, arguments);
-
-        // Восстанавливаем значения по именам
-        if (savedValues && Array.isArray(savedValues)) {
-            const targets = this.widgets.filter(w => !w.skipSerialize);
-            if (savedNames && savedNames.length === savedValues.length) {
-                for (let i = 0; i < savedValues.length; i++) {
-                    const name = savedNames[i];
-                    const target = targets.find(w => w.name === name);
-                    if (target) {
-                        target.value = savedValues[i];
-                    }
-                }
-            } 
+        // 1. Снимок фабричных дефолтов — один раз
+        if (!this._factoryDefaults) {
+            this._factoryDefaults = {};
+            for (const w of this.widgets) {
+                if (w && w.name) this._factoryDefaults[w.name] = w.value;
+            }
         }
 
-        // Синхронизация групп — без триггера колбэков
+        // 2. Штатный configure
+        origConfigure.apply(this, arguments);
+
+        // 3. Собираем карту { имя: значение } из того, что есть.
+        let nameMap = null;
+        if (savedValues && savedNames && savedNames.length === savedValues.length) {
+            // Приоритет 1: наш _widget_names + widgets_values (позиционно).
+            nameMap = {};
+            for (let i = 0; i < savedValues.length; i++) {
+                nameMap[savedNames[i]] = savedValues[i];
+            }
+        } else if (info.widgets_values_named) {
+            // Приоритет 2: штатное поле нового ComfyUI — уже карта.
+            nameMap = info.widgets_values_named;
+        }
+
+        // 4. Если карта есть — обновляем по именам.
+        if (nameMap) {
+            // 4a. Сброс в фабричные дефолты.
+            for (const w of this.widgets) {
+                if (!w || !w.name || w.skipSerialize) continue;
+                if (Object.prototype.hasOwnProperty.call(this._factoryDefaults, w.name)) {
+                    w.value = this._factoryDefaults[w.name];
+                }
+            }
+            // 4b. Обновление из карты (всё, чего нет в карте, остаётся дефолтом).
+            for (const w of this.widgets) {
+                if (!w || !w.name || w.skipSerialize) continue;
+                if (Object.prototype.hasOwnProperty.call(nameMap, w.name)) {
+                    w.value = nameMap[w.name];
+                }
+            }
+        }
+
+        // 5. Обновляем группы и кнопки 
         GROUP_HEADERS.forEach(headerName => {
             const widget = this.widgets.find(w => w.name === headerName);
             if (widget) this.toggleGroup(widget, !!widget.value);
         });
-        if (this._groupTogglePanel?.syncState) this._groupTogglePanel.syncState();
+        if (this._groupTogglePanel?.syncState) {
+            this._groupTogglePanel.syncState();
+        }
 
-        // Базовые значения пресета — асинхронно, но БЕЗ сброса виджетов
+        // 6. Обновляем список пресетов с сервера
         setTimeout(async () => {
             try {
                 const resp = await fetch('/simpleqwenvl/presets/list?type=model');
-                if (!resp.ok) return;
-                const data = await resp.json();
-                if (!data.presets) return;
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.presets) {
+                        const oldValue = presetCombo.value;
+                        presetCombo.options.values = data.presets;
+                        if (!data.presets.includes(presetCombo.value)) {
+                            presetCombo.value = "None";
+                            if (oldValue !== "None") {
+                                this._dirty = false;
+                                this._baselineValues = {};
+                            }
+                        }
+                        const presetName = presetCombo.value;
+                        if (presetName && presetName !== "None") {
+                            const cfg = await fetchPresetConfig(presetName);
+                            if (cfg) {
+                                setBaselineFromPreset(this, cfg);
+                            } else {
+                                this._dirty = false;
+                                this._baselineValues = {};
+                            }
+                        } else {
+                            this._dirty = false;
+                            this._baselineValues = {};
+                        }
 
-                presetCombo.options.values = data.presets;
-                if (!data.presets.includes(presetCombo.value)) {
-                    presetCombo.value = "None";
+                        if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
+                        this.setDirtyCanvas(true, true);
+                    }
                 }
-                const presetName = presetCombo.value;
-                if (presetName && presetName !== "None") {
-                    const cfg = await fetchPresetConfig(presetName);
-                    if (cfg) setBaselineFromPreset(this, cfg);
-                    else { this._dirty = false; this._baselineValues = {}; }
-                } else {
-                    this._dirty = false; this._baselineValues = {};
-                }
-                if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
-                this.setDirtyCanvas(true, true);
             } catch (e) {
                 console.error("[Configurator] Failed to refresh presets list:", e);
             }

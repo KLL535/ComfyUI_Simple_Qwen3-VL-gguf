@@ -22,9 +22,36 @@ const DYNAMIC_NODES = [
     }
 ];
 
+const LLAMA_FREE_ENDPOINT = "/simpleqwenvl/memory/free";
+
 app.registerExtension({
     name: "DynamicInputSlots",
 
+    // --- Хук 1: Перехват кнопки "Пылесос" ---
+    async setup() {
+        const originalFetchApi = app.api.fetchApi;
+
+        app.api.fetchApi = async function(url, options) {
+            const urlString = typeof url === "string" ? url : url?.url;
+            
+            // Проверяем, что это вызов "Пылесоса"
+            if (urlString === "/free" || urlString?.endsWith("/free")) {
+                // НЕ используем await!
+                // Запускаем запрос в фоне, чтобы не блокировать оригинальный /free
+                // и не мешать другим расширениям в цепочке перехватчиков.
+                originalFetchApi.call(this, LLAMA_FREE_ENDPOINT, { 
+                    method: "POST" 
+                })
+                .then(() => console.log("✅ [SimpleQwen] Память llama.cpp очищена"))
+                .catch(e => console.warn("⚠️ [SimpleQwen] Ошибка очистки памяти:", e));
+            }
+
+            // Оригинальный вызов всегда выполнится
+            return originalFetchApi.apply(this, arguments);
+        };
+    },
+
+    // --- Хук 2: Динамические слоты ---
     async beforeRegisterNodeDef(nodeType, nodeData) {
         const config = DYNAMIC_NODES.find(c => c.nodeName === nodeData.name);
         if (!config) return;
@@ -43,8 +70,7 @@ app.registerExtension({
             // Обрабатываем только изменения на входах (type === 1)
             if (type !== 1) return;
 
-            // ---- РАННЯЯ ПРОВЕРКА ПО ioSlot ----
-            // Если ioSlot отсутствует или не имеет имени – выходим
+            // Ранняя проверка по ioSlot
             if (!ioSlot || typeof ioSlot.name !== 'string') return;
 
             // Проверяем, относится ли имя слота к одному из наших префиксов
@@ -57,6 +83,7 @@ app.registerExtension({
             }
             if (!matched) return;
 
+            // Debounce для избежания множественных вызовов
             if (this._dynamicTimeout) {
                 clearTimeout(this._dynamicTimeout);
                 this._dynamicTimeout = null;
