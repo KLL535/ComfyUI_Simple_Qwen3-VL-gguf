@@ -15,6 +15,9 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
+- ⚠️ Name-based serialization fix
+- Native video mode with ffmpeg
+- Memory-free endpoint for the cleanup button
 - Add Qwen3-TTS audio output + configurations.
 - Add `answer_delimiter` config.
 - Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
