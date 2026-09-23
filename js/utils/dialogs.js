@@ -1,10 +1,9 @@
-// js/dialogs.js
-// Shared modal dialogs — pure DOM, no dependency on ComfyUI frontend API.
-// Works in browser and Electron (unlike window.prompt/confirm).
+// js/utils/dialogs.js
 
 // =========================================================================
 // showConfirmDialog
 // =========================================================================
+
 export function showConfirmDialog(title, message, onConfirm) {
     const overlay = document.createElement('div');
     overlay.style.cssText =
@@ -102,6 +101,7 @@ export function showConfirmDialog(title, message, onConfirm) {
 // =========================================================================
 // PromptDialog
 // =========================================================================
+
 export function showPromptDialog(title, defaultValue, onConfirm) {
     const overlay = document.createElement('div');
     overlay.style.cssText =

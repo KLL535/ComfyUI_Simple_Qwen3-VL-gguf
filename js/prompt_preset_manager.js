@@ -1,9 +1,12 @@
+// js/prompt_preset_manager.js
 import { app } from "../../scripts/app.js";
-import { api } from "../../scripts/api.js";
-import { showPromptDialog, showConfirmDialog } from "./dialogs.js";
+import { patchServiceWidgets, fetchPresetConfig } from "./utils/preset_serdes.js";
+import { attachSaveButtonStyle, makePresetControlButtons, createPresetControlsWidget, createGroupTogglePanel } from "./utils/preset_panels.js";
+import { createPresetActions } from "./utils/preset_actions.js";
+import { setBaselineFromPresetGeneric, resetWidgetsToDefaultsGeneric } from "./utils/preset_baseline.js";
+import { setupGroupHeaders, attachDirtyTracking } from "./utils/group_widgets.js";
 
 const TARGET_NODE = "Qwen3VL_PromptPresetConfig";
-const SAVE_BUTTON_ACTION = "save";
 const GROUP_HEADERS = [
     "📝 System Prompt",
     "📝 User Prompt Template"
@@ -17,6 +20,10 @@ const GROUP_FIELDS = {
     "📝 System Prompt": ["system_prompt"],
     "📝 User Prompt Template": ["user_prompt_template"]
 };
+const GROUP_BUTTONS = [
+    { icon: "📝", name: "📝 System Prompt", title: "System Prompt" },
+    { icon: "📝", name: "📝 User Prompt Template", title: "User Prompt Template" },
+];
 
 app.registerExtension({
     name: "SimpleQwenVL.PromptPresetConfiguratorUI",
@@ -50,106 +57,64 @@ app.registerExtension({
             };
 
             // Сворачивание групп
-            this.toggleGroup = (headerWidget, visible) => {
-                if (headerWidget.hidden === !visible) return;
-                const widgets = this.widgets;
-                const headerIdx = widgets.indexOf(headerWidget);
-                if (headerIdx < 0) return;
-                headerWidget.hidden = !visible;
-                let nextHeaderIdx = widgets.length;
-                for (let i = headerIdx + 1; i < widgets.length; i++) {
-                    if (GROUP_HEADERS.includes(widgets[i].name)) {
-                        nextHeaderIdx = i;
-                        break;
-                    }
-                }
-                for (let i = headerIdx + 1; i < nextHeaderIdx; i++) {
-                    widgets[i].hidden = !visible;
-                }
-                requestAnimationFrame(() => {
-                    this.setDirtyCanvas(true, true);
-                });
-            };
-
-            GROUP_HEADERS.forEach(headerName => {
-                const widget = this.widgets.find(w => w.name === headerName);
-                if (!widget) return;
-                const origCb = widget.callback;
-                widget.callback = (value) => {
-                    this.toggleGroup(widget, !!value);
-                    origCb?.(value);
-                    if (this._groupTogglePanel?.syncState) {
-                        this._groupTogglePanel.syncState();
-                    }
-                };
-                widget.draw = function(ctx, node, widget_width, y, H) {
-                    const color = HEADER_COLORS[this.name] || HEADER_DEFAULT_COLOR;
-                    ctx.save();
-                    ctx.fillStyle = color;
-                    ctx.fillRect(6, y + 4, 3, H - 8);
-                    ctx.fillStyle = LiteGraph.NODE_TEXT_COLOR;
-                    ctx.textAlign = "left";
-                    ctx.textBaseline = "middle";
-                    ctx.fillText(this.name, 14, y + H / 2 + 1);
-                    ctx.restore();
-                };
-                widget.hidden = false;
+            setupGroupHeaders(this, {
+                groupHeaders: GROUP_HEADERS,
+                headerColors: HEADER_COLORS,
+                headerDefaultColor: HEADER_DEFAULT_COLOR,
+                resizeOnToggle: false,
             });
 
             // Панель управления пресетами
             if (presetCombo) {
-                const controlsWidget = createPresetControlsWidget(this, presetCombo);
-                const saveButton = controlsWidget.element.querySelector(`[data-action="${SAVE_BUTTON_ACTION}"]`);
-                if (saveButton) {
-                    this._saveButton = saveButton;
-                    this._updateSaveButtonStyle = () => {
-                        if (this._saveButton) {
-                            // Если есть изменения (dirty) — красный, иначе — цвета виджетов ComfyUI
-                            this._saveButton.style.background = this._dirty ? "#e74c3c" : "var(--comfy-input-bg)";
-                            this._saveButton.style.color = this._dirty ? "#ffffff" : "var(--input-text)";
-                            this._saveButton.style.borderColor = this._dirty ? "#e74c3c" : "var(--border-color)";
-                        }
-                    };
-                    this._updateSaveButtonStyle();
-                }
 
-                this._groupTogglePanel = createGroupTogglePanel(this);
+                const presetActions = createPresetActions({
+                    presetType: "prompt",
+                    collectNodeConfig,
+                    setBaselineFromPreset,
+                    saveAsDefaultName: "",
+                });
+                const buttons = makePresetControlButtons({
+                    onSave:   () => presetActions.onSavePreset(this, presetCombo),
+                    onSaveAs: () => presetActions.onSaveAsPreset(this, presetCombo),
+                    onRename: () => presetActions.onRenamePreset(this, presetCombo),
+                    onDelete: () => presetActions.onDeletePreset(this, presetCombo),
+                });
+                const controlsWidget = createPresetControlsWidget(this, buttons);
+
+                attachSaveButtonStyle(this, controlsWidget);
+
+                this._groupTogglePanel = createGroupTogglePanel(this, GROUP_BUTTONS);
+
                 insertWidgetsAfter(this, presetCombo, [controlsWidget, this._groupTogglePanel]);
 
                 // Колбэки для отслеживания dirty
-                for (const w of this.widgets) {
-                    if (w.skipSerialize) continue;
-                    if (w.name === "system_preset" || w.name === "preset_controls" || w.name === "group_toggle_panel") continue;
-                    if (GROUP_HEADERS.includes(w.name)) continue;
-                    if (w.type === "button") continue;
-
-                    const origCb = w.callback;
-                    w.callback = function(value) {
-                        const baseline = node._baselineValues && node._baselineValues[this.name] !== undefined
-                            ? node._baselineValues[this.name]
-                            : this.value;
-                        const isDirty = (this.value !== baseline);
-                        if (isDirty !== node._dirty) {
-                            node._dirty = isDirty;
-                            if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-                        }
-                        if (origCb) origCb.call(this, value);
-                    };
-                }
+                attachDirtyTracking(this, {
+                    groupHeaders: GROUP_HEADERS,
+                    skipNames: ["system_preset"],
+                });
 
                 const origPresetCb = presetCombo.callback;
                 presetCombo.callback = async (value) => {
                     origPresetCb?.call(presetCombo, value);
                     if (value && value !== "None") {
-                        const cfg = await fetchPromptPreset(value);
-                        if (cfg) applyPreset(this, cfg);
+                        const cfg = await fetchPresetConfig(value, "prompt");
+                        if (cfg) {
+                            resetWidgetsToDefaults(this); // Сброс в дефолт
+                            applyPreset(this, cfg); // Накладываем значения пресета
+                        }
                     } else {
+                        // При выборе "None" — тоже сбрасываем в дефолт
+                        resetWidgetsToDefaults(this);
                         applyPreset(this, null);
                     }
                 };
 
                 // Патч сериализации/десериализации
-                patchServiceWidgets(this, presetCombo);
+                patchServiceWidgets(this, presetCombo, {
+                    presetType: "prompt",
+                    groupHeaders: GROUP_HEADERS,
+                    setBaselineFromPreset,
+                });
             }
 
             // Первичное применение состояний
@@ -173,42 +138,26 @@ app.registerExtension({
 // =========================================================================
 // Helpers
 // =========================================================================
+function setBaselineFromPreset(node, presetConfig) {
+    return setBaselineFromPresetGeneric(node, presetConfig, {
+        groupHeaders: GROUP_HEADERS,
+        skipNames: ["system_preset"],
+        // convertValue не передаём — будет identity
+    });
+}
+
+function resetWidgetsToDefaults(node) {
+    return resetWidgetsToDefaultsGeneric(node, {
+        groupHeaders: GROUP_HEADERS,
+        skipNames: ["system_preset"],
+    });
+}
+
 function insertWidgetsAfter(node, target, widgets) {
     const idx = node.widgets.indexOf(target);
     if (idx < 0) return;
     node.widgets = node.widgets.filter(w => !widgets.includes(w));
     node.widgets.splice(idx + 1, 0, ...widgets);
-}
-
-function setBaselineFromPreset(node, presetConfig) {
-    const baseline = {};
-    for (const w of node.widgets) {
-        if (w.skipSerialize) continue;
-        if (w.name === "system_preset" || w.name === "preset_controls" || w.name === "group_toggle_panel") continue;
-        if (GROUP_HEADERS.includes(w.name)) continue;
-        if (w.type === "button") continue;
-
-        if (presetConfig && Object.prototype.hasOwnProperty.call(presetConfig, w.name)) {
-            baseline[w.name] = presetConfig[w.name];
-        } else {
-            baseline[w.name] = w.value;
-        }
-    }
-    node._baselineValues = baseline;
-
-    let dirty = false;
-    for (const w of node.widgets) {
-        if (w.skipSerialize) continue;
-        if (w.name === "system_preset" || w.name === "preset_controls" || w.name === "group_toggle_panel") continue;
-        if (GROUP_HEADERS.includes(w.name)) continue;
-        if (w.type === "button") continue;
-        if (w.value !== baseline[w.name]) {
-            dirty = true;
-            break;
-        }
-    }
-    node._dirty = dirty;
-    if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
 }
 
 // =========================================================================
@@ -253,436 +202,11 @@ function applyPreset(node, cfg, updateBaseline = true) {
 // collectNodeConfig
 // =========================================================================
 function collectNodeConfig(node) {
-    const out = {};
-    for (const w of node.widgets) {
-        if (w.name === "system_preset") continue;
-        if (GROUP_HEADERS.includes(w.name)) continue;
-        if (w.name === "preset_controls" || w.name === "group_toggle_panel") continue;
-        out[w.name] = w.value;
-    }
-    return out;
-}
-
-// =========================================================================
-// SERVER
-// =========================================================================
-async function onSavePreset(node, combo) {
-    const name = combo.value;
-    if (!name || name === "None") {
-        alert("Select a preset to save first");
-        return;
-    }
-    const config = collectNodeConfig(node);
-    try {
-        const res = await api.fetchApi("/simpleqwenvl/presets/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                type: "prompt",
-                name,
-                config: {
-                    system_prompt: config.system_prompt || "",
-                    user_prompt_template: config.user_prompt_template || ""
-                }
-            }),
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || "Save failed");
-        }
-        const data = await res.json();
-        if (data.success) {
-            setBaselineFromPreset(node, config); // 🆕 Используем setBaselineFromPreset
-            if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-            app.graph.setDirtyCanvas(true, true);
-        }
-    } catch (e) {
-        console.error(e);
-        alert("Save failed: " + e.message);
-    }
-}
-
-async function onSaveAsPreset(node, combo) {
-    const defaultName = combo.value && combo.value !== "None" ? combo.value + "_copy" : "MyPrompt";
-    showPromptDialog("Save preset as", defaultName, async (name) => {
-        const config = collectNodeConfig(node);
-        try {
-            const res = await api.fetchApi("/simpleqwenvl/presets/save", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    type: "prompt",
-                    name,
-                    config: {
-                        system_prompt: config.system_prompt || "",
-                        user_prompt_template: config.user_prompt_template || ""
-                    }
-                }),
-            });
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || "Save As failed");
-            }
-            const data = await res.json();
-            if (data.success) {
-                combo.options.values = data.presets;
-                combo.value = name;
-                setBaselineFromPreset(node, config);
-                if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-                app.graph.setDirtyCanvas(true, true);
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Save As failed: " + e.message);
-        }
-    });
-}
-
-async function onRenamePreset(node, combo) {
-    const current = combo.value;
-    if (!current || current === "None") {
-        alert("Select a preset to rename first");
-        return;
-    }
-
-    showPromptDialog("Rename preset", current, async (name) => {
-        if (name === current) return;
-        const config = collectNodeConfig(node);
-        try {
-            const res = await api.fetchApi("/simpleqwenvl/presets/rename", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    type: "prompt",
-                    old_name: current,
-                    new_name: name,
-                    config: {
-                        system_prompt: config.system_prompt || "",
-                        user_prompt_template: config.user_prompt_template || ""
-                    }
-                }),
-            });
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.error || "Rename failed");
-            }
-            const data = await res.json();
-            if (data.success) {
-                combo.options.values = data.presets;
-                combo.value = name;
-                setBaselineFromPreset(node, config);
-                if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-                app.graph.setDirtyCanvas(true, true);
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Rename failed: " + e.message);
-        }
-    });
-}
-
-async function onDeletePreset(node, combo) {
-    const current = combo.value;
-    if (!current || current === "None") {
-        alert("Nothing to delete");
-        return;
-    }
-
-    showConfirmDialog(
-        "Delete preset",
-        `Delete preset "${current}"? This cannot be undone.`,
-        async () => {
-            try {
-                const res = await api.fetchApi("/simpleqwenvl/presets/delete", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ type: "prompt", name: current }),
-                });
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err.error || "Delete failed");
-                }
-                const data = await res.json();
-                if (data.success) {
-                    combo.options.values = data.presets.length > 0 ? data.presets : ["None"];
-                    combo.value = "None";
-                    combo.callback?.(combo.value);
-                    app.graph.setDirtyCanvas(true, true);
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Delete failed: " + e.message);
-            }
-        }
-    );
-}
-
-async function fetchPromptPreset(name) {
-    try {
-        const resp = await fetch(`/simpleqwenvl/presets/get?name=${encodeURIComponent(name)}&type=prompt`);
-        if (!resp.ok) return null;
-        const data = await resp.json();
-        return data.config || {};
-    } catch (e) {
-        console.error("[PromptConfigurator] fetchPromptPreset error:", e);
-        return null;
-    }
-}
-
-// =========================================================================
-// Панели с кнопками
-// =========================================================================
-function createPresetControlsWidget(hostNode, presetCombo) {
-    const element = document.createElement("div");
-    element.style.cssText = `display: flex; flex-direction: row; gap: 4px; margin: 0 !important; padding: 0 !important; width: 100%; height: 24px !important; box-sizing: border-box; overflow: hidden;`;
-    const buttons = [
-        { label: "💾 Save", action: () => onSavePreset(hostNode, presetCombo), dataAction: SAVE_BUTTON_ACTION },
-        { label: "💾 Save As", action: () => onSaveAsPreset(hostNode, presetCombo) },
-        { label: "✏️ Rename", action: () => onRenamePreset(hostNode, presetCombo) },
-        { label: "🗑️ Delete", action: () => onDeletePreset(hostNode, presetCombo) },
-    ];
-    buttons.forEach(btn => {
-        const button = document.createElement("button");
-        button.textContent = btn.label;
-        if (btn.dataAction) button.dataset.action = btn.dataAction;
-        button.style.cssText = `
-            flex: 1; height: 22px !important; margin-top: 1px; background: var(--comfy-input-bg);
-            color: var(--input-text); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 !important;
-            cursor: pointer; font-size: 11px; font-family: sans-serif; display: flex !important;
-            align-items: center !important; justify-content: center !important; line-height: 1 !important;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none;
-        `;
-        
-        // Hover эффект — все кнопки становятся синими, КРОМЕ Save в состоянии dirty
-        button.addEventListener("mouseenter", () => { 
-            // Если это Save и она красная (dirty) — не меняем
-            if (btn.dataAction === SAVE_BUTTON_ACTION && hostNode._dirty) return;
-            // Иначе все кнопки становятся синими при hover
-            button.style.background = "#4a90e2"; 
-            button.style.color = "#ffffff"; 
-            button.style.borderColor = "#4a90e2"; 
-        });
-        
-        // Возврат к исходному состоянию
-        button.addEventListener("mouseleave", () => {
-            if (btn.dataAction === SAVE_BUTTON_ACTION && hostNode._dirty) {
-                // Save в состоянии dirty — красная
-                button.style.background = "#e74c3c";
-                button.style.color = "#ffffff";
-                button.style.borderColor = "#e74c3c";
-            } else {
-                // Все остальные (включая Save без dirty) — стандартный цвет
-                button.style.background = "var(--comfy-input-bg)";
-                button.style.color = "var(--input-text)";
-                button.style.borderColor = "var(--border-color)";
-            }
-        });
-        
-        button.addEventListener("mousedown", (e) => { e.preventDefault(); button.style.opacity = "0.7"; });
-        button.addEventListener("mouseup", () => { button.style.opacity = "1"; });
-        button.addEventListener("click", (e) => { e.stopPropagation(); btn.action(); });
-        element.appendChild(button);
-    });
-    const controlsWidget = hostNode.addDOMWidget("preset_controls", "vf_preset_controls", element, { serialize: false, hideOnZoom: true });
-    controlsWidget.skipSerialize = true;
-    controlsWidget.computeSize = function(width) { return [width, 25]; };
-    return controlsWidget;
-}
-
-function createGroupTogglePanel(hostNode) {
-    const element = document.createElement("div");
-    element.style.cssText = `display: flex; flex-direction: row; gap: 4px; margin: 0 !important; padding: 0 !important; width: 100%; height: 24px !important; box-sizing: border-box; overflow: hidden;`;
-    const groups = [
-        { icon: "📝 System", name: "📝 System Prompt", title: "System Prompt" },
-        { icon: "📝 User", name: "📝 User Prompt Template", title: "User Prompt Template" },
-    ];
-    const buttons = [];
-    groups.forEach((grp) => {
-        const button = document.createElement("button");
-        button.textContent = grp.icon;
-        button.title = grp.title;
-        button.dataset.groupName = grp.name;
-        const toggleWidget = hostNode.widgets.find(w => w.name === grp.name);
-        const isActive = toggleWidget ? !!toggleWidget.value : false;
-        
-        // Функция применения стилей
-        const applyStyle = (active) => {
-            // active=true: синий фон (#4a90e2), белый текст (#ffffff), синий бордер (#4a90e2) — НЕ МЕНЯЕМ
-            // active=false: фон ComfyUI, текст ComfyUI, бордер ComfyUI
-            button.style.background = active ? "#4a90e2" : "var(--comfy-input-bg)";
-            button.style.color = active ? "#ffffff" : "var(--input-text)";
-            button.style.borderColor = active ? "#4a90e2" : "var(--border-color)";
-        };
-        
-        // Базовые стили кнопки
-        button.style.cssText = `
-            flex: 1; height: 22px !important; margin-top: 1px; background: var(--comfy-input-bg);
-            color: var(--input-text); border: 1px solid var(--border-color); border-radius: 3px; padding: 0 !important;
-            cursor: pointer; font-size: 11px; font-family: sans-serif; display: flex !important;
-            align-items: center !important; justify-content: center !important; line-height: 1 !important;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; outline: none;
-        `;
-        applyStyle(isActive);
-        button._isActive = isActive;
-        
-        // Hover эффект — при наведении на неактивную кнопку
-        button.addEventListener("mouseenter", () => { if (!button._isActive) { button.style.background = "var(--border-color)"; } });
-        button.addEventListener("mouseleave", () => { applyStyle(button._isActive); });
-        button.addEventListener("mousedown", (e) => { e.preventDefault(); });
-        button.addEventListener("click", (e) => {
-            e.stopPropagation();
-            const tw = hostNode.widgets.find(w => w.name === grp.name);
-            if (!tw) return;
-            const newValue = !tw.value;
-            tw.value = newValue;
-            tw.callback?.(newValue);
-            button._isActive = newValue;
-            applyStyle(newValue);
-        });
-        buttons.push(button);
-        element.appendChild(button);
-    });
-    
-    const panelWidget = hostNode.addDOMWidget("group_toggle_panel", "vf_group_toggle_panel", element, { serialize: false, hideOnZoom: true });
-    panelWidget.skipSerialize = true;
-    panelWidget.computeSize = function(width) { return [width, 40]; };
-    
-    // Синхронизация состояния кнопок
-    panelWidget.syncState = () => {
-        buttons.forEach((btn, i) => {
-            const grp = groups[i];
-            const tw = hostNode.widgets.find(w => w.name === grp.name);
-            if (!tw) return;
-            btn._isActive = !!tw.value;
-            const applyStyle = (active) => {
-                // active=true: синий (#4a90e2), белый (#ffffff), синий (#4a90e2) — НЕ МЕНЯЕМ
-                // active=false: фон ComfyUI, текст ComfyUI, бордер ComfyUI
-                btn.style.background = active ? "#4a90e2" : "var(--comfy-input-bg)";
-                btn.style.color = active ? "#ffffff" : "var(--input-text)";
-                btn.style.borderColor = active ? "#4a90e2" : "var(--border-color)";
-            };
-            applyStyle(btn._isActive);
-        });
-    };
-    return panelWidget;
-}
-
-// =========================================================================
-// Сериализация/десериализация по именам виджетов
-// =========================================================================
-function patchServiceWidgets(node, presetCombo) {
-    if (node._serviceWidgetsPatched) return;
-    node._serviceWidgetsPatched = true;
-
-    const origOnSerialize = node.onSerialize;
-    node.onSerialize = function (o) {
-        if (origOnSerialize) origOnSerialize.call(this, o);
-        if (o && Array.isArray(o.widgets_values)) {
-            const names = [];
-            for (let i = 0; i < this.widgets.length; i++) {
-                const w = this.widgets[i];
-                if (w && w.name) {
-                    names.push(w.name); // все имена, без skipSerialize
-                }
-            }
-            o._widget_names = names;
-        }
-    };
-
-    // Десериализация: восстанавливаем по имени, а не по индексу
-    const origConfigure = node.configure;
-    node.configure = function (info) {
-        const savedValues = info.widgets_values;
-        const savedNames = info._widget_names || (info.extensions && info.extensions._widget_names);
-
-        // 1. Снимок фабричных дефолтов — один раз
-        if (!this._factoryDefaults) {
-            this._factoryDefaults = {};
-            for (const w of this.widgets) {
-                if (w && w.name) this._factoryDefaults[w.name] = w.value;
-            }
-        }
-
-        // 2. Штатный configure
-        origConfigure.apply(this, arguments);
-
-        // 3. Собираем карту { имя: значение } из того, что есть.
-        let nameMap = null;
-        if (savedValues && savedNames && savedNames.length === savedValues.length) {
-            // Приоритет 1: наш _widget_names + widgets_values (позиционно).
-            nameMap = {};
-            for (let i = 0; i < savedValues.length; i++) {
-                nameMap[savedNames[i]] = savedValues[i];
-            }
-        } else if (info.widgets_values_named) {
-            // Приоритет 2: штатное поле нового ComfyUI — уже карта.
-            nameMap = info.widgets_values_named;
-        }
-
-        // 4. Если карта есть — обновляем по именам.
-        if (nameMap) {
-            // 4a. Сброс в фабричные дефолты.
-            for (const w of this.widgets) {
-                if (!w || !w.name || w.skipSerialize) continue;
-                if (Object.prototype.hasOwnProperty.call(this._factoryDefaults, w.name)) {
-                    w.value = this._factoryDefaults[w.name];
-                }
-            }
-            // 4b. Обновление из карты (всё, чего нет в карте, остаётся дефолтом).
-            for (const w of this.widgets) {
-                if (!w || !w.name || w.skipSerialize) continue;
-                if (Object.prototype.hasOwnProperty.call(nameMap, w.name)) {
-                    w.value = nameMap[w.name];
-                }
-            }
-        }
-
-        // 5. Обновляем группы и кнопки 
-        GROUP_HEADERS.forEach(headerName => {
-            const widget = this.widgets.find(w => w.name === headerName);
-            if (widget) this.toggleGroup(widget, !!widget.value);
-        });
-        if (this._groupTogglePanel?.syncState) {
-            this._groupTogglePanel.syncState();
-        }
-
-        // 6. Обновляем список пресетов с сервера
-        setTimeout(async () => {
-            try {
-                const resp = await fetch('/simpleqwenvl/presets/list?type=prompt');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data.presets) {
-                        const oldValue = presetCombo.value;
-                        presetCombo.options.values = data.presets;
-                        if (!data.presets.includes(presetCombo.value)) {
-                            presetCombo.value = "None";
-                            if (oldValue !== "None") {
-                                this._dirty = false;
-                                this._baselineValues = {};
-                            }
-                        }
-                        const presetName = presetCombo.value;
-                        if (presetName && presetName !== "None") {
-                            const cfg = await fetchPromptPreset(presetName);
-                            if (cfg) {
-                                setBaselineFromPreset(this, cfg);
-                            } else {
-                                this._dirty = false;
-                                this._baselineValues = {};
-                            }
-                        } else {
-                            this._dirty = false;
-                            this._baselineValues = {};
-                        }
-
-                        if (this._updateSaveButtonStyle) this._updateSaveButtonStyle();
-                        this.setDirtyCanvas(true, true);
-                    }
-                }
-            } catch (e) {
-                console.error("[PromptConfigurator] Failed to refresh presets list:", e);
-            }
-        }, 100);
+    const sp = node.widgets.find(w => w.name === "system_prompt")?.value || "";
+    const up = node.widgets.find(w => w.name === "user_prompt_template")?.value || "";
+    return {
+        system_prompt: sp,
+        user_prompt_template: up,
     };
 }
+

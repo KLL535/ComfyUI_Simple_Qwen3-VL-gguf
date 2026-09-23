@@ -1,6 +1,8 @@
 # Nightly
-- custom DOM dialogs
-- name-based serialization fix + native video mode with ffmpeg + memory-free endpoint for the cleanup button
+- Refactor JS
+- Custom DOM dialogs
+- Merge pull request: Centralized chat handler selection + Unified streaming + Text prompt builder + Refactored text modes
+- Name-based serialization fix + native video mode with ffmpeg + memory-free endpoint for the cleanup button
 - Qwen3-TTS: add audio output, `extract_tts`, `mmproj_use_gpu`, `mmproj_flash_attn`, `mmproj_batch_max_tokens`, `language` config
 - Add `answer_delimiter` config
 - Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
