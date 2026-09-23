@@ -17,6 +17,7 @@ import traceback
 import re
 import folder_paths
 import threading
+import numpy as np
 
 HAS_JSON_REPAIR = False
 try:
@@ -261,7 +262,6 @@ def process_images(image_inputs, file_mode=True, file_format='JPEG', jpeg_qualit
     return results
 
 def process_audios(audio_inputs, file_mode=True, target_sr=None, max_audios=3):
-    import numpy as np
     import wave
     import io
 
@@ -895,7 +895,6 @@ def run_inference_pipeline(script_name, config, mode="subprocess", gccollect = F
                 try:
                     import io
                     import wave     
-                    import numpy as np
 
                     # 1. Читаем стандартный WAV
                     with wave.open(io.BytesIO(data), 'rb') as wav_file:
