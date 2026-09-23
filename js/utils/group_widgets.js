@@ -4,6 +4,9 @@
 // Сворачиваемые группы виджетов
 // =========================================================================
 
+// Куда «прилипают» линии от скрытых виджетов.
+const HIDDEN_SLOT_Y_OFFSET = 24;
+
 export function setupGroupHeaders(node, options) {
     const {
         groupHeaders,
@@ -13,6 +16,40 @@ export function setupGroupHeaders(node, options) {
     } = options;
 
     const headerSet = new Set(groupHeaders);
+
+    // Применяем/снимаем координату скрытия для одного виджета.
+    // Возвращает true, если изменение прошло, false — если структура не та.
+    const applyHiddenCoord = (w, hidden) => {
+        try {
+            if (!w || typeof w !== "object") return false;
+
+            if (hidden) {
+                // Запоминаем только если ещё не запоминали
+                if (w._savedY === undefined && typeof w.y === "number") {
+                    w._savedY = w.y;
+                }
+                if (w._savedLastY === undefined && typeof w.last_y === "number") {
+                    w._savedLastY = w.last_y;
+                }
+                // Ставим константу только если поле уже существует
+                if (typeof w.y === "number")      w.y      = HIDDEN_SLOT_Y_OFFSET;
+                if (typeof w.last_y === "number") w.last_y = HIDDEN_SLOT_Y_OFFSET;
+            } else {
+                if (w._savedY !== undefined) {
+                    w.y = w._savedY;
+                    delete w._savedY;
+                }
+                if (w._savedLastY !== undefined) {
+                    w.last_y = w._savedLastY;
+                    delete w._savedLastY;
+                }
+            }
+            return true;
+        } catch (e) {
+            // Ничего не делаем — просто не трогаем координаты
+            return false;
+        }
+    };
 
     node.toggleGroup = (headerWidget, visible) => {
         if (headerWidget.hidden === !visible) return;
@@ -31,16 +68,47 @@ export function setupGroupHeaders(node, options) {
                 break;
             }
         }
+
         for (let i = headerIdx + 1; i < nextHeaderIdx; i++) {
-            widgets[i].hidden = !visible;
+            const w = widgets[i];
+            w.hidden = !visible;
+
+            // Ищем input по имени. Если структура inputs другая — пропускаем.
+            let input = null;
+            try {
+                if (Array.isArray(node.inputs)) {
+                    input = node.inputs.find(inp => inp && inp.name === w.name) || null;
+                }
+            } catch (e) {
+                input = null;
+            }
+
+            // Координату трогаем только если input существует — иначе
+            // смысла нет: линии всё равно нет.
+            if (input) {
+                applyHiddenCoord(w, !visible);
+            }
         }
 
         requestAnimationFrame(() => {
-            if (resizeOnToggle) {
-                const newSize = node.computeSize();
-                node.setSize([node.size[0], newSize[1]]);
+            try {
+                if (resizeOnToggle) {
+                    const newSize = node.computeSize();
+                    node.setSize([node.size[0], newSize[1]]);
+                }
+                node.setDirtyCanvas(true, true);
+            } catch (e) {
+                // тихо
             }
-            node.setDirtyCanvas(true, true);
+
+            requestAnimationFrame(() => {
+                try {
+                    node.setDirtyCanvas(true, true);
+                    if (node.graph) node.graph.setDirtyCanvas(true, true);
+                } catch (e) {
+                    // тихо
+                }
+            });
         });
     };
 
@@ -57,8 +125,6 @@ export function setupGroupHeaders(node, options) {
             }
         };
 
-        // headerColors / headerDefaultColor захвачены лексически;
-        // widget захвачен через замыкание, чтобы не полагаться на this
         widget.draw = function (ctx, _node, _widget_width, y, H) {
             const color = headerColors[widget.name] || headerDefaultColor;
             ctx.save();
