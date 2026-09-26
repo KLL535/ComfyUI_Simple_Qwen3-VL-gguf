@@ -141,11 +141,8 @@ export function setupGroupHeaders(node, options) {
     }
 }
 
-export function attachDirtyTracking(node, options) {
-    const {
-        groupHeaders,
-        skipNames = [],
-    } = options;
+function forEachTrackedWidget(node, options, fn) {
+    const { groupHeaders, skipNames = [] } = options;
 
     const headerSet = new Set(groupHeaders);
     const skipSet = new Set([
@@ -155,22 +152,50 @@ export function attachDirtyTracking(node, options) {
     ]);
 
     for (const w of node.widgets) {
-        if (w.skipSerialize) continue;
+        if (!w || w.skipSerialize) continue;
         if (skipSet.has(w.name)) continue;
         if (headerSet.has(w.name)) continue;
         if (w.type === "button") continue;
-
-        const origCb = w.callback;
-        w.callback = function (value) {
-            const baseline = node._baselineValues && node._baselineValues[w.name] !== undefined
-                ? node._baselineValues[w.name]
-                : w.value;
-            const isDirty = (w.value !== baseline);
-            if (isDirty !== node._dirty) {
-                node._dirty = isDirty;
-                if (node._updateSaveButtonStyle) node._updateSaveButtonStyle();
-            }
-            if (origCb) origCb.call(w, value);
-        };
+        fn(w);
     }
+}
+
+export function recomputeDirty(node, options) {
+    const baseline = node._baselineValues || {};
+    let dirty = false;
+
+    forEachTrackedWidget(node, options, (w) => {
+        if (dirty) return;
+
+        const base = Object.prototype.hasOwnProperty.call(baseline, w.name)
+            ? baseline[w.name]
+            : w.value;
+
+        if (w.value !== base) {
+            dirty = true;
+        }
+    });
+
+    if (node._dirty !== dirty) {
+        node._dirty = dirty;
+        if (node._updateSaveButtonStyle) {
+            node._updateSaveButtonStyle();
+        }
+    }
+
+    return dirty;
+}
+
+export function attachDirtyTracking(node, options) {
+    forEachTrackedWidget(node, options, (w) => {
+        const origCb = w.callback;
+
+        w.callback = function (value) {
+            try {
+                if (origCb) origCb.call(w, value);
+            } finally {
+                recomputeDirty(node, options);
+            }
+        };
+    });
 }
