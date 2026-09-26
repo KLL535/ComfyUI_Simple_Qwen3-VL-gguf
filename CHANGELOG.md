@@ -1,4 +1,6 @@
 # Nightly
+- Fix generic handler
+- Group collapse redirects widget links to a fixed anchor point.
 - Refactor JS
 - Custom DOM dialogs
 - Merge pull request: Centralized chat handler selection + Unified streaming + Text prompt builder + Refactored text modes

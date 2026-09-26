@@ -1342,7 +1342,7 @@ class SimpleQwen3VL_GGUF_Node:
                     raw_user_prompt = (preset_text + "\n" + raw_user_prompt).strip()
 
             # 3. Читаем шаблон для user_prompt, если он есть
-            if user_prompt_template is None:
+            if not user_prompt_template:
                 if system_preset != "None":
                     user_prompt_templates = load_cached_section('_user_prompt_template')
                     user_prompt_template = user_prompt_templates.get(system_preset, None)
@@ -1373,7 +1373,7 @@ class SimpleQwen3VL_GGUF_Node:
                     def __missing__(self, key):
                         return '{' + key + '}'
 
-                if user_prompt_template is not None:
+                if user_prompt_template:
                     raw_user_prompt = user_prompt_template
 
                 try:

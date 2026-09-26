@@ -179,6 +179,57 @@ def build_prompt(template: str, system: str, user: str):
         # Если метки нет, весь текст идёт до картинок
         return result, ""
 
+# Штатные template-переменные, которые уже приходят отдельными виджетами.
+# Соответствие "имя виджета" -> "имя переменной Jinja-шаблона".
+# Если имя отсутствует в таблице - оно передаётся как есть.
+_TEMPLATE_ARG_ALIASES = {
+    # --- Identity 
+    "enable_thinking":              "enable_thinking",
+    "force_reasoning":              "force_reasoning",
+    "add_vision_id":                "add_vision_id",
+
+    # --- Переименования 
+    "granite_controls":             "controls",
+}
+
+# Значения по умолчанию для штатных template-переменных.
+_TEMPLATE_ARG_DEFAULTS = {
+    "enable_thinking":  False,
+    "force_reasoning":  False,
+    "add_vision_id":    None,
+    "granite_controls": None,    
+}
+
+def _rename_template_args(args):
+    """
+    Переименовывает ключи template-аргументов в имена Jinja-переменных.
+
+    Известные ключи переименовываются согласно _TEMPLATE_ARG_ALIASES.
+    """
+    return {_TEMPLATE_ARG_ALIASES.get(key, key): value for key, value in args.items()}
+
+def _generic_template_arguments(config):
+    """
+    Аргументы Jinja-шаблона для generic-хендлера.
+    """
+    args = {}
+
+    # 1. Штатные виджеты.
+    for key in _TEMPLATE_ARG_ALIASES:
+        value = config.get(key)
+        if value is None:
+            value = _TEMPLATE_ARG_DEFAULTS.get(key)
+        if value is not None:
+            args[key] = value
+
+    # 2. Плоский хук template_arguments_<name>. Перекрывает штатные.
+    prefix = "template_arguments_"
+    for key, value in config.items():
+        if key.startswith(prefix) and len(key) > len(prefix):
+            args[key[len(prefix):]] = value
+
+    return args
+
 # chat_handler из конфига узла -> (класс llama-cpp, требование к версии).
 # Используется и при загрузке mmproj, и для текстового режима, где нужен
 # только chat-шаблон класса.
@@ -228,7 +279,7 @@ def _resolve_handler_class(chat_handler_type):
 
     return handler_class, None
 
-def _handler_options(chat_handler_type, config, add_vision_id):
+def _handler_options(chat_handler_type, config):
     """
     Опции обработчика, зависящие от его типа.
 
@@ -242,24 +293,27 @@ def _handler_options(chat_handler_type, config, add_vision_id):
     if chat_handler_type == "qwen35":
         return {
             "enable_thinking": config.get("enable_thinking", False),
-            "add_vision_id": add_vision_id,
+            "add_vision_id": config.get("add_vision_id"),
         }
 
     if chat_handler_type == "qwen3":
         return {
             "force_reasoning": config.get("force_reasoning", False),
-            "add_vision_id": add_vision_id,
+            "add_vision_id": config.get("add_vision_id"),
         }
 
     if chat_handler_type in ("minicpmv45", "minicpmv46", "glm46v", "step3vl"):
-        return {"enable_thinking": config.get("enable_thinking", True)}
+        return {"enable_thinking": config.get("enable_thinking", False)}
 
     if chat_handler_type == "granite":
-        return {"controls": config.get("granite_controls", None)}
+        return {"granite_controls": config.get("granite_controls", None)}
+
+    if chat_handler_type == "generic":
+        return _generic_template_arguments(config)
 
     return {}
 
-def _build_text_prompt(llm, chat_handler_type, messages, config, add_vision_id, debug):
+def _build_text_prompt(llm, chat_handler_type, messages, config, debug):
     """
     Готовит промпт текстового режима по chat-шаблону выбранного обработчика.
 
@@ -277,11 +331,44 @@ def _build_text_prompt(llm, chat_handler_type, messages, config, add_vision_id, 
         return None, None
 
     # Формат выбран пользователем явно - не подменяем.
-    if _norm_str(config.get("chat_format")) or config.get("chat_format_from_gguf", False):
+    if _norm_str(config.get("chat_format")):
         return None, None
 
+    t_build_text_prompt = time.perf_counter()
+
     handler_class, handler_error = _resolve_handler_class(chat_handler_type)
-    template = getattr(handler_class, "CHAT_FORMAT", None) if handler_class else None
+
+    template = None
+    template_arguments = {}
+
+    if chat_handler_type == "generic":
+        template = config.get("external_chat_format")
+
+        if not isinstance(template, str) or not template:
+            try:
+                template = llm.metadata.get("tokenizer.chat_template")
+            except Exception:
+                template = None
+
+        template_arguments.update(
+            _rename_template_args(_handler_options(chat_handler_type, config))
+        )
+
+    else:
+
+        template = getattr(handler_class, "CHAT_FORMAT", None) if handler_class else None
+
+        # Шаблоны GLM ссылаются на константы своего класса, например GLM46V_EOS_TOKEN.
+        template_arguments = {
+            name: value
+            for name, value in vars(handler_class).items()
+            if name.isupper() and name != "CHAT_FORMAT"
+        }
+
+        template_arguments.update(
+            _rename_template_args(_handler_options(chat_handler_type, config))
+        )
+
     if not isinstance(template, str):
         print(f"[WARNING] No chat template for chat_handler '{chat_handler_type}'"
               f"{': ' + handler_error if handler_error else ''}; using the model's own format.",
@@ -314,27 +401,32 @@ def _build_text_prompt(llm, chat_handler_type, messages, config, add_vision_id, 
         },
     )
 
-    # Шаблоны GLM ссылаются на константы своего класса, например GLM46V_EOS_TOKEN.
-    template_arguments = {
-        name: value
-        for name, value in vars(handler_class).items()
-        if name.isupper() and name != "CHAT_FORMAT"
-    }
-    template_arguments.update(_handler_options(chat_handler_type, config, add_vision_id))
-
     result = formatter(messages=messages, **template_arguments)
-    _debug_info(debug, "text prompt", text=f"rendered with {chat_handler_type} chat template", file=sys.stderr)
+
+    # Отладка: видеть, что уходит в промпт.
+    if config.get("verbose", False):
+        prompt = result.prompt if isinstance(result.prompt, str) else ""
+        print(f"Handler={chat_handler_type}\n"
+              f"Template_source={'gguf' if chat_handler_type == 'generic' else 'class'}\n"
+              f"Args={template_arguments}", file=sys.stderr)
+        print(f"Rendered prompt:\n{prompt}", file=sys.stderr)
 
     # Служебные токены уже расставлены шаблоном, поэтому BOS не добавляем -
     # так же поступает chat_formatter_to_chat_completion_handler.
     tokens = llm.tokenize(result.prompt.encode("utf-8"), add_bos=not result.added_special, special=True)
+
+    _debug_print(debug, f"build_text_prompt", t_build_text_prompt, text=f"rendered with {chat_handler_type} chat template", file=sys.stderr)
+
     return tokens, result.stop
 
 # ============================================================
 # Image helpers (phase 2)
 # ============================================================
 
-def _build_image_content(image_item, quality=95):
+def _build_image_content(image_item, config):
+
+    image_content_key = config.get("image_content_key") or "image_url"
+    quality = config.get("image_quality", 95)
 
     # Сценарий 1: image -> в base64
     if isinstance(image_item, Image.Image):
@@ -342,13 +434,19 @@ def _build_image_content(image_item, quality=95):
         image_item.save(buffer, format="JPEG", quality=quality, optimize=True)
         base64_str = base64.b64encode(buffer.getvalue()).decode("utf-8")
         file_url = f"data:image/jpeg;base64,{base64_str}"
-        return {"type": "image_url", "image_url": {"url": file_url}}
+        return {
+            "type": image_content_key, 
+            image_content_key: {"url": file_url}
+        }
     
     # Сценарий 2: путь к файлу -> передача пути напрямую
     elif isinstance(image_item, str):
         if Path(image_item).exists():
             file_url = Path(image_item).resolve().as_uri()
-            return {"type": "image_url", "image_url": {"url": file_url}}
+            return {
+                "type": image_content_key, 
+                image_content_key: {"url": file_url}
+            }
         else:
             print(f"build_image: Image file not found: {image_item}", file=sys.stderr)
             return None
@@ -361,14 +459,16 @@ def _build_image_content(image_item, quality=95):
 # Audio helpers (phase 2)
 # ============================================================
 
-def _build_audio_content(audio_item):
+def _build_audio_content(audio_item, config):
+
+    audio_content_key = config.get("audio_content_key") or "input_audio"
 
     # Сценарий 1: байты WAV -> в base64
     if isinstance(audio_item, bytes):
         b64_data = base64.b64encode(audio_item).decode("utf-8")
         return {
-            "type": "input_audio",
-            "input_audio": {"data": b64_data, "format": "wav"}
+            "type": audio_content_key,
+            audio_content_key: {"data": b64_data, "format": "wav"}
         }
 
     # Сценарий 2: путь к файлу -> в base64
@@ -379,8 +479,8 @@ def _build_audio_content(audio_item):
                 wav_bytes = f.read()
             b64_data = base64.b64encode(wav_bytes).decode("utf-8")
             return {
-                "type": "input_audio",
-                "input_audio": {"data": b64_data, "format": "wav"}
+                "type": audio_content_key,
+                audio_content_key: {"data": b64_data, "format": "wav"}
             }
         else:
             print(f"build_audio: Audio file not found: {audio_item}", file=sys.stderr)
@@ -397,6 +497,8 @@ def _build_audio_content(audio_item):
 def _build_video_native(video_item, config, video_num):
     """Нативный режим MTMD: передаем путь к файлу напрямую."""
 
+    video_content_key = config.get("video_content_key") or "video"
+
     file_path = video_item.get("path")
     if file_path is None:
         print(f"[ERROR] Native video path not found", file=sys.stderr)
@@ -408,8 +510,8 @@ def _build_video_native(video_item, config, video_num):
 
     abs_path = os.path.abspath(file_path)
     return [{
-        "type": "video",
-        "video": abs_path
+        "type": video_content_key,
+        video_content_key: abs_path
     }]
 
 def _build_video_as_images(video_item, config, video_num):
@@ -417,6 +519,7 @@ def _build_video_as_images(video_item, config, video_num):
     max_frames = config.get('max_frames', 24)
     quality = config.get('frame_quality', 75)
     frame_id = config.get("add_frame_id", "").strip()
+    image_content_key = config.get("image_content_key") or "image_url"
 
     frames_to_process = []
 
@@ -520,8 +623,8 @@ def _build_video_as_images(video_item, config, video_num):
             video_content_items.append({"type": "text", "text": text})
 
         video_content_items.append({
-            "type": "image_url",
-            "image_url": {"url": f"data:image/jpeg;base64,{b64_data}"}
+            "type": image_content_key,
+            image_content_key: {"url": f"data:image/jpeg;base64,{b64_data}"}
         })
         frame_num += 1
         
@@ -686,7 +789,6 @@ def _inference(config):
 
         system_prompt = config.get("system_prompt", "").strip()
         user_prompt = config.get("user_prompt", "").strip()
-        image_quality = config.get("image_quality", 95)
 
         cuda_device = _norm_default(config.get("cuda_device", ""), "")
         if cuda_device is not None:
@@ -719,13 +821,14 @@ def _inference(config):
 
         num_content = num_images + num_audios + num_videos
 
-        add_vision_id = _norm_3state_bool(config.get("add_vision_id"))
-        if add_vision_id is None:
-            add_vision_id = (num_images != 1) or (num_videos > 0)
-
         content_text = ""
         if num_content:
             content_text = f"(with {num_images}/{num_audios}/{num_videos} image/audio/video)"        
+
+        add_vision_id = _norm_3state_bool(config.get("add_vision_id"))
+        if add_vision_id is None:
+            add_vision_id = (num_images != 1) or (num_videos > 0)
+        config["add_vision_id"] = add_vision_id
 
         ### IMPORT ###
 
@@ -752,9 +855,6 @@ def _inference(config):
         mmproj_path = config.get("mmproj_path", "").strip()
         is_vision_model = bool(num_content > 0 and mmproj_path and extract_embedding == False)
 
-        if config.get("force_mmproj", True) and mmproj_path:
-            is_vision_model = True
-
         if need_new_model:
 
             # --- Загрузка новой модели ---
@@ -771,7 +871,6 @@ def _inference(config):
                     return {"status": "error", "message": "chat_handler is not set"}, None
 
                 handler_kwargs = {
-                    "clip_model_path": mmproj_path,
                     "verbose": verbose,
                 }
 
@@ -792,23 +891,32 @@ def _inference(config):
                     if key.startswith("extra_chat_handler_"):
                         new_key = key[len("extra_chat_handler_"):]
                         handler_kwargs[new_key] = value
-                        #print(f"extra chat handler kwargs: {new_key} = {value}", file=sys.stderr)
 
                 handler_class, handler_error = _resolve_handler_class(chat_handler_type)
                 if handler_class is None:
                     return {"status": "error", "message": handler_error}, None
 
-                extra_handler_kwargs = _handler_options(chat_handler_type, config, add_vision_id)
+                extra_handler_kwargs = _rename_template_args(
+                    _handler_options(chat_handler_type, config)
+                )
 
                 if chat_handler_type == "generic":
-                    # GenericMTMDChatHandler принимает mmproj_path вместо clip_model_path.
+                    # Generic получает template-переменные вложенными в extra_template_arguments.
+                    if extra_handler_kwargs:
+                        handler_kwargs["extra_template_arguments"] = extra_handler_kwargs
+
                     chat_handler = handler_class(
                         mmproj_path=mmproj_path,
-                        chat_format=chat_format,
-                        verbose=verbose,
+                        chat_format = config.get("external_chat_format") or None, 
+                        **handler_kwargs,
                     )
+
                 else:
-                    chat_handler = handler_class(**handler_kwargs, **extra_handler_kwargs)
+                    chat_handler = handler_class(
+                        clip_model_path=mmproj_path,
+                        **handler_kwargs, 
+                        **extra_handler_kwargs
+                    )
 
                 _debug_print(debug, "create_chat_handler", t0, file=sys.stderr)
 
@@ -923,28 +1031,15 @@ def _inference(config):
                         llm_kwargs["image_max_tokens"] = image_max_tokens
 
                 else:
-                    # Текстовый режим: добавляем chat_format, если он задан
-                    if config.get("chat_format_from_gguf", False):
-                        llm_kwargs["chat_format"] = "chat_template.default"
-
-                    elif chat_format:
+                    # Текстовый режим: добавляем старый chat_format, если он задан, может кому-то пригодится.
+                    if chat_format:
                         llm_kwargs["chat_format"] = chat_format 
 
                 current_cache["llm"] = Llama(**llm_kwargs)
                 
                 if chat_handler is not None:
 
-                    if config.get("chat_format_from_gguf", False):
-
-                        from jinja2 import Template
-
-                        gguf_original_template_string = current_cache["llm"].metadata.get('tokenizer.chat_template', None)
-                        gguf_original_template = Template(gguf_original_template_string)
-
-                        # Подмена, но это не работает
-                        chat_handler.chat_template = gguf_original_template
-
-                    elif raw_mode:
+                    if raw_mode:
 
                         from jinja2 import Template
 
@@ -963,8 +1058,27 @@ def _inference(config):
                             "{%- endfor %}"
                         )
 
-                        # Подмена, это работает
+                        # Подмена шаблона на минимальный
                         chat_handler.chat_template = simple_template
+
+                    elif chat_handler_type == "generic" and not config.get("external_chat_format"):
+
+                        gguf_template_str = None
+                        try:
+                            gguf_template_str = current_cache["llm"].metadata.get("tokenizer.chat_template")
+                        except Exception:
+                            gguf_template_str = None
+
+                        if isinstance(gguf_template_str, str) and gguf_template_str:
+
+                            from jinja2 import Template
+
+                            # 1. Подменяем chat_format
+                            chat_handler.chat_format = gguf_template_str
+
+                            # 2. Подменяем chat_template
+                            chat_handler.chat_template = Template(gguf_template_str)
+
 
             elif extract_embedding:
 
@@ -1116,7 +1230,7 @@ def _inference(config):
                     # 2. Собираем content
                     content = [{"type": "text", "text": text_before}]
                     for img_item in images:
-                        img_content = _build_image_content(img_item, quality=image_quality)
+                        img_content = _build_image_content(img_item, config)
                         if img_content is not None:
                             content.append(img_content)
 
@@ -1185,7 +1299,7 @@ def _inference(config):
 
                     num = 0
                     for img_item in images:
-                        img_content = _build_image_content(img_item, quality=image_quality)
+                        img_content = _build_image_content(img_item, config)
                         if img_content is not None:
                             if image_id:
                                 content.append({"type": "text", "text": image_id.replace("{num}", str(num))})
@@ -1194,7 +1308,7 @@ def _inference(config):
 
                     num = 0
                     for aud_item in audios:
-                        aud_content = _build_audio_content(aud_item)
+                        aud_content = _build_audio_content(aud_item, config)
                         if aud_content is not None:
                             if audio_id:
                                 content.append({"type": "text", "text": audio_id.replace("{num}", str(num))})
@@ -1235,7 +1349,7 @@ def _inference(config):
                         ]
 
                     text_prompt, text_prompt_stop = _build_text_prompt(
-                        current_cache["llm"], chat_handler_type, messages, config, add_vision_id, debug
+                        current_cache["llm"], chat_handler_type, messages, config, debug
                     )
 
                 _debug_print(debug, f"create message {content_text}", t3, file=sys.stderr)
