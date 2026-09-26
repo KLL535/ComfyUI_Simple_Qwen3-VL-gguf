@@ -764,6 +764,58 @@ def _stream_completion(llm, prompt, completion_kwargs):
         "usage": _stream_usage(prompt_tokens, completion_tokens),
     }
 
+def _build_message_content(config, images, audios, videos,
+                           text_before="", text_after=""):
+    """
+    Собирает content-массив chat-сообщения.
+
+    Порядок медиа единый и фиксированный: images -> audios -> videos.
+    Он же — порядок <__media__> в шаблоне.
+
+    text_before / text_after — текст до и после всего медиа-блока.
+    Пустые строки не добавляются в content.
+    """
+    content = []
+
+    if text_before:
+        content.append({"type": "text", "text": text_before})
+
+    image_id = config.get("add_image_id", "").strip()
+    audio_id = config.get("add_audio_id", "").strip()
+
+    num = 0
+    for img_item in images:
+        img_content = _build_image_content(img_item, config)
+        if img_content is None:
+            continue
+        if image_id:
+            content.append({"type": "text", "text": image_id.replace("{num}", str(num))})
+        content.append(img_content)
+        num += 1
+
+    num = 0
+    for aud_item in audios:
+        aud_content = _build_audio_content(aud_item, config)
+        if aud_content is None:
+            continue
+        if audio_id:
+            content.append({"type": "text", "text": audio_id.replace("{num}", str(num))})
+        content.append(aud_content)
+        num += 1
+
+    num = 0
+    for path in videos:
+        frames_items = _build_video_content(path, config, num)
+        if not frames_items:
+            continue
+        content.extend(frames_items)
+        num += 1
+
+    if text_after:
+        content.append({"type": "text", "text": text_after})
+
+    return content
+
 def _inference(config):
     """Внутренняя функция, выполняющая инференс с кешированием модели."""
     try:
@@ -1044,24 +1096,27 @@ def _inference(config):
                         from jinja2 import Template
 
                         # Минимальный шаблон 
-                        simple_template = Template(
+                        simple_format = (
                             "{%- for msg in messages %}"
                             "{%- if msg.role == 'user' %}"
                             "{%- if msg.content is string %}{{ msg.content }}"
                             "{%- elif msg.content is iterable %}"
                             "{%- for part in msg.content %}"
-                            "{%- if part.type == 'image_url' %}<__media__>{%- endif %}"
-                            "{%- if part.type == 'text' %}{{ part.text }}{%- endif %}"
+                            "{%- if part.type == 'text' %}{{ part.text }}"
+                            "{%- else %}<__media__>"
+                            "{%- endif %}"
                             "{%- endfor %}"
                             "{%- endif %}"
                             "{%- endif %}"
                             "{%- endfor %}"
                         )
+                        simple_template = Template(simple_format)
 
                         # Подмена шаблона на минимальный
+                        chat_handler.chat_format = simple_format
                         chat_handler.chat_template = simple_template
 
-                    elif chat_handler_type == "generic" and not config.get("external_chat_format"):
+                    elif chat_handler_type == "generic" and not config.get("external_chat_format") and config.get("generic_patch", True):
 
                         gguf_template_str = None
                         try:
@@ -1225,31 +1280,16 @@ def _inference(config):
                 chat_handler = getattr(current_cache["llm"], "chat_handler", None)        
                 if chat_handler is not None:
 
-                    t3 = time.perf_counter()
+                    t_create_raw_prompt = time.perf_counter()
 
                     # 2. Собираем content
-                    content = [{"type": "text", "text": text_before}]
-                    for img_item in images:
-                        img_content = _build_image_content(img_item, config)
-                        if img_content is not None:
-                            content.append(img_content)
-
-                    # Пока аудио в raw режиме не работает
-
-                    # Нативное видео пока в raw режиме не работает
-                    
-                    num = 0 
-                    for path in videos:
-                        frames_items = _build_video_content(path, config, num)
-                        if frames_items is not None:
-                            content.extend(frames_items) 
-                            num += 1
-
-                    content.append({"type": "text", "text": text_after})
-
+                    content = _build_message_content(
+                        config, images, audios, videos,
+                        text_before=text_before, text_after=text_after,
+                    )
                     messages = [{"role": "user", "content": content}]
 
-                    _debug_print(debug, f"create raw prompt {content_text}", t3, file=sys.stderr)
+                    _debug_print(debug, f"create raw prompt {content_text}", t_create_raw_prompt, file=sys.stderr)
 
                     t_inference0 = time.perf_counter()
                     if streaming_mode:
@@ -1284,46 +1324,18 @@ def _inference(config):
             else: #raw_mode = false
 
                 # Формируем сообщения для чата
-                t3 = time.perf_counter()
+                t_create_message = time.perf_counter()
 
                 if is_vision_model:
 
-                    content = []
-
                     user_prompt_after_content = config.get("user_prompt_after_content", True)
-                    image_id = config.get("add_image_id", "").strip()
-                    audio_id = config.get("add_audio_id", "").strip()
+                    text_before = "" if user_prompt_after_content else user_prompt
+                    text_after = user_prompt if user_prompt_after_content else ""
 
-                    if not user_prompt_after_content:
-                        content.append({"type": "text", "text": user_prompt})
-
-                    num = 0
-                    for img_item in images:
-                        img_content = _build_image_content(img_item, config)
-                        if img_content is not None:
-                            if image_id:
-                                content.append({"type": "text", "text": image_id.replace("{num}", str(num))})
-                            content.append(img_content)     
-                            num += 1                   
-
-                    num = 0
-                    for aud_item in audios:
-                        aud_content = _build_audio_content(aud_item, config)
-                        if aud_content is not None:
-                            if audio_id:
-                                content.append({"type": "text", "text": audio_id.replace("{num}", str(num))})
-                            content.append(aud_content)
-                            num += 1     
-
-                    num = 0        
-                    for path in videos:
-                        frames_items = _build_video_content(path, config, num)
-                        if frames_items is not None:
-                            content.extend(frames_items) 
-                            num += 1
-
-                    if user_prompt_after_content:
-                        content.append({"type": "text", "text": user_prompt})
+                    content = _build_message_content(
+                        config, images, audios, videos,
+                        text_before=text_before, text_after=text_after,
+                    )
 
                     if system_prompt:
                         messages = [
@@ -1352,7 +1364,7 @@ def _inference(config):
                         current_cache["llm"], chat_handler_type, messages, config, debug
                     )
 
-                _debug_print(debug, f"create message {content_text}", t3, file=sys.stderr)
+                _debug_print(debug, f"create message {content_text}", t_create_message, file=sys.stderr)
 
                 # --- Инференс ---
 

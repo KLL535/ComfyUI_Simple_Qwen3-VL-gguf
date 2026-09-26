@@ -1,4 +1,5 @@
 # Nightly
+- Fix raw mode
 - Fix generic handler
 - Group collapse redirects widget links to a fixed anchor point.
 - Refactor JS
