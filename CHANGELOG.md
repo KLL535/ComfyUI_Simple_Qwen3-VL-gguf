@@ -1,4 +1,5 @@
 # Nightly
+- Revert force_mmproj
 - Fix raw mode
 - Fix generic handler
 - Group collapse redirects widget links to a fixed anchor point.
