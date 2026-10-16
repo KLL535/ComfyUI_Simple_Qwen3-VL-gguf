@@ -1,4 +1,5 @@
 # Nightly
+- The multimodal embedder has been updated for the new library.
 - Refactor qwen3vl_run.py
 - Revert force_mmproj
 - Fix raw mode

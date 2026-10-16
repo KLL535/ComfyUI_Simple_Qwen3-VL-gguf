@@ -912,6 +912,8 @@ def _load_text_embedder(config):
         "verbose":      verbose,
         "n_gpu_layers": config.get("n_gpu_layers", config.get("gpu_layers", -1)),
         "pooling_type": config.get("pooling_type", LLAMA_POOLING_TYPE_NONE),
+        "n_seq_max":    config.get("n_seq_max", 1), #TODO сделать батчевый режим
+        "kv_unified": True,
     }
 
     # Пробрасываем кастомные параметры extra_llama_*
@@ -997,17 +999,10 @@ def _infer_text_embedding(llm, config, images = [], audios = [], videos = []):
 # MULTIMODAL EMBEDDER
 # =====================================================================
 
-QWEN3_VL_EMBEDDING_PROMPT_TEMPLATE = (
-    "<|im_start|>system\n"
-    "{system}<|im_end|>\n"
-    "<|im_start|>user\n"
-    "{images}{user}<|im_end|>\n"
-    "<|im_start|>assistant\n"
-)
-
-QWEN3_VL_EMBEDDING_DEFAULT_SYSTEM = "Represent the user's input."
-
-QWEN3_VL_EMBEDDING_POOLING_TYPE = 3  # LAST
+VL_EMBEDDING_PROMPT_TEMPLATE = "{user}{images}"
+VL_EMBEDDING_DEFAULT_SYSTEM = ""
+VL_EMBEDDING_POOLING_TYPE = 3  # LAST
+VL_EMBEDDING_DEFAULT_NORMALIZE = 0
 
 def _load_multimodal_embedder(config):
     """
@@ -1026,7 +1021,7 @@ def _load_multimodal_embedder(config):
         raise ValueError("mmproj_path is required for image embedding")
 
     from llama_cpp import Llama
-    from llama_cpp.llama_multimodal import MTMDImageEmbedder
+    from llama_cpp.llama_multimodal import MTMDEmbeddingHandler
 
     llm_kwargs = {
         "model_path":    model_path,
@@ -1037,8 +1032,10 @@ def _load_multimodal_embedder(config):
         "verbose":       verbose,
         "n_gpu_layers":  config.get("n_gpu_layers", -1),
         "embeddings":    True,
-        "pooling_type":  config.get("pooling_type", QWEN3_VL_EMBEDDING_POOLING_TYPE),
+        "pooling_type":  config.get("pooling_type", VL_EMBEDDING_POOLING_TYPE),
         "logits_all":    False,
+        "n_seq_max":     config.get("n_seq_max", 1), #TODO сделать батчевый режим
+        "kv_unified":    True,
     }
 
     # Пробрасываем кастомные параметры extra_llama_*
@@ -1049,7 +1046,10 @@ def _load_multimodal_embedder(config):
 
     llm = Llama(**llm_kwargs)
 
-    mtmd_kwargs = {}
+    mtmd_kwargs = {
+        "mmproj_path":  mmproj_path,
+        "verbose":      verbose,
+    }
 
     image_min_tokens = config.get("image_min_tokens", 0)
     image_max_tokens = config.get("image_max_tokens", 0)
@@ -1065,13 +1065,7 @@ def _load_multimodal_embedder(config):
             new_key = key[len("extra_mtmd_"):]
             mtmd_kwargs[new_key] = value
 
-    embedder = MTMDImageEmbedder(
-        mmproj_path=mmproj_path,
-        verbose=verbose,
-        **mtmd_kwargs,
-    )
-
-    embedder.DEFAULT_SYSTEM_MESSAGE = None
+    embedder = MTMDEmbeddingHandler(**mtmd_kwargs)
 
     llm._mtmd_embedder = embedder
 
@@ -1088,28 +1082,35 @@ def _infer_multimodal_embedding(llm, config, images = [], audios = [], videos = 
         debug = config.get("debug", True)
         embedder = getattr(llm, "_mtmd_embedder", None)
         if embedder is None:
-            raise RuntimeError("MTMDImageEmbedder is not attached to Llama")
+            raise RuntimeError("MTMDEmbeddingHandler is not attached to Llama")
 
         prompt_template = (config.get("prompt_template") or "")
         if not prompt_template:
-            prompt_template = QWEN3_VL_EMBEDDING_PROMPT_TEMPLATE
+            prompt_template = VL_EMBEDDING_PROMPT_TEMPLATE
 
         system_prompt = (config.get("system_prompt") or "").strip()
         if not system_prompt:
-            system_prompt = QWEN3_VL_EMBEDDING_DEFAULT_SYSTEM
+            system_prompt = VL_EMBEDDING_DEFAULT_SYSTEM
 
         user_prompt = (config.get("user_prompt") or "").strip()
 
-        text_before, text_after = build_prompt(
-            prompt_template, system=system_prompt, user=user_prompt
-        )
+        media_bytes = []
+        for path in (images + audios + videos):
+            with open(path, "rb") as f:
+                media_bytes.append(f.read())
 
-        embedding = embedder.create_image_embedding(
-            llm=llm,
-            image_paths=images,
-            text_before=text_before,
-            text_after=text_after,
-            pooling="pooled",
+        text_before, text_after = build_prompt(prompt_template, system=system_prompt, user=user_prompt)
+
+        parts = [text_before]
+        parts.extend(media_bytes)
+        if text_after:
+            parts.append(text_after)
+
+        embedding, n_tokens = embedder.embed(
+            llm,
+            parts=parts,
+            normalize=config.get("normalize", VL_EMBEDDING_DEFAULT_NORMALIZE),
+            return_count=True,
         )
 
         arr = np.asarray(embedding, dtype=np.float32)
