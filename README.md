@@ -1,6 +1,4 @@
-<img width="2048" height="448" alt="15184-43452264163153+" src="https://github.com/user-attachments/assets/92b22216-aa55-4411-8718-8ec82e1b88b6" />
-
-Simple gguf LLM Qwen3-VL, Qwen3.5-3.8, Gemma4 and others model loader for Comfy-UI.
+Simple gguf LLM JoyCaption, Qwen3-3.8, Gemma4, Muse-Glimmer and others model loader for Comfy-UI.
 
 # Why need this version?
 This version was created to meet my requirements:
@@ -15,15 +13,18 @@ In the latest update added a new `keep_vram` mode, which allows you to keep the 
 
 **Nightly (tests)**
 
-- ⚠️ Name-based serialization fix
+- Add new batch modes.
+- Add multimodal embedder.
+- Support for a new generic handler.
+- Group collapse redirects widget links to a fixed anchor point.
+- Centralized chat handler selection + Unified streaming + Text prompt builder + Refactored text modes. Thanks @phazei
+- Name-based serialization fix
 - Native video mode with ffmpeg
 - Memory-free endpoint for the cleanup button
 - Add Qwen3-TTS audio output + configurations.
 - Add `answer_delimiter` config.
 - Add `streaming_mode`, refactor subprocess mode - the process is now interruptible.
-- Add speculative decoding
-> ⚠️ **Important Limitations**: Incompatible with multimodal inputs (images, video, audio), requires `llama-cpp-python` version 0.3.48 or higher, disabled by default.
-
+- Add speculative decoding, requires `llama-cpp-python` version 0.4.3 or higher. 
 - Add dynamic image, audio, video input, Add "user_prompt_template" input, Add "bypass" input
 - New design for LLM Config
 - **Added new configurator 🌐 LLM Config and 🌐 LLM Prompt Preset**
@@ -344,7 +345,9 @@ A universal version. The model and its parameters mast be passed to the `config_
 | subprocess | Inference runs in a separate Python process. The model is loaded and unloaded for each execution. |	✅ Complete isolation – no VRAM leaks. ✅ Safe main script - no crash. 💡 Frees VRAM after each use. |
 | direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are transmitted directly (no temporary files).	| ✅ Faster than subprocess (no process spawn overhead). 💡 Still frees VRAM after each use. |
 | keep_vram | Inference runs in the main ComfyUI process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. |	✅ Maximum speed for batch processing or iterative workflows. 💡 When switching the mode to `direct_clean` or `subprocess`, this cache will be unloaded. | 
-| save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `UnloadQwenModel` node and unload a specific cache or all caches. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
+| save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `Simple Qwen Unload` node and unload a specific cache or all caches. A "vacuum cleaner" also clears out all the memory. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
+| direct_clean_batch | ⚠️ EXPERIMENTAL. Inference runs in the main ComfyUI process (like direct_clean), but the model is loaded once at the first queued task and kept in VRAM through the entire queue. Intermediate tasks run only the LLM step — their downstream nodes are skipped via ExecutionBlocker, and their outputs are accumulated in a class-level buffer. The last task in the queue processes its own input, merges everything into a single list, returns it via OUTPUT_IS_LIST (so downstream runs once per text), and then unloads the model. | Huge speedup for "analyze N → render N" workflows. Standard mode: LLM1 → render1 ... LLM30 → render30. Batch mode: LLM1 ... LLM30  →  render1 ... render30. In both cases, the workflow remains the same. |
+| keep_vram_batch | Same as direct_clean_batch, but the model is not unloaded after the final task - it stays in VRAM, ready for the next batch with the same config hash. | It is useful when the node’s input is also a batch. However, this requires an additional cleanup `Simple Qwen Unload` step after the node. |
 
 </details>
 
