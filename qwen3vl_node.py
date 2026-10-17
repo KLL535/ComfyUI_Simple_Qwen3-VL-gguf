@@ -19,6 +19,19 @@ import folder_paths
 import threading
 import numpy as np
 
+try:
+    from comfy.model_management import InterruptProcessingException
+except ImportError:
+    class InterruptProcessingException(Exception):
+        pass
+    print("[SimpleQwenVL] InterruptProcessingException not found. Batch modes ")
+
+try:
+    from comfy_execution.graph import ExecutionBlocker
+except ImportError:
+    ExecutionBlocker = None
+    print("[SimpleQwenVL] ExecutionBlocker not found. Batch modes will fallback to InterruptProcessingException.")
+
 HAS_JSON_REPAIR = False
 try:
     from json_repair import repair_json
@@ -51,6 +64,43 @@ def _norm_default(value, default):
     except Exception:
         pass
     return value
+
+# ========== batch dispatch interrupt helper ==========
+def _get_queue_state() -> Dict[str, Any]:
+    """
+    Возвращает {"running": int, "pending": int, "total": int}
+    через внутренний API ComfyUI (безопаснее и быстрее, чем HTTP-запросы).
+    """
+    try:
+        from server import PromptServer
+        prompt_queue = PromptServer.instance.prompt_queue
+        
+        with prompt_queue.mutex:
+            running = len(prompt_queue.currently_running)
+            pending = len(prompt_queue.queue)
+        
+        return {
+            "running": running,
+            "pending": pending,
+            "total": running + pending
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def _log_queue_state(tag: str = "before"):
+    qs = _get_queue_state()
+    if "error" in qs:
+        print(f"[SimpleQwenVL-Batch] ({tag}) Queue state error: {qs['error']}")
+    else:
+        print(f"[SimpleQwenVL-Batch] ({tag}) Queue: running={qs['running']} pending={qs['pending']} total={qs['total']}")
+def _interrupt_batch_execution(message):
+    """
+    Прерывает выполнение текущего воркфлоу для пакетной обработки.
+    """
+    if ExecutionBlocker is not None:
+        return ExecutionBlocker(message)
+    else:
+        raise InterruptProcessingException()
 
 # ========== Глобальный кеш и переменные ==========
 _config_cache = {}
@@ -1070,6 +1120,7 @@ def config_override_repair(text: str) -> Dict[str, Any]:
 class SimpleQwen3VL_GGUF_Node:
     _cached_config_hash = ""
     _cached_config = {}
+    _accumulated_texts: list = []   # batch dispatch accumulator
 
     @classmethod
     def _config_override_repair(cls, text: str) -> Dict[str, Any]:
@@ -1119,14 +1170,15 @@ class SimpleQwen3VL_GGUF_Node:
                     "default": False,
                     "tooltip": "If True, clears VRAM/RAM before starting inference to prevent OOM errors.",
                 }),
-                "mode": (["subprocess", "direct_clean", "keep_vram", "save1", "save2", "save3"], {
+                "mode": (["subprocess", "direct_clean", "keep_vram", "save1", "save2", "save3", "direct_clean_batch", "keep_vram_batch"], {
                     "default": "subprocess",
                     "tooltip": (
                         "Execution mode:\n"
-                        "• subprocess — isolates llama.cpp, prevents memory leaks and ComfyUI crashes (INCOMPATIBLE with video inputs).\n"
+                        "• subprocess — isolates llama.cpp, prevents memory leaks.\n"
                         "• direct_clean — unloads model after inference, no subprocess overhead.\n"
                         "• keep_vram — keeps model in VRAM for fast sequential batch processing.\n"
-                        "• save1/save2/save3 — auxiliary slots for long-term model storage in VRAM."
+                        "• save1/save2/save3 — auxiliary slots for long-term model storage in VRAM.\n"
+                        "• direct_clean_batch/keep_vram_batch — ⚠️ EXPERIMENTAL: Accumulates text outputs across queued prompts and returns them as a list on the final prompt. WARNING: Do NOT run other workflows concurrently. Intermediate prompts will complete successfully but skip downstream nodes."
                     ),
                 }),
                 "bypass": ("BOOLEAN", {
@@ -1178,6 +1230,7 @@ class SimpleQwen3VL_GGUF_Node:
 
     RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING", "AUDIO")
     RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt", "audio")
+    OUTPUT_IS_LIST = (True, False, False, False, False)   # for batch dispatch accumulator
     FUNCTION = "run"
     CATEGORY = CATEGORY_NAME
 
@@ -1196,8 +1249,95 @@ class SimpleQwen3VL_GGUF_Node:
             **kwargs):
 
         if bypass:
-            return (user_prompt, None, "", "", None)
+            return ([user_prompt], None, "", "", None)
 
+        single_kwargs = dict(
+            model_preset=model_preset,
+            system_preset=system_preset,
+            user_prompt=user_prompt,
+            seed=seed,
+            unload_all_models=unload_all_models,
+            mode=mode,
+            system_prompt_override=system_prompt_override,
+            config_override=config_override,
+            variables=variables,
+            user_prompt_template=user_prompt_template,
+            **kwargs,
+        )
+
+        if mode in ("keep_vram_batch", "direct_clean_batch"):
+            _log_queue_state("before")
+            try:
+                qs = _get_queue_state()
+                total = qs.get("total", 0)
+                cls = type(self)
+
+                if total == 0:
+                    print("[SimpleQwenVL-Batch] WARNING: Queue is empty. Falling back to single execution.")
+                    cls._accumulated_texts.clear()
+                    text, cond, sp, up, audio = self._run_single(**single_kwargs)
+                    return ([text], cond, sp, up, audio)
+
+                if total > 1:
+                    print(f"[SimpleQwenVL-Batch] Accumulating task ({total} items in queue). Blocking downstream execution.")
+                    text, _, _, _, _ = self._run_single(**single_kwargs)
+                    if isinstance(text, str) and not text.startswith("❌"):
+                        cls._accumulated_texts.append(text)
+                    else:
+                        print("[SimpleQwenVL-Batch] WARNING: Task failed. Skip.")
+                    
+                    # Прерываем выполнение: ExecutionBlocker или InterruptProcessingException
+                    blocker = _interrupt_batch_execution("Accumulating batch...")
+                    return ([blocker], blocker, blocker, blocker, blocker)
+
+                # Последняя задача в очереди
+                last_kwargs = dict(single_kwargs)
+                if mode == "direct_clean_batch":
+                    last_kwargs["mode"] = "direct_clean"
+
+                text, cond, sp, up, audio = self._run_single(**last_kwargs)
+                if isinstance(text, str) and not text.startswith("❌"):
+                    cls._accumulated_texts.append(text)
+                else:
+                    print("[SimpleQwenVL-Batch] WARNING: Final task failed. Skip.")
+
+                print(f"[SimpleQwenVL-Batch] Final task. Processing and returning {len(cls._accumulated_texts)} accumulated items.")
+
+                all_texts = cls._accumulated_texts.copy()
+                cls._accumulated_texts.clear()
+
+                return (all_texts, cond, sp, up, audio)
+
+            except InterruptProcessingException:
+                # Штатный ход batch при отсутствии ExecutionBlocker.
+                # Аккумулятор сохраняем, прерывание пробрасываем.
+                raise
+
+            except Exception as e:
+                cls._accumulated_texts.clear()
+                print(f"[SimpleQwenVL-Batch] ERROR: {e}. Accumulator cleared.")
+                raise
+
+            finally:
+                _log_queue_state("after")
+
+        # Обычные режимы — один прогон, text оборачиваем в список
+        text, cond, sp, up, audio = self._run_single(**single_kwargs)
+        return ([text], cond, sp, up, audio)
+
+    def _run_single(self,
+                    model_preset,
+                    system_preset,
+                    user_prompt,
+                    seed,
+                    unload_all_models,
+                    mode,
+                    system_prompt_override,
+                    config_override,
+                    variables,
+                    user_prompt_template,
+                    **kwargs):
+        """Одиночный run()"""
         t_total0 = time.perf_counter()
         temp_paths = []
         debug = None
@@ -1214,40 +1354,34 @@ class SimpleQwen3VL_GGUF_Node:
                     raise ValueError(f"Model preset '{model_preset}' not found")
                 config = old_names_patch(model_presets[model_preset])
 
-            # Восстанавливаем config_override
             if config_override and str(config_override).strip():
                 try:
                     override_dict = self._config_override_repair(str(config_override))
                     config.update(old_names_patch(override_dict))
                 except Exception as e:
-                    raise ValueError(e)      
+                    raise ValueError(e)
 
-            # Восстанавливаем variables
             if variables and str(variables).strip():
                 try:
                     variables_dict = self._config_override_repair(str(variables))
                     user_vars.update(old_names_patch(variables_dict))
                 except Exception as e:
-                    raise ValueError(e)         
+                    raise ValueError(e)
 
-            # Получаем имя скрипта
             script_name = config.get("script", "qwen3vl_run.py")
             debug = config.get("debug", True)
             gccollect_start = config.get("force_gc_start", False)
             gccollect = config.get("force_gc_unload", False)
 
             _debug_print(debug, "config read", t_total0, f"| mode {mode}")
- 
-            # Очистка моделей
+
             if unload_all_models:
                 clear_memory(gccollect_start, debug=debug)
 
-            # Собираем все входы
             input_images = []
             input_audios = []
             input_videos = []
 
-            # Legacy входы
             if kwargs.get("image") is not None:
                 input_images.append(kwargs["image"])
             if kwargs.get("audio") is not None:
@@ -1255,11 +1389,10 @@ class SimpleQwen3VL_GGUF_Node:
             if kwargs.get("video") is not None:
                 input_videos.append(kwargs["video"])
 
-            # Динамические входы (image2, image3, ..., audio2, audio3, ..., video2, video3, ...)
             for key in sorted(kwargs.keys()):
                 if key in ["image", "audio", "video"]:
-                    continue  # Уже обработаны выше
-                
+                    continue
+
                 if key.startswith("image") and key[5:].isdigit():
                     if kwargs[key] is not None:
                         input_images.append(kwargs[key])
@@ -1270,13 +1403,11 @@ class SimpleQwen3VL_GGUF_Node:
                     if kwargs[key] is not None:
                         input_videos.append(kwargs[key])
 
-            # Обработка изображений и аудио
             file_mode = (mode == "subprocess")
             images_value = []
             audio_value = []
             video_value = []
 
-            # Изображения
             if input_images:
                 t_process_images = time.perf_counter()
                 max_images = config.get("max_images", 10)
@@ -1285,40 +1416,34 @@ class SimpleQwen3VL_GGUF_Node:
                     temp_paths += images_value
                 _debug_print(debug, "process_images", t_process_images)
 
-            # Аудио
             if input_audios:
                 t_process_audios = time.perf_counter()
-                target_sr = _norm_default(config.get("audio_sample_rate", 0), 0) #0 - disable resample
+                target_sr = _norm_default(config.get("audio_sample_rate", 0), 0)
                 max_audios = config.get("max_audios", 3)
                 audio_value = process_audios(input_audios, file_mode=file_mode, target_sr=target_sr, max_audios=max_audios)
                 if file_mode:
                     temp_paths += audio_value
                 _debug_print(debug, "process_audios", t_process_audios)
 
-            # Видео 
             if input_videos:
                 t_process_videos = time.perf_counter()
                 video_value, vid_config, file_paths = process_videos(input_videos, config, execution_mode=mode)
-                config.update(vid_config)    
+                config.update(vid_config)
                 temp_paths += file_paths
                 _debug_print(debug, "process_videos", t_process_videos)
 
             if mode == "subprocess":
-                # streaming_mode не нужен в subprocess режиме
                 config["streaming_mode"] = False
 
             if (len(images_value) + len(audio_value) + len(video_value)) == 0:
-                config["content_count"] = 0 # Это нужно только для того чтобы форсировать перезагрузку кеша
-
-            # system_prompt & user_prompt
+                config["content_count"] = 0
 
             raw_system_prompt = ""
             raw_user_prompt = user_prompt if user_prompt else ""
-            
+
             use_preset_for_user = config.get("system_preset_to_user_prompt", False)
             enable_placeholders = config.get("enable_variables", False)
 
-            # 1. Определяем системный промпт из override, выпадающего списка или default
             if not use_preset_for_user:
                 if system_prompt_override is not None:
                     raw_system_prompt = system_prompt_override.strip()
@@ -1328,36 +1453,31 @@ class SimpleQwen3VL_GGUF_Node:
                 else:
                     raw_system_prompt = config.get("system_prompt_default", "")
             else:
-                # Если пресет должен уйти в юзер, системный берем из override или default
                 if system_prompt_override is not None:
                     raw_system_prompt = system_prompt_override.strip()
                 else:
                     raw_system_prompt = config.get("system_prompt_default", "")
 
-            # 2. Если пресет должен уйти в юзер-промпт, дописываем его туда (для joecaptionbeta и подобных)
             if use_preset_for_user and system_preset != "None":
                 system_prompts = load_cached_section('_system_prompts')
                 preset_text = system_prompts.get(system_preset, "").strip()
                 if preset_text:
                     raw_user_prompt = (preset_text + "\n" + raw_user_prompt).strip()
 
-            # 3. Читаем шаблон для user_prompt, если он есть
             if not user_prompt_template:
                 if system_preset != "None":
                     user_prompt_templates = load_cached_section('_user_prompt_template')
                     user_prompt_template = user_prompt_templates.get(system_preset, None)
 
-            # Если выключатель выключен, просто возвращаем то, что собрали
             if enable_placeholders or len(user_vars) > 0 or user_prompt_template:
-                # Если плейсхолдеры включены - собираем переменные            
                 auto_vars = {
-                    "image_num": len(images_value) if images_value else 0, # Количество изображений на трех входах
-                    "ref_num": max(0, len(images_value) - 1), # Количество референсных изображений за вычетом первого
+                    "image_num": len(images_value) if images_value else 0,
+                    "ref_num": max(0, len(images_value) - 1),
                     "audio_num": len(audio_value) if audio_value else 0,
-                    "frame_num": config.get('frame_num', 0), # Количество кадров видео
-                    "user_prompt": raw_user_prompt, 
+                    "frame_num": config.get('frame_num', 0),
+                    "user_prompt": raw_user_prompt,
                 }
-                
+
                 if input_images is not None and len(input_images) > 0:
                     auto_vars["width"] = input_images[0].shape[2]
                     auto_vars["height"] = input_images[0].shape[1]
@@ -1365,10 +1485,8 @@ class SimpleQwen3VL_GGUF_Node:
                     auto_vars["width"] = 0
                     auto_vars["height"] = 0
 
-                # Приоритет: кастомные перекрывают авто
                 final_vars = {**auto_vars, **user_vars}
 
-                # Безопасная замена
                 class SafeDict(dict):
                     def __missing__(self, key):
                         return '{' + key + '}'
@@ -1377,16 +1495,11 @@ class SimpleQwen3VL_GGUF_Node:
                     raw_user_prompt = user_prompt_template
 
                 try:
-                    # Форматируем системный промпт
                     final_system_prompt = raw_system_prompt.format_map(SafeDict(final_vars))
-                    
-                    # Форматируем юзер-промпт (используя тот же словарь)
                     final_user_prompt = raw_user_prompt.format_map(SafeDict(final_vars))
-                    
                 except Exception as e:
                     raise ValueError(f"Error formatting prompts: {e}")
 
-                # Если {user_prompt} был в системном, очищаем юзерский, чтобы LLM не читал его дважды.
                 if "{user_prompt}" in raw_system_prompt:
                     final_user_prompt = ""
 
@@ -1396,14 +1509,12 @@ class SimpleQwen3VL_GGUF_Node:
                 system_prompt = raw_system_prompt
                 user_prompt = raw_user_prompt
 
-
             script_name, config = old_config_patch(script_name, config)
 
             cache_mode = mode if mode.startswith("save") else "keep_vram"
             config_str = json.dumps(config, sort_keys=True, ensure_ascii=False).encode('utf-8')
             config_hash = hashlib.sha256(config_str).hexdigest()
 
-            # Итоговый конфиг для инференса
             final_config = {
                 **config,
                 "cache_mode": cache_mode,
@@ -1419,13 +1530,13 @@ class SimpleQwen3VL_GGUF_Node:
             if not script_name:
                 raise ValueError(f"Script {script_name} is not defined")
 
-            # Запуск инференса
-            text, conditioning, audio = run_inference_pipeline(script_name, final_config, mode, gccollect, debug = debug)
+            text, conditioning, audio = run_inference_pipeline(
+                script_name, final_config, mode, gccollect, debug=debug
+            )
 
             return (text, conditioning, system_prompt, user_prompt, audio)
 
         finally:
-
             if temp_paths:
                 t_clear_temp_files0 = time.perf_counter()
                 clear_temp_files(temp_paths)
@@ -1435,7 +1546,6 @@ class SimpleQwen3VL_GGUF_Node:
             check_pending_cleanup()
 
             _debug_print(debug, f"total time", t_total0)
-
 
 
 def old_config_patch(script_name, config):
@@ -1508,7 +1618,7 @@ def request_cleanup() -> dict:
     Возвращает словарь с результатом для ответа клиенту.
     """
     global _is_inferring, _pending_cleanup
-    
+    SimpleQwen3VL_GGUF_Node._accumulated_texts.clear() # batch dispatch accumulator
     if _is_inferring:
         _pending_cleanup = True
         print("[SimpleQwenVL] Inference in progress. Cleanup deferred.")

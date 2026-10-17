@@ -999,6 +999,36 @@ def _infer_text_embedding(llm, config, images = [], audios = [], videos = []):
 # MULTIMODAL EMBEDDER
 # =====================================================================
 
+_SUPPORTED_BY_STB = frozenset({"PNG", "JPEG", "JPG", "BMP",
+                               "GIF", "TGA", "PSD", "PIC", "PNM", "HDR"})
+
+def _read_image_as_supported_bytes(path: str) -> bytes:
+    """
+    stb_image внутри llama.cpp не знает WebP (и ещё десятка форматов).
+    Декодируем через PIL и, если формат не из списка stb — отдаём PNG
+    байты прямо из памяти, без временного файла.
+    """
+    try:
+        with Image.open(path) as pil:
+            fmt = (pil.format or "").upper()
+            if fmt in _SUPPORTED_BY_STB:
+                with open(path, "rb") as f:
+                    return f.read()
+
+            pil.load()
+            if pil.mode not in ("RGB", "RGBA", "L"):
+                pil = pil.convert("RGB")
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG", optimize=False)
+            return buf.getvalue()
+
+    except Exception as e:
+        print(f"[RAG] _read_image_as_supported_bytes({path!r}) failed: {e}",
+              file=sys.stderr)
+        # Последний шанс: отдать как есть — вдруг stb всё-таки осилит.
+        with open(path, "rb") as f:
+            return f.read()
+
 VL_EMBEDDING_PROMPT_TEMPLATE = "{user}{images}"
 VL_EMBEDDING_DEFAULT_SYSTEM = ""
 VL_EMBEDDING_POOLING_TYPE = 3  # LAST
@@ -1094,10 +1124,15 @@ def _infer_multimodal_embedding(llm, config, images = [], audios = [], videos = 
 
         user_prompt = (config.get("user_prompt") or "").strip()
 
-        media_bytes = []
-        for path in (images + audios + videos):
-            with open(path, "rb") as f:
-                media_bytes.append(f.read())
+        def _read_part(p, is_image):
+            if isinstance(p, (bytes, bytearray)):
+                return bytes(p)
+            if is_image:
+                return _read_image_as_supported_bytes(p)
+            with open(p, "rb") as f:
+                return f.read()
+
+        media_bytes = ( [_read_part(p, True)  for p in images] + [_read_part(p, False) for p in audios] + [_read_part(p, False) for p in videos] )
 
         text_before, text_after = build_prompt(prompt_template, system=system_prompt, user=user_prompt)
 
