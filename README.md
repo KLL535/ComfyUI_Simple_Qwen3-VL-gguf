@@ -740,6 +740,31 @@ Allows select a user prompt from templates:
 
 <details>
 
+<summary>Flux3 Prompt Enchancer</summary>
+
+- https://huggingface.co/prithivMLmods/flux-3-image-klein-prompt-upsampler-GGUF
+
+```json
+{
+  "model_path": "I:\\LLM\\flux3\\flux-3-image-klein-pup.Q4_K_M.gguf",
+  "mmproj_path": "I:\\LLM\\flux3\\flux-3-image-klein-pup.mmproj-bf16.gguf",
+  "max_tokens": 3584,
+  "top_p": 0.95,
+  "min_p": 0,
+  "top_k": 20,
+  "repeat_penalty": 1,
+  "chat_handler": "generic",
+  "force_mmproj": false,
+  "video_mode": "native",
+  "video_timestamp_interval_ms": 1000,
+  "streaming_mode": true
+}
+```
+
+</details>
+
+<details>
+
 <summary>Qwen3-TTS</summary>
 
 - https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/tree/main
@@ -1528,6 +1553,58 @@ https://huggingface.co/Tongyi-MAI/Z-Image-Turbo/tree/main/tokenizer.
     "tokenizer_path": "I:\\LLM\\encoder\\Z-Image-Turbo-HF\\tokenizer",
     "embedding_scale": 100.0,
     "convert_emb_to_cond": true
+}
+```
+
+</details>
+
+<details>
+
+<summary>Qwen3-VL-Embedding-8B (mtmd-encoder)</summary>
+
+- https://huggingface.co/mradermacher/Qwen3-VL-Embedding-8B-i1-GGUF
+
+```json
+{
+  "model_path": "I:\\LLM\\embedding\\Qwen3-VL-Embedding\\Qwen3-VL-Embedding-8B.i1-Q4_K_M.gguf",
+  "mmproj_path": "I:\\LLM\\embedding\\Qwen3-VL-Embedding\\Qwen3-VL-Embedding-8B.mmproj-f16.gguf",
+  "n_batch": 8192,
+  "n_ubatch": 8192,
+  "system_prompt_default": "Represent the user's input.",
+  "raw_mode": true,
+  "prompt_template": "<|im_start|>system\\n{system}<|im_end|>\\n<|im_start|>user\\n{images}{user}<|im_end|>\\n<|im_start|>assistant\\n",
+  "force_mmproj": false,
+  "image_min_tokens": 1024,
+  "image_max_tokens": 2048,
+  "extract_embedding": true,
+  "pooling_type": 3,
+  "extract_multimodal_embedding": true
+}
+```
+
+</details>
+
+<details>
+
+<summary>Embedding Ggemma 2 (mtmd-encoder)</summary>
+
+- https://huggingface.co/unsloth/embeddinggemma-2-GGUF
+
+```json
+{
+  "model_path": "I:\\LLM\\embedding\\embeddinggemma2\\embeddinggemma-2-BF16.gguf",
+  "mmproj_path": "I:\\LLM\\embedding\\embeddinggemma2\\mmproj-BF16.gguf",
+  "n_batch": 8192,
+  "n_ubatch": 8192,
+  "max_tokens": 4096,
+  "raw_mode": true,
+  "prompt_template": "{user}{images}",
+  "force_mmproj": false,
+  "image_min_tokens": 1024,
+  "image_max_tokens": 2048,
+  "extract_embedding": true,
+  "pooling_type": 1,
+  "extract_multimodal_embedding": true
 }
 ```
 
