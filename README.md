@@ -346,7 +346,7 @@ A universal version. The model and its parameters mast be passed to the `config_
 | direct_clean | Inference runs in the main ComfyUI process. The model is cached between calls, but unloaded immediately after each inference (VRAM freed). Images are transmitted directly (no temporary files).	| ✅ Faster than subprocess (no process spawn overhead). 💡 Still frees VRAM after each use. |
 | keep_vram | Inference runs in the main ComfyUI process. The model stays loaded in VRAM after the first inference, and is reused for subsequent calls with the same config hash. |	✅ Maximum speed for batch processing or iterative workflows. 💡 When switching the mode to `direct_clean` or `subprocess`, this cache will be unloaded. | 
 | save1-save3 | Allows you to keep the model in VRAM for a long time, if it makes sense. The difference with the `keep_vram` mode is that the model is not cleared after switching modes, and the only way to unload the model is to use the `Simple Qwen Unload` node and unload a specific cache or all caches. A "vacuum cleaner" also clears out all the memory. | ✅ Suitable for storing small models in memory, such as local translators or embedders. 💡 The main thing is to remember unload model manually from VRAM when no longer needed. | 
-| direct_clean_batch | ⚠️ EXPERIMENTAL. Runs in the main process. Accumulates Part A outputs across the queue and flushes them to Part B either on the last queued task or every batch_limit items. Model is unloaded after the final flush. | Huge speedup for "analyze N images → render N results" workflows. The whole queue is processed with a single model load. |
+| direct_clean_batch | ⚠️ EXPERIMENTAL (see description below). Runs in the main process. Accumulates Part A outputs across the queue and flushes them to Part B either on the last queued task or every batch_limit items. Model is unloaded after the final flush. | Huge speedup for "analyze N images → render N results" workflows. The whole queue is processed with a single model load. |
 | keep_vram_batch | Same as direct_clean_batch, but the model stays in VRAM after the final flush, ready for the next batch with the same config hash. | Useful when the node's own inputs are also batched, or when you chain multiple batch runs. Requires an explicit Simple Qwen Unload step afterwards to free VRAM. |
 
 <details>
@@ -357,28 +357,41 @@ Standard mode (e.g. direct_clean):
 ```
 LLM₁ → render₁ → LLM₂ → render₂ → … → LLM₂₀ → render₂₀
 ```
+If an LLM and a rendering model cannot both fit into memory at the same time, they have to be loaded and unloaded repeatedly—which is slow and inefficient.
+The core idea is to change the order of processing without making any significant alterations to the workflow.
+
 Batch mode (*_batch):
 ```
 LLM₁ → LLM₂ → … → LLM₂₀   →   render₁ → render₂ → … → render₂₀
       (Part A)                        (Part B)
 ```
+In this mode, 19 renders will be skipped until the 20 LLMs are finished, and all 20 renders will be performed only on the final iteration.
+If there is only one task in the queue, the behavior will be no different from the standard one.
+If additional tasks are added to the queue while processing is underway, they will automatically be grouped into new batches.
+If the queue is cleared, all accumulated tasks will be executed during the final iteration.
+The batch size is configured via config_override. It defaults to 20, meaning that after every 20 LLM calls, the process will continue and 20 render operations will be triggered.
 
-Passing data from Part A → Part B
-Use the pipe input. Whatever you feed into pipe on task i is accumulated together with the text and delivered as a list to Part B. Pack/unpack with Crystools' Pipe to any / Pipe from any — e.g. to carry a unique image per task:
+However, this setup has 4 drawbacks:
+1. You cannot mix different workflows in this mode into a single queue, as the results will become unpredictably intermingled.
+2. The queue in ComfyUI will show 19 failed executions.
+3. The final execution will take a long time, as it involves processing all the accumulated results at once. It will not be possible to cancel the execution of individual parts - only the entire batch.
+4. The previous level of flexibility in configuring workflows is no longer available. For example, if you add 5 tasks to the queue, then change the rendering settings (in Part B) and add another 5 tasks, the original settings for the first 5 tasks will be lost. To avoid this, you must pass the settings through a "pipe" from Part A to Part B; this ensures that each individual task retains its own unique parameters.
+
+Passing data from Part A to Part B
+Use the pipe input/output. Whatever you feed into pipe on task i is accumulated together with the text and delivered as a list to Part B. Pack/unpack with Crystools' Pipe to any / Pipe from any — e.g. to carry a unique image per task:
 ```
 LoadImage → Pipe to any → [pipe]  SQVLM  [pipe] → Pipe from any → UseImage
 ```
 
-⚠️ **Limitations**
+⚠️ **Limitations**:
 No concurrent workflows. Do not run any other workflow or node in parallel while a *_batch run is in progress — the shared accumulator will mix results.
-Queue must be stable. Do not add/remove/reorder tasks while the batch is running.
 One batch node per workflow. Using multiple *_batch nodes in the same graph is not supported.
 
 Controls for *_batch modes (set via config_override)
 | Key | Values | Default | Meaning |
 |--------|--------|--------|--------|
 | batch_limit | int | 20 | Flush accumulated results every N tasks, even if the queue is not empty. |
-| interrupt_mode | str | interrupt | How intermediate tasks are stopped. "interrupt" marks them as Interrupted in history. "blocking" uses ExecutionBlocker — they complete with a green check but skip Part B. |
+| interrupt_mode | str | interrupt | How intermediate tasks are stopped. "interrupt" marks them as "failed" in history. "blocking" uses ExecutionBlocker, but for me, this runs more slowly. |
 
 </details>
 
