@@ -24,7 +24,6 @@ try:
 except ImportError:
     class InterruptProcessingException(Exception):
         pass
-    print("[SimpleQwenVL] InterruptProcessingException not found. Batch modes ")
 
 try:
     from comfy_execution.graph import ExecutionBlocker
@@ -87,20 +86,17 @@ def _get_queue_state() -> Dict[str, Any]:
     except Exception as e:
         return {"error": str(e)}
 
-def _log_queue_state(tag: str = "before"):
-    qs = _get_queue_state()
-    if "error" in qs:
-        print(f"[SimpleQwenVL-Batch] ({tag}) Queue state error: {qs['error']}")
-    else:
-        print(f"[SimpleQwenVL-Batch] ({tag}) Queue: running={qs['running']} pending={qs['pending']} total={qs['total']}")
-def _interrupt_batch_execution(message):
+def _interrupt_batch_execution(interrupt_mode):
     """
     Прерывает выполнение текущего воркфлоу для пакетной обработки.
     """
-    if ExecutionBlocker is not None:
-        return ExecutionBlocker(message)
-    else:
-        raise InterruptProcessingException()
+    if interrupt_mode == "blocking":
+        if ExecutionBlocker is not None:
+            print("[SimpleQwenVL-Batch] Blocking downstream.")
+            return ExecutionBlocker("Accumulating batch...")
+
+    print("[SimpleQwenVL-Batch] Interrupt downstream.")
+    raise InterruptProcessingException()
 
 # ========== Глобальный кеш и переменные ==========
 _config_cache = {}
@@ -1121,6 +1117,7 @@ class SimpleQwen3VL_GGUF_Node:
     _cached_config_hash = ""
     _cached_config = {}
     _accumulated_texts: list = []   # batch dispatch accumulator
+    _accumulated_pipes: list = []
 
     @classmethod
     def _config_override_repair(cls, text: str) -> Dict[str, Any]:
@@ -1178,7 +1175,12 @@ class SimpleQwen3VL_GGUF_Node:
                         "• direct_clean — unloads model after inference, no subprocess overhead.\n"
                         "• keep_vram — keeps model in VRAM for fast sequential batch processing.\n"
                         "• save1/save2/save3 — auxiliary slots for long-term model storage in VRAM.\n"
-                        "• direct_clean_batch/keep_vram_batch — ⚠️ EXPERIMENTAL: Accumulates text outputs across queued prompts and returns them as a list on the final prompt. WARNING: Do NOT run other workflows concurrently. Intermediate prompts will complete successfully but skip downstream nodes."
+                        "• direct_clean_batch/keep_vram_batch — ⚠️ EXPERIMENTAL: "
+                        "Splits the workflow into Part A (upstream) and Part B (downstream). Part A runs for every queued task, outputs are accumulated in memory. "
+                        "Part B runs on batches of accumulated results — every `\"batch_limit\": 20` (default 20) items or on the last queued task. " 
+                        "Interrupt modes `\"interrupt_mode\": \"interrupt\"` intermediate tasks show as interrupted in job history " 
+                        "or `\"interrupt_mode\": \"blocking\"` uses ExecutionBlocker. Use a pipe to pass dynamic data from Part A to Part B.\n" 
+                        "  WARNING: Do NOT run other workflows/nodes concurrently with direct_clean_batch/keep_vram_batch modes."
                     ),
                 }),
                 "bypass": ("BOOLEAN", {
@@ -1225,12 +1227,13 @@ class SimpleQwen3VL_GGUF_Node:
                         "Many frames/files consume more VRAM; smaller models may lose details. "
                     ),
                 }),
+                "pipe": ("*", {"tooltip": "Optional data to pass through to part B in direct_clean_batch/keep_vram_batch modes. Use `Pipe to any` and `Pipe from any` by Crystools to pack/unpack pipe."}),
             },
         }
 
-    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING", "AUDIO")
-    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt", "audio")
-    OUTPUT_IS_LIST = (True, False, False, False, False)   # for batch dispatch accumulator
+    RETURN_TYPES = ("STRING", "CONDITIONING", "STRING", "STRING", "AUDIO", "*")
+    RETURN_NAMES = ("text", "conditioning", "system_prompt", "user_prompt", "audio", "pipe")
+    OUTPUT_IS_LIST = (True, False, False, False, False, True)   # for batch dispatch accumulator
     FUNCTION = "run"
     CATEGORY = CATEGORY_NAME
 
@@ -1246,10 +1249,11 @@ class SimpleQwen3VL_GGUF_Node:
             config_override=None,
             variables=None,
             user_prompt_template=None,
+            pipe=None,
             **kwargs):
 
         if bypass:
-            return ([user_prompt], None, "", "", None)
+            return ([user_prompt], None, "", "", None, [pipe])
 
         single_kwargs = dict(
             model_preset=model_preset,
@@ -1262,51 +1266,60 @@ class SimpleQwen3VL_GGUF_Node:
             config_override=config_override,
             variables=variables,
             user_prompt_template=user_prompt_template,
+            pipe=pipe,
             **kwargs,
         )
 
         if mode in ("keep_vram_batch", "direct_clean_batch"):
-            _log_queue_state("before")
             try:
+                cls = type(self)
+
                 qs = _get_queue_state()
                 total = qs.get("total", 0)
-                cls = type(self)
 
                 if total == 0:
                     print("[SimpleQwenVL-Batch] WARNING: Queue is empty. Falling back to single execution.")
                     cls._accumulated_texts.clear()
-                    text, cond, sp, up, audio = self._run_single(**single_kwargs)
-                    return ([text], cond, sp, up, audio)
+                    cls._accumulated_pipes.clear()
+                    text, cond, sp, up, audio, pipe_in_val, _ = self._run_single(**single_kwargs)
+                    return ([text], cond, sp, up, audio, [pipe_in_val])
 
-                if total > 1:
-                    print(f"[SimpleQwenVL-Batch] Accumulating task ({total} items in queue). Blocking downstream execution.")
-                    text, _, _, _, _ = self._run_single(**single_kwargs)
-                    if isinstance(text, str) and not text.startswith("❌"):
-                        cls._accumulated_texts.append(text)
-                    else:
-                        print("[SimpleQwenVL-Batch] WARNING: Task failed. Skip.")
-                    
-                    # Прерываем выполнение: ExecutionBlocker или InterruptProcessingException
-                    blocker = _interrupt_batch_execution("Accumulating batch...")
-                    return ([blocker], blocker, blocker, blocker, blocker)
-
-                # Последняя задача в очереди
-                last_kwargs = dict(single_kwargs)
-                if mode == "direct_clean_batch":
-                    last_kwargs["mode"] = "direct_clean"
-
-                text, cond, sp, up, audio = self._run_single(**last_kwargs)
+                text, cond, sp, up, audio, pipe_val, config = self._run_single(**single_kwargs)
                 if isinstance(text, str) and not text.startswith("❌"):
                     cls._accumulated_texts.append(text)
+                    cls._accumulated_pipes.append(pipe_val)
                 else:
-                    print("[SimpleQwenVL-Batch] WARNING: Final task failed. Skip.")
+                    print("[SimpleQwenVL-Batch] WARNING: Task failed. Skip.")
 
-                print(f"[SimpleQwenVL-Batch] Final task. Processing and returning {len(cls._accumulated_texts)} accumulated items.")
+                batch_limit = max(1, int(config.get('batch_limit', 20)))
+                interrupt_mode = str(config.get('interrupt_mode', "interrupt"))
 
-                all_texts = cls._accumulated_texts.copy()
-                cls._accumulated_texts.clear()
+                # Re-check ПОСЛЕ инференса
+                qs2 = _get_queue_state()
+                total2 = qs2.get("total", 0)
 
-                return (all_texts, cond, sp, up, audio)
+                acc_len = len(cls._accumulated_texts)
+                is_last = (total2 <= 1) # это последний таск
+                hit_limit = (acc_len >= batch_limit)
+
+                if is_last or hit_limit:
+                    reason = "last task" if is_last else f"limit {batch_limit}"
+                    print(f"[SimpleQwenVL-Batch] Flushing {acc_len} item(s) — {reason}.")
+
+                    all_texts = cls._accumulated_texts.copy()
+                    all_pipes = cls._accumulated_pipes.copy()
+                    cls._accumulated_texts.clear()
+                    cls._accumulated_pipes.clear()
+
+                    if mode == "direct_clean_batch" and is_last:
+                        unload_model(True, False, target="keep_vram")
+
+                    return (all_texts, cond, sp, up, audio, all_pipes)
+
+                else:
+                    print(f"[SimpleQwenVL-Batch] Accumulating ({acc_len}/{batch_limit}, queue={total2}).")
+                    blocker = _interrupt_batch_execution(interrupt_mode)
+                    return ([blocker], blocker, blocker, blocker, blocker, [blocker])
 
             except InterruptProcessingException:
                 # Штатный ход batch при отсутствии ExecutionBlocker.
@@ -1315,15 +1328,13 @@ class SimpleQwen3VL_GGUF_Node:
 
             except Exception as e:
                 cls._accumulated_texts.clear()
+                cls._accumulated_pipes.clear()
                 print(f"[SimpleQwenVL-Batch] ERROR: {e}. Accumulator cleared.")
                 raise
 
-            finally:
-                _log_queue_state("after")
-
         # Обычные режимы — один прогон, text оборачиваем в список
-        text, cond, sp, up, audio = self._run_single(**single_kwargs)
-        return ([text], cond, sp, up, audio)
+        text, cond, sp, up, audio, pipe_in_val, _ = self._run_single(**single_kwargs)
+        return ([text], cond, sp, up, audio, [pipe_in_val])
 
     def _run_single(self,
                     model_preset,
@@ -1336,6 +1347,7 @@ class SimpleQwen3VL_GGUF_Node:
                     config_override,
                     variables,
                     user_prompt_template,
+                    pipe,
                     **kwargs):
         """Одиночный run()"""
         t_total0 = time.perf_counter()
@@ -1534,7 +1546,7 @@ class SimpleQwen3VL_GGUF_Node:
                 script_name, final_config, mode, gccollect, debug=debug
             )
 
-            return (text, conditioning, system_prompt, user_prompt, audio)
+            return (text, conditioning, system_prompt, user_prompt, audio, pipe, config)
 
         finally:
             if temp_paths:
@@ -1619,6 +1631,7 @@ def request_cleanup() -> dict:
     """
     global _is_inferring, _pending_cleanup
     SimpleQwen3VL_GGUF_Node._accumulated_texts.clear() # batch dispatch accumulator
+    SimpleQwen3VL_GGUF_Node._accumulated_pipes.clear()
     if _is_inferring:
         _pending_cleanup = True
         print("[SimpleQwenVL] Inference in progress. Cleanup deferred.")

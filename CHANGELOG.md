@@ -1,4 +1,5 @@
 # Nightly
+- Add pipe to batch modes.
 - New batch modes.
 - The multimodal embedder has been updated for the new library.
 - Refactor qwen3vl_run.py
