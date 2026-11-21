@@ -82,6 +82,32 @@ def _debug_calc_speed(result, exec_time):
 
     return completion_tokens, speed
 
+def _llama_native_perf(llm):
+    """
+    Native llama.cpp perf counters for the request that just finished.
+
+    `debug` reports end-to-end speed (prompt/prefill included), so append the
+    net prefill/eval rates here instead of asking users to enable `verbose`,
+    which also dumps the rendered prompt and the whole GGUF metadata.
+    llama-cpp-python versions/backends without perf counters simply print
+    the old line.
+    """
+    try:
+        perf = llm._ctx.perf_context()
+    except Exception:
+        return ""
+
+    parts = []
+    # In chat/multimodal mode the prompt was already evaluated by the chat
+    # handler and llama-cpp-python resets the counters before generation, so
+    # n_p_eval is only the final prompt token. Skip that leftover.
+    if perf.n_p_eval > 1 and perf.t_p_eval_ms > 0:
+        parts.append(f"prefill {perf.n_p_eval * 1000.0 / perf.t_p_eval_ms:.2f} tok/sec")
+    if perf.n_eval > 0 and perf.t_eval_ms > 0:
+        parts.append(f"eval {perf.n_eval * 1000.0 / perf.t_eval_ms:.2f} tok/sec")
+
+    return ("| " + ", ".join(parts)) if parts else ""
+
 def _parse_strings_list(value):
     """
     Parse stop sequences from widget string.
@@ -1485,6 +1511,7 @@ def _infer_chat(llm, config, images = [], audios = [], videos = []):
             completion_tokens, speed = _debug_calc_speed(result, t_inference_stop - t_inference_start)
             _debug_print(debug, "inference", t_inference_start,
                          text=f"{speed:.2f} tok/sec {completion_tokens} tokens",
+                         message=_llama_native_perf(llm),
                          file=sys.stderr)
 
         # --- 4. Пост-обработка ---
@@ -1561,6 +1588,7 @@ def _infer_raw(llm, config, images = [], audios = [], videos = []):
                 completion_tokens, speed = _debug_calc_speed(result, t_inference_end - t_inference_start)
                 _debug_print(debug, "inference (raw mtmd)", t_inference_start,
                              text=f"{speed:.2f} tok/sec {completion_tokens} tokens",
+                             message=_llama_native_perf(llm),
                              file=sys.stderr)
 
             output = result["choices"][0]["message"]["content"]
@@ -1579,6 +1607,7 @@ def _infer_raw(llm, config, images = [], audios = [], videos = []):
                 completion_tokens, speed = _debug_calc_speed(result, t_inference_end - t_inference_start)
                 _debug_print(debug, "inference (raw text)", t_inference_start,
                              text=f"{speed:.2f} tok/sec {completion_tokens} tokens",
+                             message=_llama_native_perf(llm),
                              file=sys.stderr)
 
             output = result["choices"][0]["text"]
