@@ -598,7 +598,7 @@ Speculative decoding accelerates text generation by using a draft model (or stat
 | Field | Type | Default | Description |
 |--------|--------|--------|--------|
 | verbose | bool | False | Enable verbose logging from llama.cpp. Prints detailed inference info to console |
-| debug | bool | True | Enable timing output for each stage in console. Shows metrics [DEBUG] inference 80.11 tok/sec 1812 tokens: 22.619s |
+| debug | bool | True | Enable timing output for each stage in console. Shows metrics [DEBUG] inference 80.11 tok/sec 1812 tokens: 22.619s; when llama-cpp-python exposes perf counters the same line ends with the native prefill/eval tok/sec |
 | debug_output | bool | False | Print final LLM text output to console | 
 | raw_output | bool | False | Disable output.strip(). Keeps leading/trailing whitespaces in response | 
 | streaming_mode | bool | False | Enables token streaming to allow interrupting generation via the ComfyUI 'Interrupt' button. Adds a negligible overhead (~1%), but guarantees you can manually stop long responses. Recommended if you often need to cancel generations. Ignore in subprocess mode | 
@@ -1673,7 +1673,7 @@ If the memory is full before this node starts use `unload_all_models = true`.
 
 If `debug=true` this node in calculates in console the generation time (tok/sec) from the start of inference to its completion, which also includes overhead such as graph compilation/optimization, vision encoder preprocessing (if applicable), prompt tokenization & embedding, VRAM allocation, sampling/decoding initialization etc.
 LM Studio displays the net generation time, so the values in LM Studio will be higher (better tok/sec).
-You can view the net generation time (`eval time` in llama.cpp verbose output) in console by enabling `verbose=true`.
+You can view the net generation time (`eval time` in llama.cpp verbose output) in console by enabling `verbose=true`. With `debug=true` the node also appends the native `prefill`/`eval` tok/sec to the `[DEBUG] inference` line (llama-cpp-python versions with perf counters), so `verbose` is only needed for the full llama.cpp block.
 
 ---
 

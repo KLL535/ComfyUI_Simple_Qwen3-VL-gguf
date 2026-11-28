@@ -1,4 +1,5 @@
 # Nightly
+- `debug` output now appends llama.cpp's native `prefill`/`eval` tok/sec, so the net generation rate no longer needs `verbose=true`.
 - Add pipe to batch modes.
 - New batch modes.
 - The multimodal embedder has been updated for the new library.
